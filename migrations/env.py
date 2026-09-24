@@ -9,6 +9,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from src.config import settings
+from src.modules.identity import models  # noqa: F401
 from src.platform.database.base import Base
 
 # this is the Alembic Config object, which provides
@@ -90,9 +91,7 @@ def run_migrations_online() -> None:
     if sys.platform == "win32":
         asyncio.run(
             run_async_migrations(),
-            loop_factory=lambda: asyncio.SelectorEventLoop(
-                selectors.SelectSelector()
-            ),
+            loop_factory=lambda: asyncio.SelectorEventLoop(selectors.SelectSelector()),
         )
     else:
         asyncio.run(run_async_migrations())
