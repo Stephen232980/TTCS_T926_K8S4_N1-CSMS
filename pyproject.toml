@@ -14,6 +14,7 @@ dependencies = [
     "psycopg[binary,pool]>=3.2",
     "alembic",
     "pydantic-settings",
+    "argon2-cffi>=23.1",
 ]
 
 [project.optional-dependencies]
