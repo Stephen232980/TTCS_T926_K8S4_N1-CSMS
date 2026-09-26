@@ -41,6 +41,11 @@ class User(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+    sessions: Mapped[list[Session]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
     @validates("email")
     def normalize_email(self, _key: str, value: str) -> str:
@@ -86,3 +91,54 @@ class UserRole(Base):
 
     user: Mapped[User] = relationship(back_populates="role_assignments")
     role: Mapped[Role] = relationship(back_populates="user_assignments")
+
+
+class Session(Base):
+    __tablename__ = "sessions"
+    __table_args__ = (Index("ix_sessions_user_id", "user_id"),)
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    token_hash: Mapped[str] = mapped_column(
+        String(64),
+        unique=True,
+        nullable=False,
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    user: Mapped[User] = relationship(back_populates="sessions")
+
+
+class LoginIpAttempt(Base):
+    __tablename__ = "login_ip_attempts"
+
+    ip_address: Mapped[str] = mapped_column(
+        String(45),
+        primary_key=True,
+    )
+    failed_login_count: Mapped[int] = mapped_column(
+        default=0,
+        server_default="0",
+        nullable=False,
+    )
+    locked_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )

@@ -5,9 +5,11 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.modules.identity.router import router as identity_router
 from src.platform.database.session import get_db_session
 
 app = FastAPI(title="CSMS")
+app.include_router(identity_router)
 
 DatabaseSession = Annotated[AsyncSession, Depends(get_db_session)]
 
