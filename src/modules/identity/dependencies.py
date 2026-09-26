@@ -1,10 +1,14 @@
+from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, cast
 
-from fastapi import Cookie, Depends, HTTPException, status
+from fastapi import Cookie, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.modules.identity.authorization import CurrentActor
+from src.modules.identity.authorization import (
+    CurrentActor,
+    enforce_role_policy,
+)
 from src.modules.identity.repository import IdentityRepository
 from src.modules.identity.security import hash_session_token
 from src.platform.database.session import get_db_session
@@ -37,3 +41,25 @@ async def get_current_actor(
         )
 
     return actor
+
+
+CurrentActorDependency = Annotated[
+    CurrentActor,
+    Depends(get_current_actor),
+]
+
+
+async def authorize_request(
+    request: Request,
+    actor: CurrentActorDependency,
+) -> None:
+    endpoint = request.scope.get("endpoint")
+
+    if not callable(endpoint):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Không có quyền truy cập",
+        )
+
+    handler = cast(Callable[..., object], endpoint)
+    enforce_role_policy(handler, actor)

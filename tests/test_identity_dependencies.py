@@ -2,11 +2,11 @@ from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException, status
+from fastapi import HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.modules.identity.authorization import CurrentActor
-from src.modules.identity.dependencies import get_current_actor
+from src.modules.identity.authorization import CurrentActor, allow_roles
+from src.modules.identity.dependencies import authorize_request, get_current_actor
 from src.modules.identity.repository import IdentityRepository
 from src.modules.identity.security import hash_session_token
 
@@ -61,3 +61,51 @@ async def test_get_current_actor_returns_actor_for_valid_session() -> None:
         actor = await get_current_actor(db_session, "valid-session-token")
 
     assert actor == expected_actor
+
+
+@pytest.mark.asyncio
+async def test_authorize_request_allows_matching_role() -> None:
+    @allow_roles("admin")
+    def handler() -> None:
+        pass
+
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/protected",
+            "headers": [],
+            "endpoint": handler,
+        }
+    )
+    actor = CurrentActor(
+        user_id=uuid4(),
+        roles=frozenset({"admin"}),
+    )
+
+    await authorize_request(request, actor)
+
+
+@pytest.mark.asyncio
+async def test_authorize_request_rejects_route_without_policy() -> None:
+    def handler() -> None:
+        pass
+
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/unconfigured",
+            "headers": [],
+            "endpoint": handler,
+        }
+    )
+    actor = CurrentActor(
+        user_id=uuid4(),
+        roles=frozenset({"admin"}),
+    )
+
+    with pytest.raises(HTTPException) as error:
+        await authorize_request(request, actor)
+
+    assert error.value.status_code == status.HTTP_403_FORBIDDEN
