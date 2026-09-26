@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from typing import ParamSpec, TypeVar, cast
 from uuid import UUID
 
+from fastapi import HTTPException, status
+
 
 @dataclass(frozen=True)
 class CurrentActor:
@@ -36,3 +38,16 @@ def get_allowed_roles(
 ) -> frozenset[str] | None:
     policy = getattr(handler, _ROLE_POLICY_ATTRIBUTE, None)
     return cast(frozenset[str] | None, policy)
+
+
+def enforce_role_policy(
+    handler: Callable[..., object],
+    actor: CurrentActor,
+) -> None:
+    allowed_roles = get_allowed_roles(handler)
+
+    if allowed_roles is None or actor.roles.isdisjoint(allowed_roles):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Không có quyền truy cập",
+        )
