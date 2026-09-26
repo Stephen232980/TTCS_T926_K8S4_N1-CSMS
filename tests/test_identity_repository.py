@@ -4,7 +4,14 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.modules.identity.models import LoginIpAttempt, Session, User
+from src.modules.identity.authorization import CurrentActor
+from src.modules.identity.models import (
+    LoginIpAttempt,
+    Role,
+    Session,
+    User,
+    UserRole,
+)
 from src.modules.identity.repository import IdentityRepository
 
 
@@ -98,3 +105,68 @@ async def test_repository_deletes_session_by_token_hash(
     )
 
     assert stored_session is None
+
+
+@pytest.mark.asyncio
+async def test_repository_finds_current_actor_from_valid_session(
+    db_session: AsyncSession,
+) -> None:
+    role = await db_session.scalar(select(Role).where(Role.code == "admin"))
+    assert role is not None
+
+    user = User(
+        email="current-actor-repository@example.com",
+        password_hash="test-password-hash",
+    )
+    db_session.add(user)
+    await db_session.flush()
+
+    db_session.add_all(
+        [
+            UserRole(user_id=user.id, role_id=role.id),
+            Session(
+                user_id=user.id,
+                token_hash="c" * 64,
+                expires_at=datetime.now(UTC) + timedelta(hours=1),
+            ),
+        ]
+    )
+    await db_session.flush()
+
+    actor = await IdentityRepository(db_session).get_current_actor_by_session_hash(
+        "c" * 64,
+        datetime.now(UTC),
+    )
+
+    assert actor == CurrentActor(
+        user_id=user.id,
+        roles=frozenset({"admin"}),
+    )
+
+
+@pytest.mark.asyncio
+async def test_repository_rejects_expired_session(
+    db_session: AsyncSession,
+) -> None:
+    user = User(
+        email="expired-session-repository@example.com",
+        password_hash="test-password-hash",
+    )
+    db_session.add(user)
+    await db_session.flush()
+
+    db_session.add(
+        Session(
+            user_id=user.id,
+            token_hash="d" * 64,
+            expires_at=datetime.now(UTC) - timedelta(seconds=1),
+        )
+    )
+    await db_session.flush()
+
+    actor = await IdentityRepository(db_session).get_current_actor_by_session_hash(
+        "d" * 64,
+        datetime.now(UTC),
+    )
+
+    assert actor is None
