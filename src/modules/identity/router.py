@@ -12,8 +12,13 @@ from fastapi import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
+from src.modules.identity.dependencies import CurrentActorDependency
 from src.modules.identity.repository import IdentityRepository
-from src.modules.identity.schemas import LoginRequest, LoginResponse
+from src.modules.identity.schemas import (
+    CurrentUserResponse,
+    LoginRequest,
+    LoginResponse,
+)
 from src.modules.identity.service import (
     AuthService,
     InvalidCredentialsError,
@@ -96,4 +101,27 @@ async def logout(
         secure=settings.auth_cookie_secure,
         samesite="lax",
         path="/",
+    )
+
+
+@router.get("/me", response_model=CurrentUserResponse)
+async def get_current_user(
+    response: Response,
+    actor: CurrentActorDependency,
+    db_session: DatabaseSession,
+) -> CurrentUserResponse:
+    user = await IdentityRepository(db_session).get_user_by_id(actor.user_id)
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Người dùng hiện tại không tồn tại",
+        )
+
+    response.headers["Cache-Control"] = "no-store"
+
+    return CurrentUserResponse(
+        id=user.id,
+        email=user.email,
+        roles=sorted(actor.roles),
     )
