@@ -142,11 +142,17 @@ POSTGRES_DB=csms
 POSTGRES_USER=csms
 POSTGRES_PASSWORD=change_me
 DATABASE_URL=postgresql+psycopg://csms:change_me@localhost:5432/csms
+
+AUTH_MAX_FAILED_ATTEMPTS=5
+AUTH_LOCK_SECONDS=900
+AUTH_SESSION_TTL_SECONDS=86400
+AUTH_COOKIE_SECURE=false
 ```
 
 Không commit `.env` và không dùng secret production. Khi backend chạy trên máy,
 database host là `localhost`; khi backend chạy trong Compose, host là `db` và
-Compose tự truyền URL phù hợp.
+Compose tự truyền URL phù hợp. `AUTH_COOKIE_SECURE=false` chỉ phù hợp với HTTP
+local; môi trường chạy HTTPS phải đặt thành `true`.
 
 ## 5. Chạy toàn bộ bằng Docker (khuyến nghị)
 
@@ -172,6 +178,14 @@ trước khi khởi động Uvicorn.
 - <http://localhost:8001/docs>: OpenAPI tương tác.
 
 Hai health endpoint phải trả HTTP `200`.
+
+Không chỉ dựa vào trạng thái `healthy` của container. Kiểm tra thêm từ máy
+Windows để xác nhận cổng publish có thể truy cập:
+
+```powershell
+curl.exe -i http://127.0.0.1:8001/health/live
+curl.exe -i http://127.0.0.1:8001/health/ready
+```
 
 ### Bước 4: Xem log khi lỗi
 
@@ -204,11 +218,16 @@ python -m venv .venv
 ### Bước 2: Cài project
 
 ```powershell
-python -m pip install --upgrade pip
-python -m pip install -e ".[dev]"
+python -c "import sys; print(sys.executable)"
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 ```
 
-`-e` cho phép sửa source mà không cài lại; `[dev]` cài công cụ kiểm tra.
+Đường dẫn do lệnh đầu tiên in ra phải trỏ tới
+`CSMS\.venv\Scripts\python.exe`. Nếu không, cửa sổ PowerShell hiện tại đang dùng
+nhầm Python hệ thống hoặc Anaconda. Các lệnh tường minh bên dưới vẫn bảo đảm
+dùng đúng môi trường ảo. `-e` cho phép sửa source mà không cài lại; `[dev]` cài
+công cụ kiểm tra.
 
 ### Bước 3: Chạy database
 
@@ -222,48 +241,69 @@ Chờ `db` thành `healthy`.
 ### Bước 4: Chạy migration
 
 ```powershell
-alembic upgrade head
-alembic current
+.\.venv\Scripts\python.exe -m alembic upgrade head
+.\.venv\Scripts\python.exe -m alembic current
 ```
 
 ### Bước 5: Chạy API
 
 ```powershell
-uvicorn src.entrypoints.http:app --reload --port 8001
+.\.venv\Scripts\python.exe -m uvicorn src.entrypoints.http:app --reload --port 8001
 ```
 
 Kiểm tra các URL ở mục 5. Dừng bằng `Ctrl+C`.
 
-## 7. Kiểm tra chất lượng
+Không chạy đồng thời API local và container `app` trên cùng cổng:
 
-Kích hoạt `.venv`, bảo đảm database đang chạy, rồi thực hiện:
+| Chế độ | Container cần chạy | API được phục vụ bởi |
+| --- | --- | --- |
+| Toàn bộ bằng Docker | `app`, `db` | Container tại `localhost:8001` |
+| Phát triển trên máy | Chỉ `db` | Uvicorn local tại `localhost:8001` |
+
+Khi chuyển sang chế độ phát triển trên máy:
 
 ```powershell
-ruff check .
-mypy src
-pytest
+docker compose stop app
+docker compose up -d db
+.\.venv\Scripts\python.exe -m uvicorn src.entrypoints.http:app --reload --port 8001
+```
+
+## 7. Kiểm tra chất lượng
+
+Bảo đảm database đang chạy, rồi thực hiện bằng đúng Python trong `.venv`:
+
+```powershell
+.\.venv\Scripts\python.exe -m ruff check .
+.\.venv\Scripts\python.exe -m ruff format --check .
+.\.venv\Scripts\python.exe -m mypy src
+.\.venv\Scripts\python.exe -m pytest -q
 ```
 
 - Ruff kiểm tra lỗi và quy ước code.
+- Ruff format kiểm tra định dạng nhưng không tự sửa file.
 - mypy kiểm tra kiểu dữ liệu.
 - Pytest chạy test tự động.
 
-Cả ba lệnh phải thành công trước khi push.
+Cả bốn lệnh phải thành công trước khi push.
+
+Không chạy `docker compose exec app pytest`: image ứng dụng chỉ chứa dependency
+runtime và không chứa thư mục `tests`. Chạy test trên máy bằng `.venv`; dùng
+Docker để kiểm tra runtime của ứng dụng và PostgreSQL.
 
 ## 8. Migration
 
 Sau khi thay đổi model, tạo migration:
 
 ```powershell
-alembic revision --autogenerate -m "mo ta thay doi"
+.\.venv\Scripts\python.exe -m alembic revision --autogenerate -m "mo ta thay doi"
 ```
 
 Đọc file vừa sinh, rồi kiểm tra cả chiều tiến và lùi:
 
 ```powershell
-alembic upgrade head
-alembic downgrade -1
-alembic upgrade head
+.\.venv\Scripts\python.exe -m alembic upgrade head
+.\.venv\Scripts\python.exe -m alembic downgrade -1
+.\.venv\Scripts\python.exe -m alembic upgrade head
 ```
 
 Không tạo/sửa bảng bằng tay. Mọi thay đổi schema phải qua Alembic.
@@ -319,6 +359,83 @@ container, `db` trong Compose).
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .venv\Scripts\Activate.ps1
 ```
+
+Bạn cũng có thể không kích hoạt môi trường mà gọi trực tiếp
+`.\.venv\Scripts\python.exe` như các lệnh trong tài liệu này.
+
+### Có `ModuleNotFoundError` dù đã cài dependency
+
+Kiểm tra Python thực sự đang được sử dụng:
+
+```powershell
+python -c "import sys; print(sys.executable)"
+.\.venv\Scripts\python.exe -c "import sys; print(sys.executable)"
+```
+
+Nếu hai đường dẫn khác nhau, hãy chạy lệnh bằng
+`.\.venv\Scripts\python.exe -m <module>` thay vì `python` hoặc executable toàn
+cục.
+
+### Docker báo không tìm thấy Alembic revision
+
+Ví dụ: `Can't locate revision identified by '<revision>'`. Trường hợp thường
+gặp là image `app` được build từ source cũ trong khi database đã ở migration
+mới hơn. Rebuild image và xem log:
+
+```powershell
+docker compose up --build -d
+docker compose logs app
+```
+
+Không dùng `docker compose down -v` để sửa lỗi image cũ. Lệnh đó xóa toàn bộ dữ
+liệu PostgreSQL local nhưng không cập nhật source trong image.
+
+### Container healthy nhưng không truy cập được API từ Windows
+
+Trạng thái `healthy` có thể chỉ chứng minh endpoint truy cập được từ bên trong
+container. Kiểm tra URL từ host và cấu hình thực tế:
+
+```powershell
+curl.exe -i http://127.0.0.1:8001/health/live
+docker compose config
+docker compose logs app
+docker inspect csms-app --format '{{json .Config.Cmd}}'
+```
+
+Trong log, Uvicorn trong container phải lắng nghe tại `0.0.0.0:8000`, không
+phải `127.0.0.1:8000`.
+
+### Script async dùng Psycopg lỗi event loop trên Windows
+
+Với script Python độc lập truy cập database, dùng selector event loop:
+
+```python
+import asyncio
+import selectors
+
+asyncio.run(
+    main(),
+    loop_factory=lambda: asyncio.SelectorEventLoop(selectors.SelectSelector()),
+)
+```
+
+Ứng dụng, migration và test đã có cấu hình riêng; chỉ áp dụng đoạn trên cho
+script độc lập gặp lỗi Proactor event loop.
+
+### Không nhìn thấy session cookie sau khi đăng nhập
+
+Swagger UI không hiển thị giá trị `Set-Cookie` qua JavaScript. Kiểm tra trong
+Browser DevTools tại **Network** hoặc **Application/Storage**, hoặc dùng curl:
+
+```powershell
+curl.exe -i `
+  -H "Content-Type: application/json" `
+  -d '{"email":"email-cua-ban@example.com","password":"mat-khau-local"}' `
+  http://localhost:8001/api/v1/auth/login
+```
+
+Response thành công phải có header `Set-Cookie` với `HttpOnly`. Không gửi mật
+khẩu, token hoặc cookie thật khi nhờ người khác hỗ trợ.
 
 ## 11. Tài liệu cần đọc
 
