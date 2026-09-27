@@ -51,7 +51,7 @@ Các mã HTTP chính:
 | 400 | `bad_request` | Request sai định dạng hoặc không thể xử lý |
 | 401 | `authentication_required` | Chưa đăng nhập, session sai hoặc hết hạn |
 | 403 | `permission_denied` | Đã đăng nhập nhưng không đủ quyền |
-| 404 | `resource_not_found` | Tài nguyên không tồn tại trong phạm vi người dùng được phép thấy |
+| 404 | `resource_not_found` | Tài nguyên không tồn tại |
 | 409 | `resource_conflict` | Trùng dữ liệu hoặc xung đột trạng thái |
 | 422 | `validation_error` | Dữ liệu không đạt validation |
 | 423 | `login_temporarily_locked` | Đăng nhập bị khóa tạm |
@@ -59,7 +59,7 @@ Các mã HTTP chính:
 
 Login/logout hiện trên `main` vẫn dùng response lỗi mặc định `{"detail": "..."}`. Việc đưa
 hai endpoint cũ về error contract chung nên thực hiện trong một task nhỏ riêng để tránh thay
-đổi hành vi ngay trong PR T-06 đang chờ review.
+đổi hành vi trong phạm vi T-06 đã được merge.
 
 ## 3. Phân trang
 
@@ -130,7 +130,7 @@ Thành công: `204 No Content`. Endpoint có tính idempotent: gọi khi không 
 
 ### 4.3. Người dùng hiện tại
 
-Endpoint cần bổ sung ngay sau khi T-06 được merge:
+Contract đề xuất cho một cải tiến độc lập sau T-06; endpoint chưa được triển khai:
 
 ```text
 GET /api/v1/auth/me
@@ -153,7 +153,7 @@ Quy tắc:
 - Session thiếu, sai hoặc hết hạn trả `401 authentication_required`.
 - Endpoint này chỉ yêu cầu đã đăng nhập; không áp một role cụ thể.
 
-T-06 hiện cung cấp cơ chế nội bộ `CurrentActor` gồm `user_id` và `roles`. Repository cần lấy
+T-06 đã cung cấp cơ chế nội bộ `CurrentActor` gồm `user_id` và `roles`. Repository cần lấy
 thêm email hoặc endpoint truy vấn user theo `user_id` để tạo response trên.
 
 ## 5. Station
@@ -240,7 +240,9 @@ Request có thể chứa một hoặc nhiều field:
 - Không cho cập nhật `id`, `owner_id`, `created_at`, `updated_at` trực tiếp.
 - Object rỗng trả `422 validation_error`.
 - Thành công: `200 OK`, body là station sau cập nhật.
-- Không tồn tại hoặc nằm ngoài ownership scope trả `404 resource_not_found` để hạn chế lộ dữ liệu.
+- Station không tồn tại trả `404 resource_not_found`.
+- Station tồn tại nhưng nằm ngoài ownership scope trả `403 permission_denied` và ghi security
+  log không chứa dữ liệu nhạy cảm.
 - Chuyển trạng thái station nên dùng endpoint/action riêng khi có luật nghiệp vụ, không trộn vào
   PATCH thông tin cơ bản trong Sprint 1.
 
@@ -330,11 +332,11 @@ Response:
 
 ## 8. Trạng thái triển khai
 
-| Contract | Trạng thái ngày 26/09/2026 |
+| Contract | Trạng thái ngày 27/09/2026 |
 | --- | --- |
 | Login/logout | Đã triển khai trên `main`; error shape chưa theo chuẩn chung |
-| Session lookup + RBAC | Đã có trong PR T-06, chờ review và merge |
-| `GET /auth/me` | Đã chốt contract, chưa triển khai |
+| Session lookup + RBAC | Đã triển khai trên `main` qua T-06 |
+| `GET /auth/me` | Đã chốt contract đề xuất; chưa triển khai |
 | Station list/create/update | Đã chốt baseline, chờ T-07/T-08/T-09 |
 | Charge point/code availability | Đã chốt baseline, chờ T-10/T-11 |
 | Error contract chung | Đã chốt baseline, chưa triển khai exception handler |
