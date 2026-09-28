@@ -9,8 +9,10 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     Numeric,
     String,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -65,3 +67,98 @@ class Station(Base):
     )
 
     owner: Mapped[User] = relationship(User)
+    charge_points: Mapped[list[ChargePoint]] = relationship(
+        "ChargePoint",
+        back_populates="station",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+class ChargePoint(Base):
+    __tablename__ = "charge_points"
+    __table_args__ = (
+        Index("ix_charge_points_code", "code", unique=True),
+        Index("ix_charge_points_station_id", "station_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    station_id: Mapped[UUID] = mapped_column(
+        ForeignKey("stations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    code: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(20),
+        default="offline",
+        server_default="offline",
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    station: Mapped[Station] = relationship(
+        "Station",
+        back_populates="charge_points",
+    )
+    connectors: Mapped[list[Connector]] = relationship(
+        "Connector",
+        back_populates="charge_point",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+class Connector(Base):
+    __tablename__ = "connectors"
+    __table_args__ = (
+        UniqueConstraint(
+            "charge_point_id",
+            "connector_number",
+            name="uq_connectors_cp_id_connector_number",
+        ),
+        CheckConstraint(
+            "connector_number >= 1",
+            name="ck_connectors_connector_number_gte_1",
+        ),
+        Index("ix_connectors_charge_point_id", "charge_point_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    charge_point_id: Mapped[UUID] = mapped_column(
+        ForeignKey("charge_points.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    connector_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(30),
+        default="Available",
+        server_default="Available",
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    charge_point: Mapped[ChargePoint] = relationship(
+        "ChargePoint",
+        back_populates="connectors",
+    )
