@@ -5,6 +5,7 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from src.modules.identity.models import User
 from src.modules.stations.models import Station
@@ -63,7 +64,11 @@ async def test_station_creation_persists_in_database(
     db_session.add(station)
     await db_session.flush()
 
-    query = select(Station).where(Station.id == station.id)
+    query = (
+        select(Station)
+        .options(selectinload(Station.owner))
+        .where(Station.id == station.id)
+    )
     result = await db_session.execute(query)
     persisted_station = result.scalar_one()
 
