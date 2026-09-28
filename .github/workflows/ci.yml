@@ -1,4 +1,4 @@
-name: CI
+name: CI/CD
 
 on:
   push:
@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: read
+  packages: write
 
 jobs:
   quality:
@@ -60,7 +61,7 @@ jobs:
         run: pytest
         
   build:
-    name: Build Docker image
+    name: Build & Push Docker image
     runs-on: ubuntu-latest
 
     steps:
@@ -68,4 +69,64 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Build Docker image
-        run: docker build --tag csms:test .
+        run: |
+          IMAGE_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          docker build --tag csms:test .
+          docker tag csms:test "ghcr.io/${IMAGE_LOWER}:${{ github.sha }}"
+          docker tag csms:test "ghcr.io/${IMAGE_LOWER}:latest"
+
+      - name: Push image to GitHub Container Registry
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          IMAGE_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker push "ghcr.io/${IMAGE_LOWER}:${{ github.sha }}"
+          docker push "ghcr.io/${IMAGE_LOWER}:latest"
+
+  deploy:
+    name: Deploy to Staging
+    needs: [quality, build]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v7
+
+      - name: Make deploy script executable
+        run: chmod +x ./scripts/deploy_staging.sh
+
+      - name: Deploy to Staging Server via SSH
+        if: "${{ secrets.STAGING_HOST != '' }}"
+        env:
+          STAGING_HOST: ${{ secrets.STAGING_HOST }}
+          STAGING_USER: ${{ secrets.STAGING_USER }}
+          STAGING_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          STAGING_PORT: ${{ secrets.STAGING_PORT || '22' }}
+        run: |
+          IMAGE_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          IMAGE_TAG="ghcr.io/${IMAGE_LOWER}:${{ github.sha }}"
+          mkdir -p ~/.ssh
+          echo "$STAGING_SSH_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -p "$STAGING_PORT" -H "$STAGING_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+          
+          # Truyền script deploy lên máy chủ staging và thực thi kiểm tra sức khỏe + rollback
+          scp -P "$STAGING_PORT" ./scripts/deploy_staging.sh "$STAGING_USER@$STAGING_HOST":/tmp/deploy_staging.sh
+          ssh -p "$STAGING_PORT" "$STAGING_USER@$STAGING_HOST" "chmod +x /tmp/deploy_staging.sh && /tmp/deploy_staging.sh $IMAGE_TAG"
+
+      - name: Deployment Readiness Notice
+        if: "${{ secrets.STAGING_HOST == '' }}"
+        run: |
+          echo "=========================================================================="
+          echo "[THÔNG BÁO] Docker image đã đóng gói và đẩy lên GitHub Container Registry:"
+          IMAGE_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "Tag: ghcr.io/${IMAGE_LOWER}:${{ github.sha }}"
+          echo ""
+          echo "[SẴN SÀNG TRIỂN KHAI] Script ./scripts/deploy_staging.sh đã sẵn sàng với cơ chế Candidate & Zero-Downtime Rollback."
+          echo "Để triển khai tự động tới máy chủ riêng qua SSH, bạn chỉ cần thêm 3 Secrets vào GitHub Repository:"
+          echo "  - STAGING_HOST: IP hoặc tên miền của máy chủ staging"
+          echo "  - STAGING_USER: Tên tài khoản SSH trên máy chủ (vd: ubuntu hoặc deploy)"
+          echo "  - STAGING_SSH_KEY: Khóa riêng tư SSH (Private Key) để truy cập máy chủ"
+          echo "  - STAGING_PORT: (Tùy chọn) Cổng SSH nếu khác 22"
+          echo "=========================================================================="
