@@ -1,22 +1,32 @@
-import importlib
+from pathlib import Path
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 
-stations_migration = importlib.import_module(
-    "migrations.versions.8f2b1d3a4c5e_tao_bang_stations"
-)
+
+def _get_alembic_config() -> Config:
+    ini_path = Path(__file__).parent.parent / "alembic.ini"
+    return Config(str(ini_path))
+
+
+def _get_stations_migration():
+    alembic_config = _get_alembic_config()
+    script = ScriptDirectory.from_config(alembic_config)
+    rev = script.get_revision("8f2b1d3a4c5e")
+    assert rev is not None, "Revision 8f2b1d3a4c5e not found in Alembic script directory"
+    return rev, rev.module
 
 
 def test_stations_migration_revision_chain() -> None:
-    assert stations_migration.revision == "8f2b1d3a4c5e"
-    assert stations_migration.down_revision == "106fd5767106"
+    rev, stations_migration = _get_stations_migration()
+    assert rev.revision == "8f2b1d3a4c5e"
+    assert rev.down_revision == "106fd5767106"
     assert callable(stations_migration.upgrade)
     assert callable(stations_migration.downgrade)
 
 
 def test_alembic_revision_exists_in_script_directory() -> None:
-    alembic_config = Config("alembic.ini")
+    alembic_config = _get_alembic_config()
     script = ScriptDirectory.from_config(alembic_config)
     rev = script.get_revision("8f2b1d3a4c5e")
 
