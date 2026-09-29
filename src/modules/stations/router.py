@@ -12,6 +12,7 @@ from src.modules.identity.dependencies import (
 from src.modules.stations.exceptions import StationOwnershipDeniedError
 from src.modules.stations.repository import StationRepository
 from src.modules.stations.schemas import (
+    StationCreateRequest,
     StationListQuery,
     StationListResponse,
     StationResponse,
@@ -55,6 +56,27 @@ async def list_stations(
         total=page_result.total,
         total_pages=total_pages,
     )
+
+
+@router.post(
+    "",
+    response_model=StationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+@allow_roles("station_owner")
+async def create_station(
+    request: StationCreateRequest,
+    actor: CurrentActorDependency,
+    db_session: DatabaseSession,
+) -> StationResponse:
+    station = await StationRepository(db_session).create_station(
+        owner_id=actor.user_id,
+        name=request.name,
+        address=request.address,
+        latitude=request.latitude,
+        longitude=request.longitude,
+    )
+    return StationResponse.model_validate(station)
 
 
 @router.get("/{station_id}", response_model=StationResponse)

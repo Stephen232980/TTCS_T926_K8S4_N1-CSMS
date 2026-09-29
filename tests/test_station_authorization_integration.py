@@ -255,3 +255,86 @@ async def test_station_list_rejects_driver_role(
         response = await client.get("/api/v1/stations")
 
     assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_owner_creates_station_through_http(
+    db_session: AsyncSession,
+) -> None:
+    owner = User(
+        email="station-create-http-owner@example.com",
+        password_hash="hashed-password",
+    )
+    db_session.add(owner)
+    await db_session.flush()
+
+    actor = CurrentActor(
+        user_id=owner.id,
+        roles=frozenset({"station_owner"}),
+    )
+
+    async with station_api_client(db_session, actor) as client:
+        response = await client.post(
+            "/api/v1/stations",
+            json={
+                "name": "  Trạm Quận 1  ",
+                "address": "  123 Nguyễn Huệ, Quận 1  ",
+                "latitude": 10.7731,
+                "longitude": 106.7032,
+            },
+        )
+
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["owner_id"] == str(owner.id)
+    assert payload["name"] == "Trạm Quận 1"
+    assert payload["address"] == "123 Nguyễn Huệ, Quận 1"
+    assert payload["latitude"] == 10.7731
+    assert payload["longitude"] == 106.7032
+    assert payload["status"] == "inactive"
+
+
+@pytest.mark.asyncio
+async def test_create_station_rejects_invalid_coordinates(
+    db_session: AsyncSession,
+) -> None:
+    actor = CurrentActor(
+        user_id=uuid4(),
+        roles=frozenset({"station_owner"}),
+    )
+
+    async with station_api_client(db_session, actor) as client:
+        response = await client.post(
+            "/api/v1/stations",
+            json={
+                "name": "Trạm sai tọa độ",
+                "address": "Quận 1",
+                "latitude": 90.01,
+                "longitude": -180.01,
+            },
+        )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_driver_cannot_create_station(
+    db_session: AsyncSession,
+) -> None:
+    actor = CurrentActor(
+        user_id=uuid4(),
+        roles=frozenset({"driver"}),
+    )
+
+    async with station_api_client(db_session, actor) as client:
+        response = await client.post(
+            "/api/v1/stations",
+            json={
+                "name": "Trạm không được phép",
+                "address": "Quận 1",
+                "latitude": 10.7731,
+                "longitude": 106.7032,
+            },
+        )
+
+    assert response.status_code == 403
