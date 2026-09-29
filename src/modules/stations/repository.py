@@ -216,3 +216,30 @@ class StationRepository:
             station_id,
         )
         raise StationOwnershipDeniedError
+
+    async def update_station(
+        self,
+        station_id: UUID,
+        scope: ActorScope,
+        *,
+        name: str | None,
+        address: str | None,
+        latitude: Decimal | None,
+        longitude: Decimal | None,
+    ) -> Station | None:
+        station = await self.get_station_by_id(station_id, scope)
+        if station is None:
+            return None
+
+        if name is not None:
+            station.name = name
+        if address is not None:
+            station.address = address
+        if latitude is not None:
+            station.latitude = latitude
+        if longitude is not None:
+            station.longitude = longitude
+
+        await self._db_session.flush()
+        await self._db_session.refresh(station)
+        return station

@@ -468,3 +468,100 @@ async def test_create_station_idempotent_serializes_concurrent_requests() -> Non
                 delete(Station).where(Station.owner_id == owner_id)
             )
             await cleanup_session.execute(delete(User).where(User.id == owner_id))
+
+
+@pytest.mark.asyncio
+async def test_update_station_changes_only_supplied_fields(
+    db_session: AsyncSession,
+) -> None:
+    owner = User(
+        email="station-update-owner@example.com",
+        password_hash="hashed-password",
+    )
+    db_session.add(owner)
+    await db_session.flush()
+    station = Station(
+        owner_id=owner.id,
+        name="Trạm ban đầu",
+        address="Địa chỉ ban đầu",
+        latitude=Decimal("10.700000"),
+        longitude=Decimal("106.700000"),
+    )
+    db_session.add(station)
+    await db_session.flush()
+
+    updated_station = await StationRepository(db_session).update_station(
+        station.id,
+        ActorScope(actor_id=owner.id, owner_id=owner.id),
+        name="Trạm đã sửa",
+        address="Địa chỉ đã sửa",
+        latitude=None,
+        longitude=None,
+    )
+
+    assert updated_station is not None
+    assert updated_station.name == "Trạm đã sửa"
+    assert updated_station.address == "Địa chỉ đã sửa"
+    assert updated_station.latitude == Decimal("10.700000")
+    assert updated_station.longitude == Decimal("106.700000")
+    assert updated_station.owner_id == owner.id
+    assert updated_station.status == "inactive"
+
+
+@pytest.mark.asyncio
+async def test_update_station_returns_none_for_missing_station(
+    db_session: AsyncSession,
+) -> None:
+    owner_id = uuid4()
+
+    updated_station = await StationRepository(db_session).update_station(
+        uuid4(),
+        ActorScope(actor_id=owner_id, owner_id=owner_id),
+        name="Trạm không tồn tại",
+        address=None,
+        latitude=None,
+        longitude=None,
+    )
+
+    assert updated_station is None
+
+
+@pytest.mark.asyncio
+async def test_update_station_rejects_cross_owner_access_and_logs(
+    db_session: AsyncSession,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    owner_a = User(
+        email="station-update-owner-a@example.com",
+        password_hash="hashed-password",
+    )
+    owner_b = User(
+        email="station-update-owner-b@example.com",
+        password_hash="hashed-password",
+    )
+    db_session.add_all([owner_a, owner_b])
+    await db_session.flush()
+    station_b = Station(
+        owner_id=owner_b.id,
+        name="Trạm của B",
+        address="Địa chỉ B",
+        latitude=Decimal("10.800000"),
+        longitude=Decimal("106.800000"),
+    )
+    db_session.add(station_b)
+    await db_session.flush()
+    caplog.set_level(logging.WARNING, logger="csms.security")
+
+    with pytest.raises(StationOwnershipDeniedError):
+        await StationRepository(db_session).update_station(
+            station_b.id,
+            ActorScope(actor_id=owner_a.id, owner_id=owner_a.id),
+            name="Không được phép",
+            address=None,
+            latitude=None,
+            longitude=None,
+        )
+
+    assert "cross_owner_station_access_denied" in caplog.text
+    assert str(owner_a.id) in caplog.text
+    assert str(station_b.id) in caplog.text
