@@ -7,6 +7,7 @@ import type {
   StationUpdate,
 } from '../model/station'
 import type { StationApi } from './stationApi'
+import { notifySessionUnauthorized } from '../../auth/sessionEvents'
 
 interface StationResponse {
   id: string
@@ -59,6 +60,8 @@ function mapStation(response: StationResponse): Station {
 
 async function parseResponse<T>(response: Response): Promise<T> {
   if (response.ok) return (await response.json()) as T
+
+  if (response.status === 401) notifySessionUnauthorized()
 
   let detail: unknown
   try {

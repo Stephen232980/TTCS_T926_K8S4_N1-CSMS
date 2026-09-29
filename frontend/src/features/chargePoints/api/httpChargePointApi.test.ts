@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { SESSION_UNAUTHORIZED_EVENT } from '../../auth/sessionEvents'
 import { ChargePointApiError } from './chargePointApi'
 import { HttpChargePointApi } from './httpChargePointApi'
 
@@ -97,5 +98,21 @@ describe('HttpChargePointApi', () => {
         detail: 'charge_point_code_already_exists',
       }),
     )
+  })
+
+  it('notifies the app when the session is unauthorized', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(jsonResponse({ detail: 'Chưa đăng nhập' }, 401)),
+    )
+    const listener = vi.fn()
+    window.addEventListener(SESSION_UNAUTHORIZED_EVENT, listener)
+
+    await expect(
+      new HttpChargePointApi().checkCodeAvailability('CP-Q1-001'),
+    ).rejects.toEqual(expect.objectContaining({ status: 401 }))
+
+    expect(listener).toHaveBeenCalledTimes(1)
+    window.removeEventListener(SESSION_UNAUTHORIZED_EVENT, listener)
   })
 })
