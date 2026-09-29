@@ -190,7 +190,22 @@ Role: `station_owner`, `operator`, `admin`.
 - `search` tìm theo tên và địa chỉ, tối đa 100 ký tự.
 - Response dùng cấu trúc phân trang chung, `items` là mảng station.
 
-### 5.3. Tạo station
+### 5.3. Chi tiết station
+
+```text
+GET /api/v1/stations/{station_id}
+```
+
+Role: `station_owner`, `operator`, `admin`.
+
+- `station_owner` chỉ đọc được station thuộc chính mình.
+- `operator` và `admin` đọc theo global scope.
+- Station không tồn tại trả `404 resource_not_found`.
+- Station tồn tại nhưng nằm ngoài ownership scope trả `403 permission_denied` và ghi
+  security log không chứa dữ liệu nhạy cảm.
+- Response thành công dùng kiểu dữ liệu station tại mục 5.1.
+
+### 5.4. Tạo station
 
 ```text
 POST /api/v1/stations
@@ -220,7 +235,7 @@ Request:
 - Gửi lại cùng `Idempotency-Key` và cùng payload trả cùng kết quả; cùng key nhưng payload khác
   trả `409 resource_conflict`.
 
-### 5.4. Cập nhật station
+### 5.5. Cập nhật station
 
 ```text
 PATCH /api/v1/stations/{station_id}
