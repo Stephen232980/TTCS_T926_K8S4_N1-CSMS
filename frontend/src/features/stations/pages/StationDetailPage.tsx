@@ -1,10 +1,15 @@
 import { useEffect, useState } from 'react'
 import { Icon } from '../../../components/icons/Icon'
+import type { ChargePointApi } from '../../chargePoints/api/chargePointApi'
+import { HttpChargePointApi } from '../../chargePoints/api/httpChargePointApi'
+import { ChargePointForm } from '../../chargePoints/components/ChargePointForm'
+import type { ChargePoint } from '../../chargePoints/model/chargePoint'
 import { HttpStationApi, StationApiError } from '../api/httpStationApi'
 import type { StationApi } from '../api/stationApi'
 import type { Station } from '../model/station'
 
 const defaultStationApi = new HttpStationApi()
+const defaultChargePointApi = new HttpChargePointApi()
 
 function detailErrorMessage(error: unknown): string {
   if (error instanceof StationApiError) {
@@ -19,17 +24,22 @@ interface StationDetailPageProps {
   stationId: string
   onBack: () => void
   api?: StationApi
+  chargePointApi?: ChargePointApi
 }
 
 export function StationDetailPage({
   stationId,
   onBack,
   api = defaultStationApi,
+  chargePointApi = defaultChargePointApi,
 }: StationDetailPageProps) {
   const [station, setStation] = useState<Station | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
   const [requestVersion, setRequestVersion] = useState(0)
+  const [createdChargePoint, setCreatedChargePoint] = useState<ChargePoint | null>(
+    null,
+  )
 
   useEffect(() => {
     const controller = new AbortController()
@@ -103,10 +113,24 @@ export function StationDetailPage({
           </dl>
 
           <section className="station-detail__charge-points" aria-labelledby="charge-points-title">
-            <div>
+            <div className="station-detail__section-heading">
               <h2 id="charge-points-title">Trụ sạc và đầu nối</h2>
               <p>Thêm trụ sạc thuộc trạm này và khai báo số đầu nối đi kèm.</p>
             </div>
+            {createdChargePoint && (
+              <div className="charge-point-created" role="status">
+                <div>
+                  <strong>Đã thêm trụ {createdChargePoint.code}</strong>
+                  <span>{createdChargePoint.connectors.length} đầu nối, trạng thái ban đầu chưa rõ</span>
+                </div>
+                <span className="status-badge status-badge--inactive">Ngoại tuyến</span>
+              </div>
+            )}
+            <ChargePointForm
+              stationId={station.id}
+              api={chargePointApi}
+              onCreated={setCreatedChargePoint}
+            />
           </section>
         </>
       ) : null}

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { AppShell } from './app/AppShell'
+import type { ChargePointApi } from './features/chargePoints/api/chargePointApi'
 import type { StationApi } from './features/stations/api/stationApi'
 import { StationDetailPage } from './features/stations/pages/StationDetailPage'
 import { StationListPage } from './features/stations/pages/StationListPage'
@@ -7,9 +8,10 @@ import './App.css'
 
 interface AppProps {
   stationApi?: StationApi
+  chargePointApi?: ChargePointApi
 }
 
-function App({ stationApi }: AppProps) {
+function App({ stationApi, chargePointApi }: AppProps) {
   const [notice, setNotice] = useState('')
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null)
 
@@ -30,6 +32,7 @@ function App({ stationApi }: AppProps) {
           stationId={selectedStationId}
           onBack={() => setSelectedStationId(null)}
           api={stationApi}
+          chargePointApi={chargePointApi}
         />
       ) : (
         <StationListPage

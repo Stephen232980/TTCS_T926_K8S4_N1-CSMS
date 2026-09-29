@@ -130,6 +130,15 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .station-detail__charge-points { min-height: 180px; padding: 24px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
 .station-detail__charge-points h2 { margin: 0 0 7px; color: var(--ink); font-size: 1.05rem; letter-spacing: -.015em; }
 .station-detail__charge-points p { margin: 0; color: var(--muted); font-size: .82rem; }
+.station-detail__section-heading { margin-bottom: 22px; }
+.charge-point-form { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(160px, .6fr); gap: 18px; align-items: start; }
+.field-help { color: var(--muted); font-size: .73rem; line-height: 1.4; }
+.charge-point-form__actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
+.charge-point-form__actions .primary-button { min-width: 132px; }
+.charge-point-created { margin-bottom: 20px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; gap: 18px; border-radius: 12px; background: var(--accent-soft); }
+.charge-point-created div { display: grid; gap: 4px; }
+.charge-point-created strong { color: var(--accent-strong); font-size: .84rem; }
+.charge-point-created div span { color: #47645b; font-size: .75rem; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
@@ -171,6 +180,11 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
   .station-detail__facts { grid-template-columns: minmax(0, 1fr); }
   .station-detail__facts div { border-right: 0; border-bottom: 1px solid var(--line); }
   .station-detail__facts div:last-child { border-bottom: 0; }
+  .station-detail__charge-points { padding: 20px 18px; }
+  .charge-point-form { grid-template-columns: minmax(0, 1fr); }
+  .charge-point-form__actions { grid-column: auto; }
+  .charge-point-form__actions .primary-button { width: 100%; }
+  .charge-point-created { align-items: flex-start; flex-direction: column; }
   .data-surface { border-radius: 12px; }
 }
 
