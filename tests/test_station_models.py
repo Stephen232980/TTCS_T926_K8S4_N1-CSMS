@@ -11,7 +11,7 @@ from src.modules.identity.models import User
 from src.modules.stations.models import Station
 
 
-def test_station_model_default_status() -> None:
+def test_station_model_defaults_and_fields() -> None:
     station = Station(
         owner_id=uuid4(),
         name="Trạm Sạc Trung Tâm",
@@ -20,11 +20,16 @@ def test_station_model_default_status() -> None:
         longitude=Decimal("106.703200"),
     )
 
-    assert station.status == "inactive"
     assert station.name == "Trạm Sạc Trung Tâm"
     assert station.address == "123 Nguyễn Huệ, Quận 1, TP.HCM"
     assert station.latitude == Decimal("10.773100")
     assert station.longitude == Decimal("106.703200")
+
+    status_column = Station.__table__.c.status
+    assert status_column.default is not None
+    assert status_column.default.arg == "inactive"
+    assert status_column.server_default is not None
+    assert status_column.server_default.arg == "inactive"
 
 
 def test_station_table_indexes_and_foreign_keys() -> None:
