@@ -13,8 +13,15 @@ client = TestClient(
 )
 
 
-def test_health_live():
-    response = client.get("health/live")
+def test_root() -> None:
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "app": "CSMS"}
+
+
+def test_health_live() -> None:
+    response = client.get("/health/live")
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}

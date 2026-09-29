@@ -14,6 +14,11 @@ app.include_router(identity_router)
 DatabaseSession = Annotated[AsyncSession, Depends(get_db_session)]
 
 
+@app.get("/")
+async def root() -> dict[str, str]:
+    return {"status": "ok", "app": "CSMS"}
+
+
 @app.get("/health/live")
 async def health_live() -> dict[str, str]:
     return {"status": "ok"}
