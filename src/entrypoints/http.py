@@ -6,10 +6,12 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.identity.router import router as identity_router
+from src.modules.stations.router import router as stations_router
 from src.platform.database.session import get_db_session
 
 app = FastAPI(title="CSMS")
 app.include_router(identity_router)
+app.include_router(stations_router)
 
 DatabaseSession = Annotated[AsyncSession, Depends(get_db_session)]
 
