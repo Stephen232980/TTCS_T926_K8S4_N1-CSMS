@@ -1,7 +1,9 @@
+import hashlib
+import json
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.identity.authorization import allow_roles, build_actor_scope
@@ -9,7 +11,10 @@ from src.modules.identity.dependencies import (
     CurrentActorDependency,
     authorize_request,
 )
-from src.modules.stations.exceptions import StationOwnershipDeniedError
+from src.modules.stations.exceptions import (
+    StationIdempotencyConflictError,
+    StationOwnershipDeniedError,
+)
 from src.modules.stations.repository import StationRepository
 from src.modules.stations.schemas import (
     StationCreateRequest,
@@ -27,6 +32,17 @@ router = APIRouter(
 
 DatabaseSession = Annotated[AsyncSession, Depends(get_db_session)]
 StationListQueryDependency = Annotated[StationListQuery, Query()]
+IdempotencyKey = Annotated[UUID, Header(alias="Idempotency-Key")]
+
+
+def _station_create_request_hash(request: StationCreateRequest) -> str:
+    canonical_payload = json.dumps(
+        request.model_dump(mode="json"),
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return hashlib.sha256(canonical_payload.encode("utf-8")).hexdigest()
 
 
 @router.get("", response_model=StationListResponse)
@@ -66,16 +82,25 @@ async def list_stations(
 @allow_roles("station_owner")
 async def create_station(
     request: StationCreateRequest,
+    idempotency_key: IdempotencyKey,
     actor: CurrentActorDependency,
     db_session: DatabaseSession,
 ) -> StationResponse:
-    station = await StationRepository(db_session).create_station(
-        owner_id=actor.user_id,
-        name=request.name,
-        address=request.address,
-        latitude=request.latitude,
-        longitude=request.longitude,
-    )
+    try:
+        station = await StationRepository(db_session).create_station_idempotent(
+            actor_id=actor.user_id,
+            idempotency_key=idempotency_key,
+            request_hash=_station_create_request_hash(request),
+            name=request.name,
+            address=request.address,
+            latitude=request.latitude,
+            longitude=request.longitude,
+        )
+    except StationIdempotencyConflictError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="idempotency_conflict",
+        ) from error
     return StationResponse.model_validate(station)
 
 

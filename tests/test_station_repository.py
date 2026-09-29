@@ -1,15 +1,21 @@
+import asyncio
 import logging
 from decimal import Decimal
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.identity.authorization import ActorScope
 from src.modules.identity.models import User
-from src.modules.stations.exceptions import StationOwnershipDeniedError
-from src.modules.stations.models import Station
+from src.modules.stations.exceptions import (
+    StationIdempotencyConflictError,
+    StationOwnershipDeniedError,
+)
+from src.modules.stations.models import Station, StationCreateIdempotency
 from src.modules.stations.repository import StationRepository
+from src.platform.database.session import SessionFactory
 
 
 @pytest.mark.asyncio
@@ -332,3 +338,133 @@ async def test_create_station_persists_owner_and_default_status(
     assert station.status == "inactive"
     assert station.created_at is not None
     assert station.updated_at is not None
+
+
+@pytest.mark.asyncio
+async def test_create_station_idempotent_replays_existing_station(
+    db_session: AsyncSession,
+) -> None:
+    owner = User(
+        email="station-idempotency-replay@example.com",
+        password_hash="hashed-password",
+    )
+    db_session.add(owner)
+    await db_session.flush()
+
+    repository = StationRepository(db_session)
+    idempotency_key = uuid4()
+    request_hash = "a" * 64
+
+    first_station = await repository.create_station_idempotent(
+        actor_id=owner.id,
+        idempotency_key=idempotency_key,
+        request_hash=request_hash,
+        name="Trạm idempotent",
+        address="Quận 1",
+        latitude=Decimal("10.773100"),
+        longitude=Decimal("106.703200"),
+    )
+    replayed_station = await repository.create_station_idempotent(
+        actor_id=owner.id,
+        idempotency_key=idempotency_key,
+        request_hash=request_hash,
+        name="Trạm idempotent",
+        address="Quận 1",
+        latitude=Decimal("10.773100"),
+        longitude=Decimal("106.703200"),
+    )
+
+    station_count = await db_session.scalar(
+        select(func.count(Station.id)).where(Station.owner_id == owner.id)
+    )
+
+    assert replayed_station.id == first_station.id
+    assert station_count == 1
+
+
+@pytest.mark.asyncio
+async def test_create_station_idempotent_rejects_changed_payload(
+    db_session: AsyncSession,
+) -> None:
+    owner = User(
+        email="station-idempotency-conflict@example.com",
+        password_hash="hashed-password",
+    )
+    db_session.add(owner)
+    await db_session.flush()
+
+    repository = StationRepository(db_session)
+    idempotency_key = uuid4()
+
+    await repository.create_station_idempotent(
+        actor_id=owner.id,
+        idempotency_key=idempotency_key,
+        request_hash="a" * 64,
+        name="Trạm ban đầu",
+        address="Quận 1",
+        latitude=Decimal("10.773100"),
+        longitude=Decimal("106.703200"),
+    )
+
+    with pytest.raises(StationIdempotencyConflictError):
+        await repository.create_station_idempotent(
+            actor_id=owner.id,
+            idempotency_key=idempotency_key,
+            request_hash="b" * 64,
+            name="Trạm đã thay đổi",
+            address="Quận 3",
+            latitude=Decimal("10.780000"),
+            longitude=Decimal("106.690000"),
+        )
+
+
+@pytest.mark.asyncio
+async def test_create_station_idempotent_serializes_concurrent_requests() -> None:
+    idempotency_key = uuid4()
+    owner_email = f"station-idempotency-concurrent-{uuid4()}@example.com"
+
+    async with SessionFactory() as setup_session:
+        owner = User(
+            email=owner_email,
+            password_hash="hashed-password",
+        )
+        setup_session.add(owner)
+        await setup_session.commit()
+        owner_id = owner.id
+
+    async def create_station() -> Station:
+        async with SessionFactory() as request_session, request_session.begin():
+            return await StationRepository(request_session).create_station_idempotent(
+                actor_id=owner_id,
+                idempotency_key=idempotency_key,
+                request_hash="c" * 64,
+                name="Trạm đồng thời",
+                address="Quận 1",
+                latitude=Decimal("10.773100"),
+                longitude=Decimal("106.703200"),
+            )
+
+    try:
+        first_station, second_station = await asyncio.gather(
+            create_station(),
+            create_station(),
+        )
+
+        async with SessionFactory() as verification_session:
+            station_count = await verification_session.scalar(
+                select(func.count(Station.id)).where(Station.owner_id == owner_id)
+            )
+
+        assert first_station.id == second_station.id
+        assert station_count == 1
+    finally:
+        async with SessionFactory() as cleanup_session, cleanup_session.begin():
+            await cleanup_session.execute(
+                delete(StationCreateIdempotency).where(
+                    StationCreateIdempotency.actor_id == owner_id
+                )
+            )
+            await cleanup_session.execute(
+                delete(Station).where(Station.owner_id == owner_id)
+            )
+            await cleanup_session.execute(delete(User).where(User.id == owner_id))

@@ -276,6 +276,7 @@ async def test_owner_creates_station_through_http(
     async with station_api_client(db_session, actor) as client:
         response = await client.post(
             "/api/v1/stations",
+            headers={"Idempotency-Key": str(uuid4())},
             json={
                 "name": "  Trạm Quận 1  ",
                 "address": "  123 Nguyễn Huệ, Quận 1  ",
@@ -306,6 +307,7 @@ async def test_create_station_rejects_invalid_coordinates(
     async with station_api_client(db_session, actor) as client:
         response = await client.post(
             "/api/v1/stations",
+            headers={"Idempotency-Key": str(uuid4())},
             json={
                 "name": "Trạm sai tọa độ",
                 "address": "Quận 1",
@@ -329,6 +331,7 @@ async def test_driver_cannot_create_station(
     async with station_api_client(db_session, actor) as client:
         response = await client.post(
             "/api/v1/stations",
+            headers={"Idempotency-Key": str(uuid4())},
             json={
                 "name": "Trạm không được phép",
                 "address": "Quận 1",
@@ -338,3 +341,110 @@ async def test_driver_cannot_create_station(
         )
 
     assert response.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_create_station_requires_idempotency_key(
+    db_session: AsyncSession,
+) -> None:
+    actor = CurrentActor(
+        user_id=uuid4(),
+        roles=frozenset({"station_owner"}),
+    )
+
+    async with station_api_client(db_session, actor) as client:
+        response = await client.post(
+            "/api/v1/stations",
+            json={
+                "name": "Trạm thiếu khóa",
+                "address": "Quận 1",
+                "latitude": 10.7731,
+                "longitude": 106.7032,
+            },
+        )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_station_replays_same_idempotency_request(
+    db_session: AsyncSession,
+) -> None:
+    owner = User(
+        email="station-create-replay-owner@example.com",
+        password_hash="hashed-password",
+    )
+    db_session.add(owner)
+    await db_session.flush()
+
+    actor = CurrentActor(
+        user_id=owner.id,
+        roles=frozenset({"station_owner"}),
+    )
+    headers = {"Idempotency-Key": str(uuid4())}
+    payload = {
+        "name": "Trạm idempotent",
+        "address": "Quận 1",
+        "latitude": 10.7731,
+        "longitude": 106.7032,
+    }
+
+    async with station_api_client(db_session, actor) as client:
+        first_response = await client.post(
+            "/api/v1/stations",
+            headers=headers,
+            json=payload,
+        )
+        replay_response = await client.post(
+            "/api/v1/stations",
+            headers=headers,
+            json=payload,
+        )
+
+    assert first_response.status_code == 201
+    assert replay_response.status_code == 201
+    assert replay_response.json()["id"] == first_response.json()["id"]
+
+
+@pytest.mark.asyncio
+async def test_create_station_rejects_reused_key_with_changed_payload(
+    db_session: AsyncSession,
+) -> None:
+    owner = User(
+        email="station-create-conflict-owner@example.com",
+        password_hash="hashed-password",
+    )
+    db_session.add(owner)
+    await db_session.flush()
+
+    actor = CurrentActor(
+        user_id=owner.id,
+        roles=frozenset({"station_owner"}),
+    )
+    headers = {"Idempotency-Key": str(uuid4())}
+
+    async with station_api_client(db_session, actor) as client:
+        first_response = await client.post(
+            "/api/v1/stations",
+            headers=headers,
+            json={
+                "name": "Trạm ban đầu",
+                "address": "Quận 1",
+                "latitude": 10.7731,
+                "longitude": 106.7032,
+            },
+        )
+        conflict_response = await client.post(
+            "/api/v1/stations",
+            headers=headers,
+            json={
+                "name": "Trạm đã thay đổi",
+                "address": "Quận 3",
+                "latitude": 10.78,
+                "longitude": 106.69,
+            },
+        )
+
+    assert first_response.status_code == 201
+    assert conflict_response.status_code == 409
+    assert conflict_response.json() == {"detail": "idempotency_conflict"}
