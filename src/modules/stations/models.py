@@ -65,3 +65,23 @@ class Station(Base):
     )
 
     owner: Mapped[User] = relationship(User)
+
+
+class StationCreateIdempotency(Base):
+    __tablename__ = "station_create_idempotency"
+
+    actor_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+    idempotency_key: Mapped[UUID] = mapped_column(primary_key=True)
+    request_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    station_id: Mapped[UUID] = mapped_column(
+        ForeignKey("stations.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
