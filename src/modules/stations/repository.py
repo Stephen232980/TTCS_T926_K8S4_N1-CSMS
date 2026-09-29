@@ -13,7 +13,7 @@ from src.modules.stations.exceptions import (
     StationIdempotencyConflictError,
     StationOwnershipDeniedError,
 )
-from src.modules.stations.models import Station, StationCreateIdempotency
+from src.modules.stations.models import ChargePoint, Station, StationCreateIdempotency
 
 _security_logger = logging.getLogger("csms.security")
 
@@ -131,6 +131,12 @@ class StationRepository:
         await self._db_session.flush()
         await self._db_session.refresh(station)
         return station
+
+    async def is_charge_point_code_available(self, code: str) -> bool:
+        charge_point_id = await self._db_session.scalar(
+            select(ChargePoint.id).where(ChargePoint.code == code).limit(1)
+        )
+        return charge_point_id is None
 
     async def create_station_idempotent(
         self,

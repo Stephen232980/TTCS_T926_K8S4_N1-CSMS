@@ -88,3 +88,17 @@ class StationListResponse(BaseModel):
     page_size: int
     total: int
     total_pages: int
+
+
+class ChargePointCodeAvailabilityQuery(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
+
+    code: str = Field(min_length=1, max_length=64)
+
+
+class ChargePointCodeAvailabilityResponse(BaseModel):
+    code: str
+    available: bool
