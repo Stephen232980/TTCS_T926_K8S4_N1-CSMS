@@ -1,5 +1,7 @@
 import logging
 from dataclasses import dataclass
+from decimal import Decimal
+from hashlib import sha256
 from uuid import UUID
 
 from sqlalchemy import func, or_, select
@@ -7,10 +9,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
 from src.modules.identity.authorization import ActorScope
-from src.modules.stations.exceptions import StationOwnershipDeniedError
-from src.modules.stations.models import Station
+from src.modules.stations.exceptions import (
+    StationIdempotencyConflictError,
+    StationOwnershipDeniedError,
+)
+from src.modules.stations.models import Station, StationCreateIdempotency
 
 _security_logger = logging.getLogger("csms.security")
+
+
+def _idempotency_lock_id(actor_id: UUID, idempotency_key: UUID) -> int:
+    digest = sha256(actor_id.bytes + idempotency_key.bytes).digest()
+    return int.from_bytes(digest[:8], byteorder="big", signed=True)
 
 
 @dataclass(frozen=True)
@@ -101,6 +111,84 @@ class StationRepository:
             total=total or 0,
         )
 
+    async def create_station(
+        self,
+        *,
+        owner_id: UUID,
+        name: str,
+        address: str,
+        latitude: Decimal,
+        longitude: Decimal,
+    ) -> Station:
+        station = Station(
+            owner_id=owner_id,
+            name=name,
+            address=address,
+            latitude=latitude,
+            longitude=longitude,
+        )
+        self._db_session.add(station)
+        await self._db_session.flush()
+        await self._db_session.refresh(station)
+        return station
+
+    async def create_station_idempotent(
+        self,
+        *,
+        actor_id: UUID,
+        idempotency_key: UUID,
+        request_hash: str,
+        name: str,
+        address: str,
+        latitude: Decimal,
+        longitude: Decimal,
+    ) -> Station:
+        await self._db_session.execute(
+            select(
+                func.pg_advisory_xact_lock(
+                    _idempotency_lock_id(actor_id, idempotency_key)
+                )
+            )
+        )
+
+        idempotency_record = await self._db_session.scalar(
+            select(StationCreateIdempotency).where(
+                StationCreateIdempotency.actor_id == actor_id,
+                StationCreateIdempotency.idempotency_key == idempotency_key,
+            )
+        )
+
+        if idempotency_record is not None:
+            if idempotency_record.request_hash != request_hash:
+                raise StationIdempotencyConflictError
+
+            station = await self._db_session.scalar(
+                select(Station).where(
+                    Station.id == idempotency_record.station_id,
+                )
+            )
+            if station is None:
+                raise RuntimeError("Idempotency record references a missing station")
+            return station
+
+        station = await self.create_station(
+            owner_id=actor_id,
+            name=name,
+            address=address,
+            latitude=latitude,
+            longitude=longitude,
+        )
+        self._db_session.add(
+            StationCreateIdempotency(
+                actor_id=actor_id,
+                idempotency_key=idempotency_key,
+                request_hash=request_hash,
+                station_id=station.id,
+            )
+        )
+        await self._db_session.flush()
+        return station
+
     async def get_station_by_id(
         self,
         station_id: UUID,
@@ -128,3 +216,30 @@ class StationRepository:
             station_id,
         )
         raise StationOwnershipDeniedError
+
+    async def update_station(
+        self,
+        station_id: UUID,
+        scope: ActorScope,
+        *,
+        name: str | None,
+        address: str | None,
+        latitude: Decimal | None,
+        longitude: Decimal | None,
+    ) -> Station | None:
+        station = await self.get_station_by_id(station_id, scope)
+        if station is None:
+            return None
+
+        if name is not None:
+            station.name = name
+        if address is not None:
+            station.address = address
+        if latitude is not None:
+            station.latitude = latitude
+        if longitude is not None:
+            station.longitude = longitude
+
+        await self._db_session.flush()
+        await self._db_session.refresh(station)
+        return station
