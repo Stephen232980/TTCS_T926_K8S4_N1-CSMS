@@ -20,6 +20,10 @@ CANDIDATE_PORT="${CANDIDATE_PORT:-8002}"
 NETWORK_NAME="${NETWORK_NAME:-ttcs_t926_k8s4_n1-csms-main_default}"
 ENV_FILE="${ENV_FILE:-.env}"
 
+container_exists() {
+  docker ps -a --format '{{.Names}}' | grep -Fxq "$1"
+}
+
 echo "=========================================================="
 echo "BẮT ĐẦU TRIỂN KHAI LÊN STAGING"
 echo "Image mới: ${IMAGE_NAME}"
@@ -30,16 +34,30 @@ echo "=========================================================="
 
 # 0. Tự động đăng nhập GHCR nếu được cung cấp token
 if [ -n "${GHCR_TOKEN:-}" ]; then
+  if [ -z "${GHCR_USER:-}" ]; then
+    echo "[ERROR] Có GHCR_TOKEN nhưng thiếu GHCR_USER."
+    exit 1
+  fi
+
   echo "[0/6] Đăng nhập GitHub Container Registry (GHCR)..."
-  echo "${GHCR_TOKEN}" | docker login ghcr.io -u "${GHCR_USER:-$USER}" --password-stdin || true
+  echo "${GHCR_TOKEN}" |
+    docker login ghcr.io -u "${GHCR_USER}" --password-stdin
 fi
 
 # 1. Kéo image mới
 echo "[1/6] Kéo Docker image mới..."
 docker pull "${IMAGE_NAME}"
 
-# Dọn dẹp container candidate và backup cũ nếu còn sót từ lần chạy trước
-docker rm -f "${CANDIDATE_CONTAINER}" "${BACKUP_CONTAINER}" 2>/dev/null || true
+# Candidate cũ có thể xóa, nhưng backup cũ phải được kiểm tra thủ công.
+if container_exists "${CANDIDATE_CONTAINER}"; then
+  docker rm -f "${CANDIDATE_CONTAINER}"
+fi
+
+if container_exists "${BACKUP_CONTAINER}"; then
+  echo "[ERROR] Phát hiện container backup '${BACKUP_CONTAINER}' từ lần triển khai trước."
+  echo "[ERROR] Dừng triển khai để tránh xóa mất phiên bản có thể dùng để khôi phục."
+  exit 1
+fi
 
 # Đảm bảo network docker tồn tại
 docker network inspect "${NETWORK_NAME}" >/dev/null 2>&1 || docker network create "${NETWORK_NAME}" || true
@@ -102,11 +120,25 @@ echo "[5/6] Giữ container cũ làm Backup và triển khai phiên bản mới 
 
 # Dừng và đổi tên container cũ thành backup
 HAS_OLD_APP=0
-if docker ps -a --format '{{.Names}}' | grep -Eq "^${APP_CONTAINER}\$"; then
+if container_exists "${APP_CONTAINER}"; then
   HAS_OLD_APP=1
-  echo "Đổi tên container cũ '${APP_CONTAINER}' thành '${BACKUP_CONTAINER}'..."
-  docker stop "${APP_CONTAINER}" || true
-  docker rename "${APP_CONTAINER}" "${BACKUP_CONTAINER}" || true
+  echo "Dừng container cũ '${APP_CONTAINER}'..."
+
+  if ! docker stop "${APP_CONTAINER}"; then
+    echo "[ERROR] Không thể dừng container cũ. Hủy chuyển đổi phiên bản."
+    exit 1
+  fi
+
+  echo "Đổi tên container cũ thành '${BACKUP_CONTAINER}'..."
+  if ! docker rename "${APP_CONTAINER}" "${BACKUP_CONTAINER}"; then
+    echo "[ERROR] Không thể tạo backup. Thử khởi động lại container cũ."
+
+    if ! docker start "${APP_CONTAINER}"; then
+      echo "[ERROR] Không thể khởi động lại container cũ. Cần can thiệp thủ công."
+    fi
+
+    exit 1
+  fi
 fi
 
 # Dừng candidate tạm để giải phóng tài nguyên
@@ -152,9 +184,15 @@ if [ "${MAIN_HEALTHY}" -ne 1 ]; then
 
   if [ "${HAS_OLD_APP}" -eq 1 ]; then
     echo "Khôi phục lại container cũ (${APP_CONTAINER})..."
-    docker rename "${BACKUP_CONTAINER}" "${APP_CONTAINER}" || true
-    docker start "${APP_CONTAINER}" || true
-    echo "[ROLLBACK THÀNH CÔNG] Đã khôi phục và chạy lại phiên bản cũ trên cổng ${APP_PORT}."
+
+    if docker rename "${BACKUP_CONTAINER}" "${APP_CONTAINER}" &&
+      docker start "${APP_CONTAINER}"; then
+      echo "[ROLLBACK THÀNH CÔNG] Đã khởi động lại phiên bản cũ trên cổng ${APP_PORT}."
+    else
+      echo "[ERROR] ROLLBACK THẤT BẠI. Container backup cần được kiểm tra thủ công."
+    fi
+  else
+    echo "[WARN] Không có phiên bản cũ để khôi phục."
   fi
   echo "=========================================================="
   exit 1
