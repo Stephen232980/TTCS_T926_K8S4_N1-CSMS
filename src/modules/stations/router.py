@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.identity.authorization import allow_roles, build_actor_scope
@@ -11,7 +11,11 @@ from src.modules.identity.dependencies import (
 )
 from src.modules.stations.exceptions import StationOwnershipDeniedError
 from src.modules.stations.repository import StationRepository
-from src.modules.stations.schemas import StationResponse
+from src.modules.stations.schemas import (
+    StationListQuery,
+    StationListResponse,
+    StationResponse,
+)
 from src.platform.database.session import get_db_session
 
 router = APIRouter(
@@ -21,6 +25,36 @@ router = APIRouter(
 )
 
 DatabaseSession = Annotated[AsyncSession, Depends(get_db_session)]
+StationListQueryDependency = Annotated[StationListQuery, Query()]
+
+
+@router.get("", response_model=StationListResponse)
+@allow_roles("station_owner", "operator", "admin")
+async def list_stations(
+    query: StationListQueryDependency,
+    actor: CurrentActorDependency,
+    db_session: DatabaseSession,
+) -> StationListResponse:
+    scope = build_actor_scope(actor)
+    page_result = await StationRepository(db_session).list_stations_page(
+        scope=scope,
+        page=query.page,
+        page_size=query.page_size,
+        status=query.status,
+        search=query.search,
+    )
+
+    total_pages = (page_result.total + query.page_size - 1) // query.page_size
+
+    return StationListResponse(
+        items=[
+            StationResponse.model_validate(station) for station in page_result.items
+        ],
+        page=query.page,
+        page_size=query.page_size,
+        total=page_result.total,
+        total_pages=total_pages,
+    )
 
 
 @router.get("/{station_id}", response_model=StationResponse)

@@ -132,3 +132,126 @@ async def test_missing_station_request_returns_404(
 
     assert response.status_code == 404
     assert response.json() == {"detail": "resource_not_found"}
+
+
+@pytest.mark.asyncio
+async def test_owner_lists_only_owned_stations_through_http(
+    db_session: AsyncSession,
+) -> None:
+    owner_a = User(
+        email="station-list-http-owner-a@example.com",
+        password_hash="hashed-password",
+    )
+    owner_b = User(
+        email="station-list-http-owner-b@example.com",
+        password_hash="hashed-password",
+    )
+    db_session.add_all([owner_a, owner_b])
+    await db_session.flush()
+
+    station_a = Station(
+        owner_id=owner_a.id,
+        name="Trạm HTTP của A",
+        address="Địa chỉ A",
+        latitude=Decimal("10.700000"),
+        longitude=Decimal("106.700000"),
+    )
+    station_b = Station(
+        owner_id=owner_b.id,
+        name="Trạm HTTP của B",
+        address="Địa chỉ B",
+        latitude=Decimal("10.800000"),
+        longitude=Decimal("106.800000"),
+    )
+    db_session.add_all([station_a, station_b])
+    await db_session.flush()
+
+    actor = CurrentActor(
+        user_id=owner_a.id,
+        roles=frozenset({"station_owner"}),
+    )
+
+    async with station_api_client(db_session, actor) as client:
+        response = await client.get(
+            "/api/v1/stations",
+            params={
+                "page": 1,
+                "page_size": 20,
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["page"] == 1
+    assert payload["page_size"] == 20
+    assert payload["total"] == 1
+    assert payload["total_pages"] == 1
+    assert [item["id"] for item in payload["items"]] == [str(station_a.id)]
+
+
+@pytest.mark.asyncio
+async def test_admin_lists_stations_in_global_scope_through_http(
+    db_session: AsyncSession,
+) -> None:
+    owner_a = User(
+        email="station-list-http-global-a@example.com",
+        password_hash="hashed-password",
+    )
+    owner_b = User(
+        email="station-list-http-global-b@example.com",
+        password_hash="hashed-password",
+    )
+    db_session.add_all([owner_a, owner_b])
+    await db_session.flush()
+
+    stations = [
+        Station(
+            owner_id=owner_a.id,
+            name="Trạm global A",
+            address="Địa chỉ A",
+            latitude=Decimal("10.700000"),
+            longitude=Decimal("106.700000"),
+        ),
+        Station(
+            owner_id=owner_b.id,
+            name="Trạm global B",
+            address="Địa chỉ B",
+            latitude=Decimal("10.800000"),
+            longitude=Decimal("106.800000"),
+        ),
+    ]
+    db_session.add_all(stations)
+    await db_session.flush()
+
+    actor = CurrentActor(
+        user_id=owner_a.id,
+        roles=frozenset({"admin"}),
+    )
+
+    async with station_api_client(db_session, actor) as client:
+        response = await client.get(
+            "/api/v1/stations",
+            params={
+                "page": 1,
+                "page_size": 20,
+            },
+        )
+
+    assert response.status_code == 200
+    returned_ids = {item["id"] for item in response.json()["items"]}
+    assert returned_ids == {str(station.id) for station in stations}
+
+
+@pytest.mark.asyncio
+async def test_station_list_rejects_driver_role(
+    db_session: AsyncSession,
+) -> None:
+    actor = CurrentActor(
+        user_id=uuid4(),
+        roles=frozenset({"driver"}),
+    )
+
+    async with station_api_client(db_session, actor) as client:
+        response = await client.get("/api/v1/stations")
+
+    assert response.status_code == 403
