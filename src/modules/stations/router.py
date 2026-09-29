@@ -21,6 +21,7 @@ from src.modules.stations.schemas import (
     StationListQuery,
     StationListResponse,
     StationResponse,
+    StationUpdateRequest,
 )
 from src.platform.database.session import get_db_session
 
@@ -116,6 +117,40 @@ async def get_station(
 
     try:
         station = await repository.get_station_by_id(station_id, scope)
+    except StationOwnershipDeniedError as error:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="permission_denied",
+        ) from error
+
+    if station is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="resource_not_found",
+        )
+
+    return StationResponse.model_validate(station)
+
+
+@router.patch("/{station_id}", response_model=StationResponse)
+@allow_roles("station_owner")
+async def update_station(
+    station_id: UUID,
+    request: StationUpdateRequest,
+    actor: CurrentActorDependency,
+    db_session: DatabaseSession,
+) -> StationResponse:
+    scope = build_actor_scope(actor)
+
+    try:
+        station = await StationRepository(db_session).update_station(
+            station_id,
+            scope,
+            name=request.name,
+            address=request.address,
+            latitude=request.latitude,
+            longitude=request.longitude,
+        )
     except StationOwnershipDeniedError as error:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
