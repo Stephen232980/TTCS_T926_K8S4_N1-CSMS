@@ -88,3 +88,50 @@ class StationListResponse(BaseModel):
     page_size: int
     total: int
     total_pages: int
+
+
+class ChargePointCodeAvailabilityQuery(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
+
+    code: str = Field(min_length=1, max_length=64)
+
+
+class ChargePointCodeAvailabilityResponse(BaseModel):
+    code: str
+    available: bool
+
+
+class ChargePointCreateRequest(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
+
+    code: str = Field(min_length=1, max_length=64)
+    connector_count: int = Field(ge=1, le=4)
+
+
+class ConnectorResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    connector_number: int
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class ChargePointResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    station_id: UUID
+    code: str
+    name: str | None
+    status: str
+    connectors: list[ConnectorResponse]
+    created_at: datetime
+    updated_at: datetime

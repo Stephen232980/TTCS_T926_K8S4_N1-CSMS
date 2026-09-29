@@ -12,11 +12,15 @@ from src.modules.identity.dependencies import (
     authorize_request,
 )
 from src.modules.stations.exceptions import (
+    ChargePointCodeAlreadyExistsError,
     StationIdempotencyConflictError,
     StationOwnershipDeniedError,
 )
 from src.modules.stations.repository import StationRepository
 from src.modules.stations.schemas import (
+    ChargePointCreateRequest,
+    ChargePointResponse,
+    ConnectorResponse,
     StationCreateRequest,
     StationListQuery,
     StationListResponse,
@@ -103,6 +107,62 @@ async def create_station(
             detail="idempotency_conflict",
         ) from error
     return StationResponse.model_validate(station)
+
+
+@router.post(
+    "/{station_id}/charge-points",
+    response_model=ChargePointResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+@allow_roles("station_owner")
+async def create_charge_point(
+    station_id: UUID,
+    request: ChargePointCreateRequest,
+    actor: CurrentActorDependency,
+    db_session: DatabaseSession,
+) -> ChargePointResponse:
+    scope = build_actor_scope(actor)
+
+    try:
+        charge_point = await StationRepository(db_session).create_charge_point(
+            station_id,
+            scope,
+            code=request.code,
+            connector_count=request.connector_count,
+        )
+    except StationOwnershipDeniedError as error:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="permission_denied",
+        ) from error
+    except ChargePointCodeAlreadyExistsError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="charge_point_code_already_exists",
+        ) from error
+
+    if charge_point is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="resource_not_found",
+        )
+
+    return ChargePointResponse(
+        id=charge_point.id,
+        station_id=charge_point.station_id,
+        code=charge_point.code,
+        name=charge_point.name,
+        status=charge_point.status,
+        connectors=[
+            ConnectorResponse.model_validate(connector)
+            for connector in sorted(
+                charge_point.connectors,
+                key=lambda item: item.connector_number,
+            )
+        ],
+        created_at=charge_point.created_at,
+        updated_at=charge_point.updated_at,
+    )
 
 
 @router.get("/{station_id}", response_model=StationResponse)
