@@ -83,6 +83,18 @@ export class HttpStationApi implements StationApi {
     this.idempotencyKeyFactory = idempotencyKeyFactory
   }
 
+  async getStation(stationId: string, signal?: AbortSignal): Promise<Station> {
+    const response = await fetch(
+      `${this.baseUrl}/api/v1/stations/${encodeURIComponent(stationId)}`,
+      {
+        credentials: 'include',
+        signal,
+      },
+    )
+
+    return mapStation(await parseResponse<StationResponse>(response))
+  }
+
   async listStations(
     query: StationListQuery,
     signal?: AbortSignal,

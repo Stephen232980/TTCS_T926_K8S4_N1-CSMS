@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { AppShell } from './app/AppShell'
 import type { StationApi } from './features/stations/api/stationApi'
+import { StationDetailPage } from './features/stations/pages/StationDetailPage'
 import { StationListPage } from './features/stations/pages/StationListPage'
 import './App.css'
 
@@ -10,6 +11,7 @@ interface AppProps {
 
 function App({ stationApi }: AppProps) {
   const [notice, setNotice] = useState('')
+  const [selectedStationId, setSelectedStationId] = useState<string | null>(null)
 
   const showPrototypeNotice = (message: string) => {
     setNotice(message)
@@ -22,11 +24,21 @@ function App({ stationApi }: AppProps) {
         showPrototypeNotice(`${label} chưa nằm trong prototype T-09.`)
       }
     >
-      <StationListPage
-        notice={notice}
-        onNotice={showPrototypeNotice}
-        api={stationApi}
-      />
+      {selectedStationId ? (
+        <StationDetailPage
+          key={selectedStationId}
+          stationId={selectedStationId}
+          onBack={() => setSelectedStationId(null)}
+          api={stationApi}
+        />
+      ) : (
+        <StationListPage
+          notice={notice}
+          onNotice={showPrototypeNotice}
+          onOpenStation={setSelectedStationId}
+          api={stationApi}
+        />
+      )}
     </AppShell>
   )
 }

@@ -46,6 +46,7 @@ describe('StationListPage create flow', () => {
     const user = userEvent.setup()
     const createStation = vi.fn(() => new Promise<Station>(() => undefined))
     const api: StationApi = {
+      getStation: vi.fn(),
       listStations: vi.fn().mockResolvedValue({
         items: [],
         page: 1,

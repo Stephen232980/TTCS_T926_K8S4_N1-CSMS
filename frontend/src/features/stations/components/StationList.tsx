@@ -5,6 +5,7 @@ interface StationListProps {
   stations: Station[]
   isLoading: boolean
   error: string
+  onView: (station: Station) => void
   onEdit: (station: Station) => void
   onClearFilters: () => void
   onRetry: () => void
@@ -21,8 +22,9 @@ function StatusBadge({ status }: { status: StationStatus }) {
 
 function StationCards({
   stations,
+  onView,
   onEdit,
-}: Pick<StationListProps, 'stations' | 'onEdit'>) {
+}: Pick<StationListProps, 'stations' | 'onView' | 'onEdit'>) {
   return (
     <div className="station-cards">
       {stations.map((station) => (
@@ -35,13 +37,23 @@ function StationCards({
             <div><dt>Vĩ độ</dt><dd>{station.latitude.toFixed(4)}</dd></div>
             <div><dt>Kinh độ</dt><dd>{station.longitude.toFixed(4)}</dd></div>
           </dl>
-          <button
-            className="text-button"
-            type="button"
-            onClick={() => onEdit(station)}
-          >
-            <Icon name="edit" /> Chỉnh sửa
-          </button>
+          <div className="station-card__actions">
+            <button
+              className="text-button"
+              type="button"
+              onClick={() => onView(station)}
+            >
+              Xem chi tiết
+              <Icon name="chevronRight" />
+            </button>
+            <button
+              className="text-button text-button--muted"
+              type="button"
+              onClick={() => onEdit(station)}
+            >
+              <Icon name="edit" /> Chỉnh sửa
+            </button>
+          </div>
         </article>
       ))}
     </div>
@@ -50,8 +62,9 @@ function StationCards({
 
 function StationTable({
   stations,
+  onView,
   onEdit,
-}: Pick<StationListProps, 'stations' | 'onEdit'>) {
+}: Pick<StationListProps, 'stations' | 'onView' | 'onEdit'>) {
   return (
     <div className="station-table-wrap">
       <table className="station-table">
@@ -67,7 +80,16 @@ function StationTable({
         <tbody>
           {stations.map((station) => (
             <tr key={station.id}>
-              <td><strong>{station.name}</strong><span>Mã {station.id}</span></td>
+              <td>
+                <button
+                  className="station-name-button"
+                  type="button"
+                  aria-label={`Xem chi tiết ${station.name}`}
+                  onClick={() => onView(station)}
+                >
+                  <strong>{station.name}</strong><span>Mã {station.id}</span>
+                </button>
+              </td>
               <td>{station.address}</td>
               <td className="coordinates">
                 {station.latitude.toFixed(4)}, {station.longitude.toFixed(4)}
@@ -95,6 +117,7 @@ export function StationList({
   stations,
   isLoading,
   error,
+  onView,
   onEdit,
   onClearFilters,
   onRetry,
@@ -120,8 +143,8 @@ export function StationList({
         </div>
       ) : (
         <>
-          <StationTable stations={stations} onEdit={onEdit} />
-          <StationCards stations={stations} onEdit={onEdit} />
+          <StationTable stations={stations} onView={onView} onEdit={onEdit} />
+          <StationCards stations={stations} onView={onView} onEdit={onEdit} />
         </>
       )}
     </div>

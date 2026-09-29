@@ -41,6 +41,20 @@ const firstPage: StationListQuery = {
 }
 
 describe('MockStationApi', () => {
+  it('returns a station by id', async () => {
+    const api = new MockStationApi(stations, 0)
+
+    await expect(api.getStation('station-2')).resolves.toEqual(stations[1])
+  })
+
+  it('rejects a missing station detail request', async () => {
+    const api = new MockStationApi(stations, 0)
+
+    await expect(api.getStation('missing-station')).rejects.toThrow(
+      'station_not_found',
+    )
+  })
+
   it('filters by search text and status', async () => {
     const api = new MockStationApi(stations, 0)
 

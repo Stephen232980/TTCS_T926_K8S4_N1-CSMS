@@ -27,12 +27,14 @@ function mutationErrorMessage(error: unknown): string {
 interface StationListPageProps {
   notice: string
   onNotice: (message: string) => void
+  onOpenStation?: (stationId: string) => void
   api?: StationApi
 }
 
 export function StationListPage({
   notice,
   onNotice,
+  onOpenStation = () => undefined,
   api = defaultStationApi,
 }: StationListPageProps) {
   const [stations, setStations] = useState<Station[]>([])
@@ -236,6 +238,7 @@ export function StationListPage({
         stations={stations}
         isLoading={isLoading}
         error={error}
+        onView={(station) => onOpenStation(station.id)}
         onEdit={openEditForm}
         onClearFilters={() => {
           handleSearch('')
