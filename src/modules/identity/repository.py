@@ -1,4 +1,5 @@
 from datetime import datetime
+from uuid import UUID
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +17,11 @@ from src.modules.identity.models import (
 class IdentityRepository:
     def __init__(self, db_session: AsyncSession) -> None:
         self._db_session = db_session
+
+    async def get_user_by_id(self, user_id: UUID) -> User | None:
+        statement = select(User).where(User.id == user_id)
+        result = await self._db_session.execute(statement)
+        return result.scalar_one_or_none()
 
     async def get_user_for_update(self, email: str) -> User | None:
         statement = select(User).where(User.email == email).with_for_update()

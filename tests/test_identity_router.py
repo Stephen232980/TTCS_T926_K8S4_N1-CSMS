@@ -3,12 +3,17 @@ import selectors
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, Mock
+from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 
 import src.modules.identity.router as router_module
 from src.entrypoints.http import app
+from src.modules.identity.authorization import CurrentActor
+from src.modules.identity.dependencies import get_current_actor
+from src.modules.identity.models import User
+from src.modules.identity.repository import IdentityRepository
 from src.modules.identity.service import (
     AuthService,
     InvalidCredentialsError,
@@ -190,3 +195,68 @@ def test_logout_without_cookie_is_idempotent(
 
     assert response.status_code == 204
     auth_service.logout.assert_awaited_once_with(None)
+
+
+def test_current_user_returns_authenticated_user(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user_id = uuid4()
+    actor = CurrentActor(
+        user_id=user_id,
+        roles=frozenset({"station_owner", "operator"}),
+    )
+    app.dependency_overrides[get_current_actor] = lambda: actor
+
+    repository = Mock(spec=IdentityRepository)
+    repository.get_user_by_id = AsyncMock(
+        return_value=User(
+            id=user_id,
+            email="owner@example.com",
+            password_hash="test-password-hash",
+        )
+    )
+    monkeypatch.setattr(
+        router_module,
+        "IdentityRepository",
+        lambda _db_session: repository,
+    )
+
+    response = client.get("/api/v1/auth/me")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": str(user_id),
+        "email": "owner@example.com",
+        "roles": ["operator", "station_owner"],
+    }
+    assert response.headers["cache-control"] == "no-store"
+    repository.get_user_by_id.assert_awaited_once_with(user_id)
+
+
+def test_current_user_rejects_missing_user(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user_id = uuid4()
+    actor = CurrentActor(
+        user_id=user_id,
+        roles=frozenset({"station_owner"}),
+    )
+    app.dependency_overrides[get_current_actor] = lambda: actor
+
+    repository = Mock(spec=IdentityRepository)
+    repository.get_user_by_id = AsyncMock(return_value=None)
+    monkeypatch.setattr(
+        router_module,
+        "IdentityRepository",
+        lambda _db_session: repository,
+    )
+
+    response = client.get("/api/v1/auth/me")
+
+    assert response.status_code == 401
+    assert response.json() == {
+        "detail": "Người dùng hiện tại không tồn tại",
+    }
+    repository.get_user_by_id.assert_awaited_once_with(user_id)

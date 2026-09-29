@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import select
@@ -31,6 +32,31 @@ async def test_repository_finds_user_by_email_for_update(
     found_user = await repository.get_user_for_update(user.email)
 
     assert found_user is user
+
+
+@pytest.mark.asyncio
+async def test_repository_finds_user_by_id(
+    db_session: AsyncSession,
+) -> None:
+    user = User(
+        email="current-user-repository@example.com",
+        password_hash="test-password-hash",
+    )
+    db_session.add(user)
+    await db_session.flush()
+
+    found_user = await IdentityRepository(db_session).get_user_by_id(user.id)
+
+    assert found_user is user
+
+
+@pytest.mark.asyncio
+async def test_repository_returns_none_for_unknown_user_id(
+    db_session: AsyncSession,
+) -> None:
+    found_user = await IdentityRepository(db_session).get_user_by_id(uuid4())
+
+    assert found_user is None
 
 
 @pytest.mark.asyncio

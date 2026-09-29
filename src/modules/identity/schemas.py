@@ -1,4 +1,5 @@
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, SecretStr
 
@@ -10,3 +11,9 @@ class LoginRequest(BaseModel):
 
 class LoginResponse(BaseModel):
     status: Literal["authenticated"] = "authenticated"
+
+
+class CurrentUserResponse(BaseModel):
+    id: UUID
+    email: EmailStr
+    roles: list[str]
