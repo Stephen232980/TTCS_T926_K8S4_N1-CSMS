@@ -12,10 +12,37 @@ class CurrentActor:
     roles: frozenset[str]
 
 
+@dataclass(frozen=True)
+class ActorScope:
+    actor_id: UUID
+    owner_id: UUID | None
+
+
 P = ParamSpec("P")
 R = TypeVar("R")
 
 _ROLE_POLICY_ATTRIBUTE = "__csms_allowed_roles__"
+_GLOBAL_SCOPE_ROLES = frozenset({"admin", "operator"})
+_OWNER_SCOPE_ROLE = "station_owner"
+
+
+def build_actor_scope(actor: CurrentActor) -> ActorScope:
+    if not actor.roles.isdisjoint(_GLOBAL_SCOPE_ROLES):
+        return ActorScope(
+            actor_id=actor.user_id,
+            owner_id=None,
+        )
+
+    if _OWNER_SCOPE_ROLE in actor.roles:
+        return ActorScope(
+            actor_id=actor.user_id,
+            owner_id=actor.user_id,
+        )
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Không có phạm vi truy cập dữ liệu",
+    )
 
 
 def allow_roles(

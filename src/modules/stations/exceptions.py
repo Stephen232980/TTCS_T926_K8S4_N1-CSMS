@@ -1,0 +1,2 @@
+class StationOwnershipDeniedError(Exception):
+    pass

@@ -50,3 +50,46 @@ K-01 chạy timebox 2 ngày bởi hai người sau khi T-01 ổn định, không
 7. Mở một route test chưa khai policy bằng admin; nhận 403.
 8. Cho CI chạy và mở trang health của staging nếu hạ tầng đã được cấp.
 
+### Kiểm tra ownership T-07 bằng curl
+
+Chuẩn bị một session của chủ trạm A và UUID của station thuộc chủ trạm B. Chỉ dùng
+tài khoản và dữ liệu local/demo; không ghi cookie thật vào tài liệu hoặc commit.
+
+```powershell
+$ownerASession = "<session-cookie-owner-A>"
+$stationBId = "<station-id-owner-B>"
+
+curl.exe -i `
+  --cookie "session=$ownerASession" `
+  "http://127.0.0.1:8001/api/v1/stations/$stationBId"
+```
+
+Kết quả mong đợi:
+
+```text
+HTTP/1.1 403 Forbidden
+```
+
+```json
+{"detail":"permission_denied"}
+```
+
+Security log phải có event `cross_owner_station_access_denied` với actor ID và
+station ID, nhưng không chứa email, password, session cookie, tên hoặc địa chỉ trạm.
+
+Dùng một UUID station không tồn tại để phân biệt lỗi:
+
+```powershell
+$missingStationId = "00000000-0000-0000-0000-000000000000"
+
+curl.exe -i `
+  --cookie "session=$ownerASession" `
+  "http://127.0.0.1:8001/api/v1/stations/$missingStationId"
+```
+
+Kết quả mong đợi là `404 Not Found` với:
+
+```json
+{"detail":"resource_not_found"}
+```
+
