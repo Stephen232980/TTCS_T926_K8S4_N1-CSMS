@@ -1,15 +1,42 @@
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from decimal import Decimal
 from uuid import UUID, uuid4
 
 import pytest
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.entrypoints.http import app
 from src.modules.identity.authorization import CurrentActor
+from src.modules.identity.dependencies import get_current_actor
 from src.modules.identity.models import User
 from src.modules.stations.models import ChargePoint, Connector, Station
-from tests.test_charge_point_code_availability import charge_point_api_client
+from src.platform.database.session import get_db_session
+
+
+@asynccontextmanager
+async def charge_point_api_client(
+    db_session: AsyncSession,
+    actor: CurrentActor,
+) -> AsyncIterator[AsyncClient]:
+    async def override_db_session() -> AsyncIterator[AsyncSession]:
+        yield db_session
+
+    app.dependency_overrides[get_db_session] = override_db_session
+    app.dependency_overrides[get_current_actor] = lambda: actor
+    transport = ASGITransport(app=app)
+
+    try:
+        async with AsyncClient(
+            transport=transport,
+            base_url="http://test",
+        ) as client:
+            yield client
+    finally:
+        app.dependency_overrides.clear()
 
 
 async def create_station(
