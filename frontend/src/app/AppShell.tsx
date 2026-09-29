@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Icon, type IconName } from '../components/icons/Icon'
+import type { AuthenticatedUser } from '../features/auth/model/auth'
 
 const navigation: Array<{ label: string; icon: IconName; active?: boolean }> = [
   { label: 'Tổng quan', icon: 'dashboard' },
@@ -11,13 +12,26 @@ const navigation: Array<{ label: string; icon: IconName; active?: boolean }> = [
 
 interface AppShellProps {
   children: ReactNode
+  currentUser: AuthenticatedUser
   onUnavailableNavigation: (label: string) => void
+}
+
+const roleLabels: Record<string, string> = {
+  driver: 'Tài xế',
+  station_owner: 'Chủ trạm',
+  operator: 'Vận hành viên',
+  accountant: 'Kế toán',
+  admin: 'Quản trị viên',
 }
 
 export function AppShell({
   children,
+  currentUser,
   onUnavailableNavigation,
 }: AppShellProps) {
+  const initials = currentUser.email.slice(0, 2).toUpperCase()
+  const roleLabel = roleLabels[currentUser.roles[0] ?? ''] ?? 'Người dùng'
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -53,8 +67,8 @@ export function AppShell({
             <span>Cài đặt</span>
           </a>
           <div className="user-panel">
-            <span className="avatar">CT</span>
-            <div><strong>Chủ trạm</strong><span>Phiên bản mock</span></div>
+            <span className="avatar">{initials}</span>
+            <div><strong>{roleLabel}</strong><span>{currentUser.email}</span></div>
           </div>
         </div>
       </aside>
@@ -71,7 +85,7 @@ export function AppShell({
             type="button"
             aria-label="Mở tài khoản"
           >
-            CT
+            {initials}
           </button>
         </header>
         {children}

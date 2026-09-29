@@ -5,6 +5,7 @@ import type {
   Connector,
 } from '../model/chargePoint'
 import { ChargePointApiError, type ChargePointApi } from './chargePointApi'
+import { notifySessionUnauthorized } from '../../auth/sessionEvents'
 
 interface ConnectorResponse {
   id: string
@@ -36,6 +37,8 @@ interface ErrorResponse {
 
 async function parseResponse<T>(response: Response): Promise<T> {
   if (response.ok) return (await response.json()) as T
+
+  if (response.status === 401) notifySessionUnauthorized()
 
   let detail: unknown
   try {
