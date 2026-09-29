@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from src.config import settings
 from src.modules.identity import models  # noqa: F401
+from src.modules.stations import models as stations_models  # noqa: F401
 from src.platform.database.base import Base
 
 # this is the Alembic Config object, which provides
