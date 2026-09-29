@@ -79,7 +79,12 @@ export function StationForm({
         {isEditing && <span className="station-form-panel__station">{station?.name}</span>}
       </div>
 
-      <form className="station-form" onSubmit={handleSubmit} noValidate>
+      <form
+        className="station-form"
+        aria-labelledby="station-form-title"
+        onSubmit={handleSubmit}
+        noValidate
+      >
         <div className="form-field">
           <label htmlFor="station-name">Tên trạm</label>
           <input

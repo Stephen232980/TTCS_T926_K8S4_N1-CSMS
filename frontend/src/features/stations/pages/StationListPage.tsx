@@ -1,12 +1,28 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '../../../components/icons/Icon'
-import { HttpStationApi } from '../api/httpStationApi'
+import { HttpStationApi, StationApiError } from '../api/httpStationApi'
 import type { StationApi } from '../api/stationApi'
 import { StationFilters } from '../components/StationFilters'
+import { StationForm } from '../components/StationForm'
 import { StationList } from '../components/StationList'
-import type { Station, StationStatus } from '../model/station'
+import type { Station, StationInput, StationStatus } from '../model/station'
 
 const defaultStationApi = new HttpStationApi()
+
+function mutationErrorMessage(error: unknown): string {
+  if (error instanceof StationApiError) {
+    if (error.status === 401) {
+      return 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.'
+    }
+    if (error.status === 403) {
+      return 'Bạn không có quyền thực hiện thao tác này.'
+    }
+    if (error.status === 422) {
+      return 'Dữ liệu chưa hợp lệ. Vui lòng kiểm tra lại các ô nhập.'
+    }
+  }
+  return 'Không thể lưu thông tin trạm. Vui lòng thử lại.'
+}
 
 interface StationListPageProps {
   notice: string
@@ -28,15 +44,20 @@ export function StationListPage({
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
   const [requestVersion, setRequestVersion] = useState(0)
+  const [isCreateFormOpen, setIsCreateFormOpen] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState('')
+  const submitInFlight = useRef(false)
   const pageSize = 2
 
   useEffect(() => {
     const controller = new AbortController()
 
-    api.listStations(
-      { page, pageSize, search, status: status || undefined },
-      controller.signal,
-    )
+    api
+      .listStations(
+        { page, pageSize, search, status: status || undefined },
+        controller.signal,
+      )
       .then((result) => {
         setStations(result.items)
         setTotal(result.total)
@@ -44,8 +65,10 @@ export function StationListPage({
       })
       .catch((requestError: unknown) => {
         if (
-          !(requestError instanceof DOMException &&
-            requestError.name === 'AbortError')
+          !(
+            requestError instanceof DOMException &&
+            requestError.name === 'AbortError'
+          )
         ) {
           setError('Không thể tải danh sách trạm. Vui lòng thử lại.')
         }
@@ -90,20 +113,72 @@ export function StationListPage({
     setRequestVersion((current) => current + 1)
   }
 
+  const openCreateForm = () => {
+    setSubmitError('')
+    setIsCreateFormOpen(true)
+  }
+
+  const closeCreateForm = () => {
+    if (submitInFlight.current) return
+    setSubmitError('')
+    setIsCreateFormOpen(false)
+  }
+
+  const handleCreate = async (input: StationInput) => {
+    if (submitInFlight.current) return
+
+    submitInFlight.current = true
+    setIsSubmitting(true)
+    setSubmitError('')
+
+    try {
+      await api.createStation(input)
+      setIsCreateFormOpen(false)
+      onNotice(`Đã tạo trạm ${input.name}.`)
+      prepareRequest()
+      setPage(1)
+      setRequestVersion((current) => current + 1)
+    } catch (requestError: unknown) {
+      setSubmitError(mutationErrorMessage(requestError))
+    } finally {
+      submitInFlight.current = false
+      setIsSubmitting(false)
+    }
+  }
+
   return (
     <section className="workspace" id="stations" aria-labelledby="page-title">
       <div className="page-heading">
-        <div><h1 id="page-title">Trạm sạc</h1><p>{resultSummary}</p></div>
+        <div>
+          <h1 id="page-title">Trạm sạc</h1>
+          <p>{resultSummary}</p>
+        </div>
         <button
           className="primary-button"
           type="button"
-          onClick={() => onNotice('Form tạo trạm sẽ được xây ở bước tiếp theo.')}
+          onClick={openCreateForm}
+          disabled={isSubmitting}
         >
-          <Icon name="plus" /><span>Tạo trạm</span>
+          <Icon name="plus" />
+          <span>Tạo trạm</span>
         </button>
       </div>
 
-      {notice && <div className="notice" role="status">{notice}</div>}
+      {notice && (
+        <div className="notice" role="status">
+          {notice}
+        </div>
+      )}
+
+      {isCreateFormOpen && (
+        <StationForm
+          mode="create"
+          isSubmitting={isSubmitting}
+          submitError={submitError}
+          onSubmit={handleCreate}
+          onCancel={closeCreateForm}
+        />
+      )}
 
       <StationFilters
         search={search}
@@ -117,13 +192,18 @@ export function StationListPage({
         isLoading={isLoading}
         error={error}
         onEdit={(station) => onNotice(`Chuẩn bị chỉnh sửa ${station.name}.`)}
-        onClearFilters={() => { handleSearch(''); handleStatus('') }}
+        onClearFilters={() => {
+          handleSearch('')
+          handleStatus('')
+        }}
         onRetry={handleRetry}
       />
 
       {!isLoading && !error && totalPages > 0 && (
         <footer className="pagination">
-          <span>Trang {page} / {totalPages}</span>
+          <span>
+            Trang {page} / {totalPages}
+          </span>
           <div>
             <button
               type="button"
