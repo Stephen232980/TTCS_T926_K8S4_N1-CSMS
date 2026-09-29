@@ -45,6 +45,7 @@ export function StationListPage({
   const [error, setError] = useState('')
   const [requestVersion, setRequestVersion] = useState(0)
   const [isCreateFormOpen, setIsCreateFormOpen] = useState(false)
+  const [editingStation, setEditingStation] = useState<Station | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
   const submitInFlight = useRef(false)
@@ -115,13 +116,21 @@ export function StationListPage({
 
   const openCreateForm = () => {
     setSubmitError('')
+    setEditingStation(null)
     setIsCreateFormOpen(true)
   }
 
-  const closeCreateForm = () => {
+  const openEditForm = (station: Station) => {
+    setSubmitError('')
+    setIsCreateFormOpen(false)
+    setEditingStation(station)
+  }
+
+  const closeForm = () => {
     if (submitInFlight.current) return
     setSubmitError('')
     setIsCreateFormOpen(false)
+    setEditingStation(null)
   }
 
   const handleCreate = async (input: StationInput) => {
@@ -138,6 +147,30 @@ export function StationListPage({
       prepareRequest()
       setPage(1)
       setRequestVersion((current) => current + 1)
+    } catch (requestError: unknown) {
+      setSubmitError(mutationErrorMessage(requestError))
+    } finally {
+      submitInFlight.current = false
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleEdit = async (input: StationInput) => {
+    if (submitInFlight.current || editingStation === null) return
+
+    submitInFlight.current = true
+    setIsSubmitting(true)
+    setSubmitError('')
+
+    try {
+      const updatedStation = await api.updateStation(editingStation.id, input)
+      setStations((current) =>
+        current.map((station) =>
+          station.id === updatedStation.id ? updatedStation : station,
+        ),
+      )
+      setEditingStation(null)
+      onNotice(`Đã cập nhật trạm ${updatedStation.name}.`)
     } catch (requestError: unknown) {
       setSubmitError(mutationErrorMessage(requestError))
     } finally {
@@ -176,7 +209,19 @@ export function StationListPage({
           isSubmitting={isSubmitting}
           submitError={submitError}
           onSubmit={handleCreate}
-          onCancel={closeCreateForm}
+          onCancel={closeForm}
+        />
+      )}
+
+      {editingStation && (
+        <StationForm
+          key={editingStation.id}
+          mode="edit"
+          station={editingStation}
+          isSubmitting={isSubmitting}
+          submitError={submitError}
+          onSubmit={handleEdit}
+          onCancel={closeForm}
         />
       )}
 
@@ -191,7 +236,7 @@ export function StationListPage({
         stations={stations}
         isLoading={isLoading}
         error={error}
-        onEdit={(station) => onNotice(`Chuẩn bị chỉnh sửa ${station.name}.`)}
+        onEdit={openEditForm}
         onClearFilters={() => {
           handleSearch('')
           handleStatus('')
