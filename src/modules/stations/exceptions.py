@@ -4,3 +4,7 @@ class StationOwnershipDeniedError(Exception):
 
 class StationIdempotencyConflictError(Exception):
     pass
+
+
+class ChargePointCodeAlreadyExistsError(Exception):
+    pass

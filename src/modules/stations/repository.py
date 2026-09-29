@@ -5,15 +5,22 @@ from hashlib import sha256
 from uuid import UUID
 
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
 from src.modules.identity.authorization import ActorScope
 from src.modules.stations.exceptions import (
+    ChargePointCodeAlreadyExistsError,
     StationIdempotencyConflictError,
     StationOwnershipDeniedError,
 )
-from src.modules.stations.models import ChargePoint, Station, StationCreateIdempotency
+from src.modules.stations.models import (
+    ChargePoint,
+    Connector,
+    Station,
+    StationCreateIdempotency,
+)
 
 _security_logger = logging.getLogger("csms.security")
 
@@ -137,6 +144,50 @@ class StationRepository:
             select(ChargePoint.id).where(ChargePoint.code == code).limit(1)
         )
         return charge_point_id is None
+
+    async def create_charge_point(
+        self,
+        station_id: UUID,
+        scope: ActorScope,
+        *,
+        code: str,
+        connector_count: int,
+    ) -> ChargePoint | None:
+        station = await self.get_station_by_id(station_id, scope)
+        if station is None:
+            return None
+
+        if not await self.is_charge_point_code_available(code):
+            raise ChargePointCodeAlreadyExistsError
+
+        charge_point = ChargePoint(
+            station_id=station.id,
+            code=code,
+            connectors=[
+                Connector(connector_number=connector_number)
+                for connector_number in range(1, connector_count + 1)
+            ],
+        )
+        self._db_session.add(charge_point)
+
+        try:
+            await self._db_session.flush()
+        except IntegrityError as error:
+            constraint_name = getattr(
+                getattr(error.orig, "diag", None),
+                "constraint_name",
+                None,
+            )
+            if constraint_name == "ix_charge_points_code":
+                raise ChargePointCodeAlreadyExistsError from error
+            raise
+
+        await self._db_session.refresh(charge_point)
+        await self._db_session.refresh(
+            charge_point,
+            attribute_names=["connectors"],
+        )
+        return charge_point
 
     async def create_station_idempotent(
         self,
