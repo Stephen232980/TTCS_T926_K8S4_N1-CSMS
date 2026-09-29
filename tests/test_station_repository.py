@@ -298,3 +298,37 @@ async def test_list_stations_page_applies_status_and_search_filters(
 
     assert result.total == 1
     assert [station.id for station in result.items] == [matching_station.id]
+
+
+@pytest.mark.asyncio
+async def test_create_station_persists_owner_and_default_status(
+    db_session: AsyncSession,
+) -> None:
+    owner = User(
+        email="station-create-owner@example.com",
+        password_hash="hashed-password",
+    )
+    db_session.add(owner)
+    await db_session.flush()
+
+    repository = StationRepository(db_session)
+
+    station = await repository.create_station(
+        owner_id=owner.id,
+        name="Trạm mới",
+        address="123 Nguyễn Huệ, Quận 1",
+        latitude=Decimal("10.773100"),
+        longitude=Decimal("106.703200"),
+    )
+
+    await db_session.refresh(station)
+
+    assert station.id is not None
+    assert station.owner_id == owner.id
+    assert station.name == "Trạm mới"
+    assert station.address == "123 Nguyễn Huệ, Quận 1"
+    assert station.latitude == Decimal("10.773100")
+    assert station.longitude == Decimal("106.703200")
+    assert station.status == "inactive"
+    assert station.created_at is not None
+    assert station.updated_at is not None

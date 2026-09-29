@@ -1,5 +1,6 @@
 import logging
 from dataclasses import dataclass
+from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import func, or_, select
@@ -100,6 +101,27 @@ class StationRepository:
             items=list(items_result.scalars().all()),
             total=total or 0,
         )
+
+    async def create_station(
+        self,
+        *,
+        owner_id: UUID,
+        name: str,
+        address: str,
+        latitude: Decimal,
+        longitude: Decimal,
+    ) -> Station:
+        station = Station(
+            owner_id=owner_id,
+            name=name,
+            address=address,
+            latitude=latitude,
+            longitude=longitude,
+        )
+        self._db_session.add(station)
+        await self._db_session.flush()
+        await self._db_session.refresh(station)
+        return station
 
     async def get_station_by_id(
         self,
