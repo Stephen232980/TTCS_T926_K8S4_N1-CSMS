@@ -53,6 +53,9 @@ jobs:
       - name: Run mypy
         run: mypy src
 
+      - name: Validate staging deployment script
+        run: bash -n scripts/deploy_staging.sh
+
       - name: Apply database migrations
         run: alembic upgrade head
 
