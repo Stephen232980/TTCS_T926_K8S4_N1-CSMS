@@ -21,6 +21,24 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe('HttpStationApi', () => {
+  it('gets a station through the encoded station path', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(stationResponse))
+    vi.stubGlobal('fetch', fetchMock)
+    const controller = new AbortController()
+    const api = new HttpStationApi('http://localhost:8001/')
+
+    const station = await api.getStation('station/1', controller.signal)
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8001/api/v1/stations/station%2F1',
+      { credentials: 'include', signal: controller.signal },
+    )
+    expect(station).toMatchObject({
+      id: 'station-1',
+      name: 'Trạm Quận 1',
+    })
+  })
+
   it('lists stations with filters, cookie credentials and response mapping', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({

@@ -19,6 +19,7 @@ const defaultProps = {
   stations: [station],
   isLoading: false,
   error: '',
+  onView: () => undefined,
   onEdit: () => undefined,
   onClearFilters: () => undefined,
   onRetry: () => undefined,
@@ -76,5 +77,17 @@ describe('StationList', () => {
     )
 
     expect(onEdit).toHaveBeenCalledWith(station)
+  })
+
+  it('opens station details from the station name', async () => {
+    const user = userEvent.setup()
+    const onView = vi.fn()
+    render(<StationList {...defaultProps} onView={onView} />)
+
+    await user.click(
+      screen.getByRole('button', { name: 'Xem chi tiết Trạm Quận 1' }),
+    )
+
+    expect(onView).toHaveBeenCalledWith(station)
   })
 })

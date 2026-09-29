@@ -70,6 +70,17 @@ export class MockStationApi implements StationApi {
     this.latency = latency
   }
 
+  async getStation(stationId: string, signal?: AbortSignal): Promise<Station> {
+    await wait(this.latency, signal)
+    const station = this.stations.find((item) => item.id === stationId)
+
+    if (station === undefined) {
+      throw new Error('station_not_found')
+    }
+
+    return { ...station }
+  }
+
   async listStations(
     query: StationListQuery,
     signal?: AbortSignal,

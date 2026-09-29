@@ -7,6 +7,8 @@ import type {
 } from '../model/station'
 
 export interface StationApi {
+  getStation(stationId: string, signal?: AbortSignal): Promise<Station>
+
   listStations(
     query: StationListQuery,
     signal?: AbortSignal,
