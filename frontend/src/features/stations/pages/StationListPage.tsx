@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Icon } from '../../../components/icons/Icon'
-import { MockStationApi } from '../api/mockStationApi'
+import { HttpStationApi } from '../api/httpStationApi'
 import type { StationApi } from '../api/stationApi'
 import { StationFilters } from '../components/StationFilters'
 import { StationList } from '../components/StationList'
 import type { Station, StationStatus } from '../model/station'
 
-const defaultStationApi = new MockStationApi()
+const defaultStationApi = new HttpStationApi()
 
 interface StationListPageProps {
   notice: string
