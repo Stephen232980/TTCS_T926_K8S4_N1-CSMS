@@ -103,6 +103,8 @@ async def test_delete_station_owner_blocked_by_foreign_key(
     await db_session.delete(owner)
     with pytest.raises(IntegrityError):
         await db_session.flush()
+    # Sau IntegrityError, PostgreSQL abort transaction — phải rollback để session hợp lệ trở lại
+    await db_session.rollback()
 
 
 @pytest.mark.asyncio
@@ -127,6 +129,8 @@ async def test_station_invalid_latitude_rejected(
 
     with pytest.raises(IntegrityError):
         await db_session.flush()
+    # Sau IntegrityError, PostgreSQL abort transaction — phải rollback để session hợp lệ trở lại
+    await db_session.rollback()
 
 
 @pytest.mark.asyncio
@@ -151,6 +155,8 @@ async def test_station_invalid_longitude_rejected(
 
     with pytest.raises(IntegrityError):
         await db_session.flush()
+    # Sau IntegrityError, PostgreSQL abort transaction — phải rollback để session hợp lệ trở lại
+    await db_session.rollback()
 
 
 @pytest.mark.asyncio
@@ -176,3 +182,5 @@ async def test_station_invalid_status_rejected(
 
     with pytest.raises(IntegrityError):
         await db_session.flush()
+    # Sau IntegrityError, PostgreSQL abort transaction — phải rollback để session hợp lệ trở lại
+    await db_session.rollback()
