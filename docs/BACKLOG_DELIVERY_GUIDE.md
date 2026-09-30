@@ -11,8 +11,9 @@ không thay thế Acceptance Criteria (AC) hoặc Non-functional Requirements (N
    phạm vi, story, AC, dependency và NFR của backlog.
 2. Phải đọc đủ các cột: ID, Type, Parent/Epic, Title, Tier, Priority, Story,
    Acceptance Criteria, Dependencies, NFR và Owner.
-3. Không dùng `.local/project-inputs/Tasks.xlsx` để xác định hoặc thu hẹp phạm
-   vi, dependency, AC, phần backend/frontend hay kết luận backlog hoàn thành.
+3. Không dùng danh sách task kỹ thuật để xác định hoặc thu hẹp phạm vi,
+   dependency, AC, phần backend/frontend hay kết luận backlog hoàn thành. Mã
+   branch và commit phải là đúng mã Story trong file backlog.
 4. Jira, khi truy cập được, chỉ dùng để kiểm tra giao việc và tiến độ hiện tại.
 5. Git và Pull Request chỉ chứng minh trạng thái code. Tài liệu kiến trúc, API
    contract và hướng dẫn kỹ thuật quy định cách triển khai nhưng không được làm

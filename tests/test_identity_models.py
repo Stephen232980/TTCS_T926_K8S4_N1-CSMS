@@ -1,5 +1,5 @@
 import pytest
-from sqlalchemy import select
+from sqlalchemy import Index, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +13,19 @@ def test_user_email_is_normalized() -> None:
     )
 
     assert user.email == "owner@example.com"
+
+
+def test_user_operational_defaults_and_case_insensitive_email_index() -> None:
+    assert User.__table__.c.status.default is not None
+    assert User.__table__.c.status.default.arg == "active"
+    assert User.__table__.c.status.server_default is not None
+
+    indexes = {
+        index.name: index
+        for index in User.__table__.indexes
+        if isinstance(index, Index)
+    }
+    assert indexes["uq_users_email_ci"].unique
 
 
 @pytest.mark.asyncio

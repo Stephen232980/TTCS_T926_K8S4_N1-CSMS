@@ -337,6 +337,31 @@ Response:
 }
 ```
 
+### 6.3. Sửa mã charge point
+
+```text
+PATCH /api/v1/charge-points/{charge_point_id}
+```
+
+Request:
+
+```json
+{
+  "code": "CP-Q1-002"
+}
+```
+
+Quy tắc:
+
+- Chỉ `station_owner` sở hữu station chứa charge point được sửa mã.
+- Mã được trim và kiểm tra unique toàn hệ thống, không phân biệt hoa thường.
+- Trước phiên sạc đầu tiên, sửa thành công trả `200 OK`.
+- Khi phiên sạc đầu tiên bắt đầu, backend phải đặt `code_locked_at` trong cùng
+  transaction tạo phiên. Từ thời điểm đó mã và chính mốc khóa là bất biến.
+- Mã đã được dùng trả `409 charge_point_code_already_exists`.
+- Mã đã khóa trả `409 charge_point_code_locked_after_charging`.
+- Database trigger vẫn chặn thay đổi mã đã khóa nếu bỏ qua API.
+
 ## 7. CORS và môi trường frontend
 
 - Development ưu tiên Vite proxy `/api` đến `http://localhost:8001` để giữ request cùng origin.

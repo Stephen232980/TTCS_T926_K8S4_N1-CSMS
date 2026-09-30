@@ -8,3 +8,11 @@ class StationIdempotencyConflictError(Exception):
 
 class ChargePointCodeAlreadyExistsError(Exception):
     pass
+
+
+class ChargePointCodeLockedError(Exception):
+    pass
+
+
+class ChargePointOwnershipDeniedError(Exception):
+    pass

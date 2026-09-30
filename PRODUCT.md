@@ -37,7 +37,7 @@ Dự án được phát triển theo sprint một tuần bởi nhóm thực tậ
 
 ## Evidence on Hand
 
-Nguồn yêu cầu: `Backlog CSMS.xlsx`, `Tasks.xlsx`, `Tong quan.xlsx` do người dùng cung cấp. Chưa có mã nguồn, nhận diện thương hiệu, máy chủ staging hoặc repository từ xa.
+Nguồn yêu cầu chính: `Backlog CSMS.xlsx` và AC/NFR của từng Story do người dùng cung cấp. `Tong quan.xlsx` chỉ cung cấp bối cảnh sản phẩm. Chưa có nhận diện thương hiệu hoặc máy chủ staging.
 
 ## Product Principles
 

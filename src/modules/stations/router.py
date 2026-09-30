@@ -153,6 +153,7 @@ async def create_charge_point(
         code=charge_point.code,
         name=charge_point.name,
         status=charge_point.status,
+        code_locked_at=charge_point.code_locked_at,
         connectors=[
             ConnectorResponse.model_validate(connector)
             for connector in sorted(

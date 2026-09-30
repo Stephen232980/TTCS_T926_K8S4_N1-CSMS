@@ -2,7 +2,7 @@
 
 Sprint dài 5 ngày. Phạm vi, Acceptance Criteria, dependency và NFR của từng
 backlog phải được đọc từ `.local/project-inputs/Backlog CSMS.xlsx`. Jira chỉ
-dùng để kiểm tra giao việc và tiến độ hiện tại; không dùng `Tasks.xlsx` để xác
+dùng để kiểm tra giao việc và tiến độ hiện tại; không dùng danh sách task kỹ thuật để xác
 định hoặc thu hẹp phạm vi. Quy trình thực hiện và kiểm chứng tuân theo
 [`BACKLOG_DELIVERY_GUIDE.md`](BACKLOG_DELIVERY_GUIDE.md).
 

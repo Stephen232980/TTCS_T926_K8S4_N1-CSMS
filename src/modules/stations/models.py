@@ -15,7 +15,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from src.modules.identity.models import User
 from src.platform.database.base import Base
@@ -34,7 +34,7 @@ class Station(Base):
             name="ck_stations_longitude_range",
         ),
         CheckConstraint(
-            "status IN ('inactive', 'active')",
+            "status IN ('inactive', 'active', 'suspended', 'blocked')",
             name="ck_stations_status",
         ),
     )
@@ -54,6 +54,16 @@ class Station(Base):
         server_default="inactive",
         nullable=False,
     )
+    timezone: Mapped[str] = mapped_column(
+        String(64),
+        default="Asia/Ho_Chi_Minh",
+        server_default="Asia/Ho_Chi_Minh",
+        nullable=False,
+    )
+    archived_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -70,7 +80,6 @@ class Station(Base):
     charge_points: Mapped[list[ChargePoint]] = relationship(
         "ChargePoint",
         back_populates="station",
-        cascade="all, delete-orphan",
         passive_deletes=True,
     )
 
@@ -104,16 +113,40 @@ class ChargePoint(Base):
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     station_id: Mapped[UUID] = mapped_column(
-        ForeignKey("stations.id", ondelete="CASCADE"),
+        ForeignKey("stations.id", ondelete="RESTRICT"),
         nullable=False,
     )
     code: Mapped[str] = mapped_column(String(64), nullable=False)
     name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    vendor: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    firmware_version: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[str] = mapped_column(
         String(20),
         default="offline",
         server_default="offline",
         nullable=False,
+    )
+    last_seen_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    last_boot_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    status_updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    archived_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    code_locked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -134,9 +167,19 @@ class ChargePoint(Base):
     connectors: Mapped[list[Connector]] = relationship(
         "Connector",
         back_populates="charge_point",
-        cascade="all, delete-orphan",
         passive_deletes=True,
     )
+
+    @validates("code")
+    def normalize_code(self, _key: str, value: str) -> str:
+        return value.strip()
+
+
+Index(
+    "uq_charge_points_code_ci",
+    func.lower(ChargePoint.__table__.c.code),
+    unique=True,
+)
 
 
 class Connector(Base):
@@ -151,12 +194,24 @@ class Connector(Base):
             "connector_number >= 1",
             name="ck_connectors_connector_number_gte_1",
         ),
+        CheckConstraint(
+            "max_power_kw IS NULL OR max_power_kw > 0",
+            name="ck_connectors_max_power_kw_positive",
+        ),
+        CheckConstraint(
+            "voltage IS NULL OR voltage > 0",
+            name="ck_connectors_voltage_positive",
+        ),
+        CheckConstraint(
+            "amperage IS NULL OR amperage > 0",
+            name="ck_connectors_amperage_positive",
+        ),
         Index("ix_connectors_charge_point_id", "charge_point_id"),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     charge_point_id: Mapped[UUID] = mapped_column(
-        ForeignKey("charge_points.id", ondelete="CASCADE"),
+        ForeignKey("charge_points.id", ondelete="RESTRICT"),
         nullable=False,
     )
     connector_number: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -165,6 +220,24 @@ class Connector(Base):
         default="unknown",
         server_default="unknown",
         nullable=False,
+    )
+    raw_ocpp_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    status_updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    connector_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    max_power_kw: Mapped[Decimal | None] = mapped_column(
+        Numeric(8, 3),
+        nullable=True,
+    )
+    current_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    voltage: Mapped[Decimal | None] = mapped_column(Numeric(8, 2), nullable=True)
+    amperage: Mapped[Decimal | None] = mapped_column(Numeric(8, 2), nullable=True)
+    archived_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -181,4 +254,42 @@ class Connector(Base):
     charge_point: Mapped[ChargePoint] = relationship(
         "ChargePoint",
         back_populates="connectors",
+    )
+    errors: Mapped[list[ConnectorError]] = relationship(
+        "ConnectorError",
+        back_populates="connector",
+        passive_deletes=True,
+    )
+
+
+class ConnectorError(Base):
+    __tablename__ = "connector_errors"
+    __table_args__ = (
+        Index(
+            "ix_connector_errors_connector_id_occurred_at",
+            "connector_id",
+            "occurred_at",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    connector_id: Mapped[UUID] = mapped_column(
+        ForeignKey("connectors.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    error_code: Mapped[str] = mapped_column(String(100), nullable=False)
+    vendor_error_code: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    details: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+
+    connector: Mapped[Connector] = relationship(
+        "Connector",
+        back_populates="errors",
     )

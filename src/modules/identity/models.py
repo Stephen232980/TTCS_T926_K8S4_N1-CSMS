@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from src.platform.database.base import Base
@@ -11,10 +11,23 @@ from src.platform.database.base import Base
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('active', 'suspended', 'deactivated', "
+            "'pending_deletion', 'anonymized')",
+            name="ck_users_status",
+        ),
+    )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(30),
+        default="active",
+        server_default="active",
+        nullable=False,
+    )
     failed_login_count: Mapped[int] = mapped_column(
         default=0,
         server_default="0",
@@ -50,6 +63,9 @@ class User(Base):
     @validates("email")
     def normalize_email(self, _key: str, value: str) -> str:
         return value.strip().lower()
+
+
+Index("uq_users_email_ci", func.lower(User.__table__.c.email), unique=True)
 
 
 class Role(Base):
@@ -111,6 +127,17 @@ class Session(Base):
         DateTime(timezone=True),
         nullable=False,
     )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(512), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

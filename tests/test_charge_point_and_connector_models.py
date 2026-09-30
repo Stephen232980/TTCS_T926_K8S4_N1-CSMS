@@ -8,7 +8,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.identity.models import User
-from src.modules.stations.models import ChargePoint, Connector, Station
+from src.modules.stations.models import (
+    ChargePoint,
+    Connector,
+    ConnectorError,
+    Station,
+)
 
 
 def test_charge_point_model_fields_and_defaults() -> None:
@@ -26,6 +31,21 @@ def test_charge_point_model_fields_and_defaults() -> None:
     assert status_column.default.arg == "offline"
     assert status_column.server_default is not None
     assert status_column.server_default.arg == "offline"
+
+
+def test_charge_point_code_is_normalized_and_has_operational_fields() -> None:
+    charge_point = ChargePoint(
+        station_id=uuid4(),
+        code="  cp-test-001  ",
+        vendor="Open Charge Alliance",
+        model="Simulator",
+        firmware_version="1.0.0",
+    )
+
+    assert charge_point.code == "cp-test-001"
+    assert charge_point.vendor == "Open Charge Alliance"
+    assert charge_point.model == "Simulator"
+    assert charge_point.firmware_version == "1.0.0"
 
 
 def test_connector_model_fields_and_unknown_default() -> None:
@@ -61,7 +81,7 @@ def test_charge_point_table_indexes_and_foreign_key() -> None:
 
     station_fk = next(iter(table.foreign_keys))
     assert station_fk.target_fullname == "stations.id"
-    assert station_fk.ondelete == "CASCADE"
+    assert station_fk.ondelete == "RESTRICT"
 
 
 def test_connector_table_constraints_and_foreign_key() -> None:
@@ -94,7 +114,42 @@ def test_connector_table_constraints_and_foreign_key() -> None:
 
     charge_point_fk = next(iter(table.foreign_keys))
     assert charge_point_fk.target_fullname == "charge_points.id"
-    assert charge_point_fk.ondelete == "CASCADE"
+    assert charge_point_fk.ondelete == "RESTRICT"
+
+
+def test_connector_supports_raw_status_and_electrical_metadata() -> None:
+    connector = Connector(
+        charge_point_id=uuid4(),
+        connector_number=1,
+        raw_ocpp_status="SuspendedEVSE",
+        connector_type="CCS2",
+        max_power_kw=Decimal("150.000"),
+        current_type="DC",
+        voltage=Decimal("800.00"),
+        amperage=Decimal("187.50"),
+    )
+
+    assert connector.raw_ocpp_status == "SuspendedEVSE"
+    assert connector.connector_type == "CCS2"
+    assert connector.max_power_kw == Decimal("150.000")
+    assert connector.current_type == "DC"
+
+
+def test_connector_error_has_history_index_and_restrictive_foreign_key() -> None:
+    table = cast(Table, ConnectorError.__table__)
+    history_index = next(
+        index
+        for index in table.indexes
+        if str(index.name) == "ix_connector_errors_connector_id_occurred_at"
+    )
+    assert [column.name for column in history_index.columns] == [
+        "connector_id",
+        "occurred_at",
+    ]
+
+    connector_fk = next(iter(table.foreign_keys))
+    assert connector_fk.target_fullname == "connectors.id"
+    assert connector_fk.ondelete == "RESTRICT"
 
 
 async def _create_station(
@@ -148,7 +203,7 @@ async def test_duplicate_charge_point_code_rejected_globally(
     db_session.add(
         ChargePoint(
             station_id=second_station.id,
-            code="CP-GLOBAL-UNIQUE-001",
+            code="cp-global-unique-001",
         )
     )
     with pytest.raises(IntegrityError):
