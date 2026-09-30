@@ -4,10 +4,20 @@ import pytest
 from pydantic import ValidationError
 
 from src.modules.stations.schemas import (
+    ChargePointCodeAvailabilityQuery,
+    ChargePointCreateRequest,
     StationCreateRequest,
     StationListQuery,
     StationUpdateRequest,
 )
+
+
+def test_charge_point_codes_are_normalized_consistently() -> None:
+    availability = ChargePointCodeAvailabilityQuery(code="  cp-q1-001  ")
+    creation = ChargePointCreateRequest(code="  cp-q1-001  ", connector_count=2)
+
+    assert availability.code == "cp-q1-001"
+    assert creation.code == "cp-q1-001"
 
 
 def valid_create_payload() -> dict[str, object]:

@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Literal, Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class StationCreateRequest(BaseModel):
@@ -64,7 +64,7 @@ class StationListQuery(BaseModel):
 
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=100)
-    status: Literal["inactive", "active"] | None = None
+    status: Literal["inactive", "active", "suspended", "blocked"] | None = None
     search: str | None = Field(default=None, max_length=100)
 
 
@@ -98,6 +98,11 @@ class ChargePointCodeAvailabilityQuery(BaseModel):
 
     code: str = Field(min_length=1, max_length=64)
 
+    @field_validator("code")
+    @classmethod
+    def normalize_code(cls, value: str) -> str:
+        return value.strip()
+
 
 class ChargePointCodeAvailabilityResponse(BaseModel):
     code: str
@@ -112,6 +117,25 @@ class ChargePointCreateRequest(BaseModel):
 
     code: str = Field(min_length=1, max_length=64)
     connector_count: int = Field(ge=1, le=4)
+
+    @field_validator("code")
+    @classmethod
+    def normalize_code(cls, value: str) -> str:
+        return value.strip()
+
+
+class ChargePointUpdateRequest(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
+
+    code: str = Field(min_length=1, max_length=64)
+
+    @field_validator("code")
+    @classmethod
+    def normalize_code(cls, value: str) -> str:
+        return value.strip()
 
 
 class ConnectorResponse(BaseModel):
@@ -132,6 +156,7 @@ class ChargePointResponse(BaseModel):
     code: str
     name: str | None
     status: str
+    code_locked_at: datetime | None = None
     connectors: list[ConnectorResponse]
     created_at: datetime
     updated_at: datetime
