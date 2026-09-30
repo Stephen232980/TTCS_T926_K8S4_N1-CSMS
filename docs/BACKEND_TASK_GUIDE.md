@@ -1,12 +1,23 @@
-# Hướng dẫn thực hiện từng task backend CSMS
+# Hướng dẫn kỹ thuật backend CSMS
 
-Tài liệu này dành cho backend developer mới bắt đầu. Nội dung được diễn giải từ `Tasks.xlsx`, `Backlog CSMS.xlsx` và kiến trúc đã chốt. Khi nội dung trong tài liệu này khác acceptance criteria trong backlog, acceptance criteria là nguồn để kiểm tra kết quả cuối cùng.
+Tài liệu này là tham khảo kỹ thuật cho phần backend, không phải nguồn xác định
+phạm vi, dependency, Acceptance Criteria (AC), NFR hoặc trạng thái hoàn thành.
+Mỗi backlog item vẫn do một người chịu trách nhiệm end-to-end theo
+[`BACKLOG_DELIVERY_GUIDE.md`](BACKLOG_DELIVERY_GUIDE.md).
+
+`.local/project-inputs/Backlog CSMS.xlsx` là nguồn bắt buộc cho phạm vi, AC,
+dependency và NFR. Không dùng `Tasks.xlsx` hoặc các mục T-xx bên dưới để thu hẹp,
+thay thế hay kết luận backlog đã hoàn thành. Jira, khi truy cập được, chỉ dùng
+để kiểm tra giao việc và tiến độ hiện tại. Nếu hướng dẫn kỹ thuật này mâu thuẫn
+với backlog, phải chỉ rõ mâu thuẫn và dừng xin quyết định nếu nó làm thay đổi
+đáng kể nghiệp vụ hoặc phạm vi.
 
 ## 1. Những từ cần biết
 
 | Từ | Ý nghĩa đơn giản |
 | --- | --- |
-| Task | Một đầu việc có mã như T-01 hoặc T-05 |
+| Backlog | Một đầu việc lớn độc lập trong `Backlog CSMS.xlsx` |
+| Task nhỏ | Increment triển khai/kiểm tra thuộc một backlog; không thay thế AC/NFR |
 | Dependency | Task phải hoàn thành trước |
 | Branch | Nhánh riêng để làm một task |
 | Commit | Một lần lưu code kèm lời mô tả |
@@ -19,20 +30,21 @@ Tài liệu này dành cho backend developer mới bắt đầu. Nội dung đư
 | Handler | Hàm xử lý một API hoặc một OCPP message |
 | Job | Công việc chạy nền theo lịch |
 
-## 2. Quy trình chung cho mọi task
+## 2. Quy trình kỹ thuật cho phần backend của một backlog
 
-### Bước 1: Đọc task
+### Bước 1: Đọc backlog và Coverage Matrix
 
 Ghi ra bốn điều trước khi code:
 
 ```text
-Task cần tạo ra kết quả gì?
-Task phụ thuộc task nào?
-Acceptance criteria kiểm tra điều gì?
-Task sẽ sửa module, API và bảng nào?
+Backlog cần tạo ra kết quả end-to-end gì?
+Dependency bắt buộc là gì?
+Mỗi AC/NFR được task nhỏ và bằng chứng nào bao phủ?
+Phần backend sẽ sửa module, API và bảng nào?
 ```
 
-Không bắt đầu nếu dependency chưa được merge vào `main`.
+Không bắt đầu nếu dependency chưa sẵn sàng hoặc Coverage Matrix chưa bao phủ
+đầy đủ AC/NFR.
 
 ### Bước 2: Báo cho người còn lại
 
@@ -896,22 +908,27 @@ Phụ thuộc: T-57.
 
 Xong khi: tìm đúng log Reset và phân trang ổn định.
 
-## 7. Checklist trước khi báo “xong task”
+## 7. Checklist trước khi báo “xong phần backend”
 
 ```text
-[ ] Dependency đã merge trước khi bắt đầu
+[ ] Đã đọc backlog và Coverage Matrix theo BACKLOG_DELIVERY_GUIDE.md
+[ ] Dependency bắt buộc đã sẵn sàng
 [ ] Đã thống nhất API/database với người còn lại
 [ ] Chỉ sửa phạm vi của task
 [ ] Không có secret hoặc dữ liệu nhạy cảm trong code/log
 [ ] Migration chạy tiến và lùi
-[ ] Test chứng minh acceptance criteria
-[ ] Ruff, mypy và pytest đều xanh
+[ ] Test chứng minh các AC/NFR được ánh xạ cho phần backend
+[ ] Ruff check/format, mypy và pytest đều xanh bằng virtual environment dự án
 [ ] Swagger cập nhật đúng với API HTTP
 [ ] Đã tự chạy luồng thành công và luồng lỗi
 [ ] PR có hướng dẫn kiểm tra
 [ ] Người còn lại đã review
-[ ] CI xanh trước khi merge
+[ ] Đã bàn giao contract và bằng chứng cho bước tích hợp frontend nếu có
 ```
+
+Hoàn thành checklist này không đồng nghĩa backlog đã hoàn thành. Chỉ kết luận
+`READY FOR REVIEW` khi toàn bộ backend, frontend, database, tích hợp, AC/NFR,
+demo, CI và review đáp ứng Definition of Done của backlog.
 
 ## 8. Khi bị kẹt
 

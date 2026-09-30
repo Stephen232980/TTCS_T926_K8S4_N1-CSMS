@@ -1,6 +1,10 @@
 # Kế hoạch thực hiện Sprint 1
 
-Sprint dài 5 ngày. Các hạng mục được xếp theo dependency trong `Tasks.xlsx`.
+Sprint dài 5 ngày. Phạm vi, Acceptance Criteria, dependency và NFR của từng
+backlog phải được đọc từ `.local/project-inputs/Backlog CSMS.xlsx`. Jira chỉ
+dùng để kiểm tra giao việc và tiến độ hiện tại; không dùng `Tasks.xlsx` để xác
+định hoặc thu hẹp phạm vi. Quy trình thực hiện và kiểm chứng tuân theo
+[`BACKLOG_DELIVERY_GUIDE.md`](BACKLOG_DELIVERY_GUIDE.md).
 
 ## Trình tự
 
@@ -32,12 +36,14 @@ K-01 chạy timebox 2 ngày bởi hai người sau khi T-01 ổn định, không
 
 ## Definition of Done chung
 
-- Acceptance criteria liên quan có test tự động hoặc bước demo lặp lại được.
+- Mọi AC/NFR trong backlog có task nhỏ và bằng chứng `PASS`.
+- Backend và frontend dùng API thật đã tích hợp end-to-end nếu backlog có UI.
 - Migration tiến và lùi sạch trên database trống.
 - Không có secret trong repository hoặc log.
 - `lint`, `typecheck`, `test`, `build` đều xanh.
 - README có lệnh chạy từ máy mới.
-- Thay đổi có pull request và ít nhất một người review.
+- Thay đổi có pull request, CI xanh, ít nhất một người review và không còn
+  review comment chưa xử lý.
 
 ## Kịch bản demo Sprint 1
 
