@@ -465,6 +465,6 @@ vì vậy frontend không cần cấu hình URL API riêng cho staging.
 
 Trước mỗi backlog, đọc đầy đủ dòng tương ứng trong
 `.local/project-inputs/Backlog CSMS.xlsx`, lập Coverage Matrix và kiểm tra
-dependency. Không dùng `Tasks.xlsx` để xác định hoặc thu hẹp phạm vi. Nếu tài
+dependency. Không dùng danh sách task kỹ thuật để xác định hoặc thu hẹp phạm vi. Nếu tài
 liệu khác acceptance criteria trong backlog, acceptance criteria là nguồn kiểm
 tra cuối.

@@ -6,7 +6,7 @@ Mỗi backlog item vẫn do một người chịu trách nhiệm end-to-end theo
 [`BACKLOG_DELIVERY_GUIDE.md`](BACKLOG_DELIVERY_GUIDE.md).
 
 `.local/project-inputs/Backlog CSMS.xlsx` là nguồn bắt buộc cho phạm vi, AC,
-dependency và NFR. Không dùng `Tasks.xlsx` hoặc các mục T-xx bên dưới để thu hẹp,
+dependency và NFR. Không dùng danh sách task kỹ thuật hoặc các mục T-xx bên dưới để thu hẹp,
 thay thế hay kết luận backlog đã hoàn thành. Jira, khi truy cập được, chỉ dùng
 để kiểm tra giao việc và tiến độ hiện tại. Nếu hướng dẫn kỹ thuật này mâu thuẫn
 với backlog, phải chỉ rõ mâu thuẫn và dừng xin quyết định nếu nó làm thay đổi
@@ -62,14 +62,14 @@ Mình dự kiến mở PR trong hôm nay.
 ```bash
 git switch main
 git pull --ff-only
-git switch -c feature/T-05-login
+git switch -c feature/S-02-login
 ```
 
 Tên branch đề xuất:
 
 ```text
-feature/T-<mã>-<tên-ngắn>
-fix/T-<mã>-<tên-lỗi>
+feature/S-<mã-story>-<tên-ngắn>
+fix/S-<mã-story>-<tên-lỗi>
 ```
 
 ### Bước 4: Chốt API và database
@@ -134,7 +134,7 @@ Luôn thử migration trên database trống trước khi mở PR.
 
 ```bash
 git add <các-file-liên-quan>
-git commit -m "feat(T-05): add login and temporary lock"
+git commit -m "feat(S-02): add login and temporary lock"
 ```
 
 Một commit chỉ nên chứa một thay đổi dễ hiểu. Không đưa secret, `.env`, mật khẩu hoặc file tạm vào commit.
@@ -145,7 +145,7 @@ Một commit chỉ nên chứa một thay đổi dễ hiểu. Không đưa secre
 git fetch origin
 git rebase origin/main
 pytest
-git push -u origin feature/T-05-login
+git push -u origin feature/S-02-login
 ```
 
 ### Bước 9: Tạo Pull Request

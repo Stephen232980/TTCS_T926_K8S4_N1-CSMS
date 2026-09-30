@@ -8,10 +8,10 @@ Matrix và bằng chứng hoàn thành nằm tại
 
 ## 1. Nguồn yêu cầu và quy trình một backlog
 
-`.local/project-inputs/Backlog CSMS.xlsx` là nguồn bắt buộc cho phạm vi, AC,
-dependency và NFR. Không dùng `Tasks.xlsx` hoặc tài liệu kỹ thuật để thu hẹp
-backlog. Jira chỉ phản ánh giao việc/tiến độ hiện tại; Git/PR chỉ phản ánh trạng
-thái code.
+`.local/project-inputs/Backlog CSMS.xlsx` là nguồn duy nhất cho phạm vi, AC,
+dependency và NFR. Mã branch, commit và Pull Request phải dùng đúng mã Story
+`S-xx` (hoặc `K-xx` với Spike) trong backlog; không suy mã Story từ task kỹ thuật.
+Jira chỉ phản ánh giao việc/tiến độ hiện tại; Git/PR chỉ phản ánh trạng thái code.
 
 ```text
 đọc backlog -> lập Coverage Matrix -> kiểm tra dependency -> cập nhật main
@@ -43,18 +43,18 @@ Kiểm tra dự kiến: <test/demo/quality gate>
 Biểu thức tham khảo:
 
 ```text
-^(feature|fix|test|refactor|chore|ci|docs)/(T|S|K)-[0-9]+-[a-z0-9-]+$
+^(feature|fix|test|refactor|chore|ci|docs)/(S|K)-[0-9]+-[a-z0-9-]+$
 ```
 
 Ví dụ hợp lệ:
 
 ```text
-feature/T-05-login
-fix/T-05-session-expiry
-test/T-07-owner-scope
-refactor/T-09-station-service
-ci/T-02-quality-checks
-docs/T-05-auth-contract
+feature/S-02-login
+fix/S-02-session-expiry
+test/S-03-owner-scope
+refactor/S-04-station-service
+ci/S-01-quality-checks
+docs/S-02-auth-contract
 ```
 
 | Loại | Mục đích |
@@ -72,7 +72,7 @@ Tạo branch:
 ```powershell
 git switch main
 git pull --ff-only
-git switch -c feature/T-05-login
+git switch -c feature/S-02-login
 ```
 
 Không commit trực tiếp lên `main`, không gộp nhiều task không liên quan và không
@@ -89,10 +89,10 @@ dùng lại branch đã merge.
 Tài liệu chung không thuộc task có thể dùng `docs: <mô tả>`.
 
 ```text
-feat(T-05): thêm đăng nhập bằng email và mật khẩu
-test(T-05): kiểm tra khoá sau năm lần đăng nhập sai
-fix(T-07): áp dụng ownership scope khi lấy danh sách trạm
-ci(T-02): chạy Ruff, mypy và pytest trên pull request
+feat(S-02): thêm đăng nhập bằng email và mật khẩu
+test(S-02): kiểm tra khoá sau năm lần đăng nhập sai
+fix(S-03): áp dụng ownership scope khi lấy danh sách trạm
+ci(S-01): chạy Ruff, mypy và pytest trên pull request
 docs: bổ sung hướng dẫn chạy dự án
 ```
 
@@ -106,7 +106,7 @@ git status
 git diff
 git add <các-file-liên-quan>
 git diff --cached
-git commit -m "feat(T-05): thêm đăng nhập bằng email và mật khẩu"
+git commit -m "feat(S-02): thêm đăng nhập bằng email và mật khẩu"
 ```
 
 Không dùng `git add .` mà chưa xem danh sách file.
@@ -292,10 +292,10 @@ chưa thống nhất.
 Tiêu đề:
 
 ```text
-[T-<số>] <mô tả ngắn bằng tiếng Việt>
+[S-<số>] <mô tả ngắn bằng tiếng Việt>
 ```
 
-Ví dụ: `[T-05] Thêm đăng nhập, session và khoá tạm`.
+Ví dụ: `[S-02] Thêm đăng nhập, session và khoá tạm`.
 
 PR phải điền template, mô tả cách kiểm tra, nêu migration/API/biến môi trường
 mới, có ít nhất một reviewer và CI xanh. Không merge khi còn conflict hoặc nhận
@@ -304,7 +304,7 @@ xét chưa giải quyết.
 ## 12. Definition of Done
 
 ```text
-[ ] Đã đọc đủ backlog và không dùng Tasks.xlsx để thu hẹp phạm vi
+[ ] Đã đọc đủ Story và AC/NFR tương ứng trong Backlog CSMS.xlsx
 [ ] Dependency bắt buộc đã sẵn sàng
 [ ] Mọi AC/NFR có task nhỏ và bằng chứng PASS
 [ ] Code đúng phạm vi backlog, bao gồm tích hợp frontend-backend nếu cần
