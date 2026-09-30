@@ -1,6 +1,7 @@
 import type {
   ChargePoint,
   ChargePointInput,
+  ChargePointUpdate,
 } from '../model/chargePoint'
 import { ChargePointApiError, type ChargePointApi } from './chargePointApi'
 
@@ -63,6 +64,7 @@ export class MockChargePointApi implements ChargePointApi {
       code,
       name: null,
       status: 'offline',
+      codeLockedAt: null,
       connectors: Array.from(
         { length: input.connectorCount },
         (_, index) => ({
@@ -81,6 +83,41 @@ export class MockChargePointApi implements ChargePointApi {
     return {
       ...chargePoint,
       connectors: chargePoint.connectors.map((connector) => ({ ...connector })),
+    }
+  }
+
+  async updateChargePoint(
+    chargePointId: string,
+    input: ChargePointUpdate,
+  ): Promise<ChargePoint> {
+    await wait(this.latency)
+    const current = this.chargePoints.find((item) => item.id === chargePointId)
+    if (!current) throw new ChargePointApiError(404, 'resource_not_found')
+    if (current.codeLockedAt != null) {
+      throw new ChargePointApiError(
+        409,
+        'charge_point_code_locked_after_charging',
+      )
+    }
+
+    const code = input.code.trim()
+    if (
+      this.chargePoints.some(
+        (item) =>
+          item.id !== chargePointId &&
+          item.code.toLowerCase() === code.toLowerCase(),
+      )
+    ) {
+      throw new ChargePointApiError(409, 'charge_point_code_already_exists')
+    }
+
+    const updated = { ...current, code, updatedAt: new Date().toISOString() }
+    this.chargePoints = this.chargePoints.map((item) =>
+      item.id === chargePointId ? updated : item,
+    )
+    return {
+      ...updated,
+      connectors: updated.connectors.map((connector) => ({ ...connector })),
     }
   }
 }

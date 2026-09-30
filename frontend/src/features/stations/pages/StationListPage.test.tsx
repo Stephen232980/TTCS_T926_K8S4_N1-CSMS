@@ -15,6 +15,23 @@ async function fillCreateForm(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe('StationListPage create flow', () => {
+  it('allows a status notice to be dismissed', async () => {
+    const user = userEvent.setup()
+    const onDismissNotice = vi.fn()
+    render(
+      <StationListPage
+        notice="Đã cập nhật trạm."
+        onNotice={() => undefined}
+        onDismissNotice={onDismissNotice}
+        api={new MockStationApi([], 0)}
+      />,
+    )
+
+    expect(screen.getByText('Đã cập nhật trạm.').closest('[role="status"]')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Đóng thông báo' }))
+    expect(onDismissNotice).toHaveBeenCalledOnce()
+  })
+
   it('creates a station and refreshes the first page', async () => {
     const user = userEvent.setup()
     const onNotice = vi.fn()

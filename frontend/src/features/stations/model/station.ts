@@ -1,4 +1,4 @@
-export type StationStatus = 'inactive' | 'active'
+export type StationStatus = 'inactive' | 'active' | 'suspended' | 'blocked'
 
 export interface Station {
   id: string

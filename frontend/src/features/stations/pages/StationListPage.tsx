@@ -27,6 +27,7 @@ function mutationErrorMessage(error: unknown): string {
 interface StationListPageProps {
   notice: string
   onNotice: (message: string) => void
+  onDismissNotice?: () => void
   onOpenStation?: (stationId: string) => void
   api?: StationApi
 }
@@ -34,10 +35,12 @@ interface StationListPageProps {
 export function StationListPage({
   notice,
   onNotice,
+  onDismissNotice = () => undefined,
   onOpenStation = () => undefined,
   api = defaultStationApi,
 }: StationListPageProps) {
   const [stations, setStations] = useState<Station[]>([])
+  const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<StationStatus | ''>('')
   const [page, setPage] = useState(1)
@@ -52,6 +55,18 @@ export function StationListPage({
   const [submitError, setSubmitError] = useState('')
   const submitInFlight = useRef(false)
   const pageSize = 2
+
+  useEffect(() => {
+    if (searchInput === search) return
+    const timeoutId = window.setTimeout(() => {
+      setIsLoading(true)
+      setError('')
+      setPage(1)
+      setSearch(searchInput)
+    }, 300)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [search, searchInput])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -95,8 +110,14 @@ export function StationListPage({
   }
 
   const handleSearch = (value: string) => {
+    setSearchInput(value)
+  }
+
+  const handleClearFilters = () => {
     prepareRequest()
-    setSearch(value)
+    setSearchInput('')
+    setSearch('')
+    setStatus('')
     setPage(1)
   }
 
@@ -191,6 +212,7 @@ export function StationListPage({
         <button
           className="primary-button"
           type="button"
+          aria-label="Tạo trạm"
           onClick={openCreateForm}
           disabled={isSubmitting}
         >
@@ -201,7 +223,14 @@ export function StationListPage({
 
       {notice && (
         <div className="notice" role="status">
-          {notice}
+          <span>{notice}</span>
+          <button
+            type="button"
+            aria-label="Đóng thông báo"
+            onClick={onDismissNotice}
+          >
+            <Icon name="close" />
+          </button>
         </div>
       )}
 
@@ -228,7 +257,7 @@ export function StationListPage({
       )}
 
       <StationFilters
-        search={search}
+        search={searchInput}
         status={status}
         onSearchChange={handleSearch}
         onStatusChange={handleStatus}
@@ -240,10 +269,7 @@ export function StationListPage({
         error={error}
         onView={(station) => onOpenStation(station.id)}
         onEdit={openEditForm}
-        onClearFilters={() => {
-          handleSearch('')
-          handleStatus('')
-        }}
+        onClearFilters={handleClearFilters}
         onRetry={handleRetry}
       />
 

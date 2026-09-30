@@ -11,11 +11,18 @@ interface StationListProps {
   onRetry: () => void
 }
 
+const statusLabels: Record<StationStatus, string> = {
+  active: 'Đang hoạt động',
+  inactive: 'Chưa hoạt động',
+  suspended: 'Tạm ngưng',
+  blocked: 'Đã khóa',
+}
+
 function StatusBadge({ status }: { status: StationStatus }) {
   return (
     <span className={`status-badge status-badge--${status}`}>
       <span aria-hidden="true" />
-      {status === 'active' ? 'Đang hoạt động' : 'Chưa hoạt động'}
+      {statusLabels[status]}
     </span>
   )
 }
@@ -123,9 +130,14 @@ export function StationList({
   onRetry,
 }: StationListProps) {
   return (
-    <div className="data-surface" aria-live="polite">
+    <div className="data-surface" aria-live="polite" aria-busy={isLoading}>
       {isLoading ? (
-        <div className="skeleton-list" aria-label="Đang tải danh sách trạm">
+        <div
+          className="skeleton-list"
+          role="status"
+          aria-label="Đang tải danh sách trạm"
+        >
+          <span className="sr-only">Đang tải danh sách trạm</span>
           {[0, 1].map((item) => <div className="skeleton-row" key={item} />)}
         </div>
       ) : error ? (

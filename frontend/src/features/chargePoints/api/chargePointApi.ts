@@ -2,6 +2,7 @@ import type {
   ChargePoint,
   ChargePointCodeAvailability,
   ChargePointInput,
+  ChargePointUpdate,
 } from '../model/chargePoint'
 
 export class ChargePointApiError extends Error {
@@ -25,5 +26,10 @@ export interface ChargePointApi {
   createChargePoint(
     stationId: string,
     input: ChargePointInput,
+  ): Promise<ChargePoint>
+
+  updateChargePoint(
+    chargePointId: string,
+    input: ChargePointUpdate,
   ): Promise<ChargePoint>
 }

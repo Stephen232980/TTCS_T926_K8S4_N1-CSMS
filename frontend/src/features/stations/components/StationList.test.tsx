@@ -90,4 +90,18 @@ describe('StationList', () => {
 
     expect(onView).toHaveBeenCalledWith(station)
   })
+
+  it.each([
+    ['suspended', 'Tạm ngưng'],
+    ['blocked', 'Đã khóa'],
+  ] as const)('renders the %s station status', (status, label) => {
+    render(
+      <StationList
+        {...defaultProps}
+        stations={[{ ...station, status }]}
+      />,
+    )
+
+    expect(screen.getAllByText(label)).toHaveLength(2)
+  })
 })

@@ -37,6 +37,8 @@ export function StationFilters({
           <option value="">Tất cả</option>
           <option value="active">Đang hoạt động</option>
           <option value="inactive">Chưa hoạt động</option>
+          <option value="suspended">Tạm ngưng</option>
+          <option value="blocked">Đã khóa</option>
         </select>
       </label>
     </div>

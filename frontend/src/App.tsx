@@ -27,6 +27,7 @@ function App({ authApi = defaultAuthApi, stationApi, chargePointApi }: AppProps)
   const [currentUser, setCurrentUser] = useState<AuthenticatedUser | null>(null)
   const [sessionMessage, setSessionMessage] = useState('')
   const [notice, setNotice] = useState('')
+  const [noticeVersion, setNoticeVersion] = useState(0)
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null)
 
   const loadCurrentUser = useCallback(async () => {
@@ -72,9 +73,15 @@ function App({ authApi = defaultAuthApi, stationApi, chargePointApi }: AppProps)
       window.removeEventListener(SESSION_UNAUTHORIZED_EVENT, handleUnauthorized)
   }, [])
 
+  useEffect(() => {
+    if (!notice) return
+    const timeoutId = window.setTimeout(() => setNotice(''), 5000)
+    return () => window.clearTimeout(timeoutId)
+  }, [notice, noticeVersion])
+
   const showPrototypeNotice = (message: string) => {
     setNotice(message)
-    window.setTimeout(() => setNotice(''), 3200)
+    setNoticeVersion((current) => current + 1)
   }
 
   if (authStatus === 'checking') {
@@ -115,6 +122,7 @@ function App({ authApi = defaultAuthApi, stationApi, chargePointApi }: AppProps)
         <StationListPage
           notice={notice}
           onNotice={showPrototypeNotice}
+          onDismissNotice={() => setNotice('')}
           onOpenStation={setSelectedStationId}
           api={stationApi}
         />

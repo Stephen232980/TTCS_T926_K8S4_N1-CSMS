@@ -24,6 +24,7 @@ describe('LoginPage', () => {
     expect(screen.getByText('Vui lòng nhập email.')).toBeInTheDocument()
     expect(screen.getByText('Vui lòng nhập mật khẩu.')).toBeInTheDocument()
     expect(api.login).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Email')).toHaveFocus()
   })
 
   it('submits valid credentials once and reports success', async () => {
