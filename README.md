@@ -1,7 +1,7 @@
-# CSMS Backend
+# CSMS Backend and Frontend
 
 CSMS là hệ thống quản lý trạm, trụ và phiên sạc. Repository này chứa backend
-FastAPI. Frontend và bảng phân công sẽ được nhóm chốt riêng.
+FastAPI và frontend React/Vite.
 
 Tài liệu này dành cho người mới. Hãy làm đúng thứ tự và chỉ chuyển bước khi
 bước hiện tại thành công.
@@ -9,6 +9,7 @@ bước hiện tại thành công.
 ## 1. Công nghệ
 
 - Python 3.12+, FastAPI, Uvicorn
+- Node.js LTS, npm, React, Vite
 - SQLAlchemy 2 async, Psycopg 3, PostgreSQL 16
 - Alembic
 - Pytest, Ruff, mypy
@@ -16,13 +17,16 @@ bước hiện tại thành công.
 
 ## 2. Chuẩn bị máy
 
-Cài Git, Python 3.12+ và Docker Desktop, sau đó kiểm tra trong PowerShell:
+Cài Git, Python 3.12+, Node.js LTS và Docker Desktop, sau đó kiểm tra trong
+PowerShell:
 
 ```powershell
 git --version
 python --version
 docker --version
 docker compose version
+node --version
+npm --version
 ```
 
 Nếu Docker báo lỗi kết nối, hãy mở Docker Desktop và chờ Docker Engine chạy.
@@ -154,7 +158,7 @@ database host là `localhost`; khi backend chạy trong Compose, host là `db` v
 Compose tự truyền URL phù hợp. `AUTH_COOKIE_SECURE=false` chỉ phù hợp với HTTP
 local; môi trường chạy HTTPS phải đặt thành `true`.
 
-## 5. Chạy toàn bộ bằng Docker (khuyến nghị)
+## 5. Chạy backend bằng Docker, frontend local (khuyến nghị)
 
 ### Bước 1: Build và khởi động
 
@@ -195,7 +199,22 @@ docker compose logs db
 docker compose logs -f app
 ```
 
-### Bước 5: Dừng
+### Bước 5: Chạy frontend
+
+Frontend hiện chạy bằng Vite trên máy, không nằm trong Docker Compose. Giữ
+backend và database hoạt động, mở PowerShell thứ hai:
+
+```powershell
+Set-Location frontend
+npm ci
+npm run dev
+```
+
+Mở URL Vite hiển thị trong terminal, mặc định là
+<http://localhost:5173>. Vite chuyển tiếp các request `/api` tới backend tại
+`http://localhost:8001`; vì vậy hãy để API chạy trong khi dùng frontend.
+
+### Bước 6: Dừng Docker
 
 ```powershell
 docker compose down
@@ -232,6 +251,7 @@ công cụ kiểm tra.
 ### Bước 3: Chạy database
 
 ```powershell
+docker compose stop app
 docker compose up -d db
 docker compose ps
 ```
@@ -251,7 +271,8 @@ Chờ `db` thành `healthy`.
 .\.venv\Scripts\python.exe -m uvicorn src.entrypoints.http:app --reload --port 8001
 ```
 
-Kiểm tra các URL ở mục 5. Dừng bằng `Ctrl+C`.
+Kiểm tra các URL API ở mục 5. Dừng Uvicorn bằng `Ctrl+C`. Frontend vẫn chạy
+theo hướng dẫn ở bước 5 mục 5 và truy cập tại <http://localhost:5173>.
 
 Không chạy đồng thời API local và container `app` trên cùng cổng:
 
@@ -259,6 +280,9 @@ Không chạy đồng thời API local và container `app` trên cùng cổng:
 | --- | --- | --- |
 | Toàn bộ bằng Docker | `app`, `db` | Container tại `localhost:8001` |
 | Phát triển trên máy | Chỉ `db` | Uvicorn local tại `localhost:8001` |
+
+Trong cả hai chế độ, frontend chạy local bằng Vite tại `localhost:5173` và
+proxy API tới `localhost:8001`.
 
 Khi chuyển sang chế độ phát triển trên máy:
 
@@ -447,6 +471,6 @@ khẩu, token hoặc cookie thật khi nhờ người khác hỗ trợ.
 
 Trước mỗi backlog, đọc đầy đủ dòng tương ứng trong
 `.local/project-inputs/Backlog CSMS.xlsx`, lập Coverage Matrix và kiểm tra
-dependency. Không dùng `Tasks.xlsx` để xác định hoặc thu hẹp phạm vi. Nếu tài
+dependency. Không dùng danh sách task kỹ thuật để xác định hoặc thu hẹp phạm vi. Nếu tài
 liệu khác acceptance criteria trong backlog, acceptance criteria là nguồn kiểm
 tra cuối.
