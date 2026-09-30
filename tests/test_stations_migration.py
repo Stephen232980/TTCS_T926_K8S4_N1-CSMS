@@ -13,7 +13,9 @@ def _get_stations_migration():
     alembic_config = _get_alembic_config()
     script = ScriptDirectory.from_config(alembic_config)
     rev = script.get_revision("8f2b1d3a4c5e")
-    assert rev is not None, "Revision 8f2b1d3a4c5e not found in Alembic script directory"
+    assert rev is not None, (
+        "Revision 8f2b1d3a4c5e not found in Alembic script directory"
+    )
     return rev, rev.module
 
 
