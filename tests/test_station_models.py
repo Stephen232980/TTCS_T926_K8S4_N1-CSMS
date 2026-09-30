@@ -20,7 +20,11 @@ def test_station_model_default_status() -> None:
         longitude=Decimal("106.703200"),
     )
 
-    assert station.status == "inactive"
+    status_column = Station.__table__.c.status
+    assert status_column.default is not None
+    assert status_column.default.arg == "inactive"
+    assert status_column.server_default is not None
+    assert status_column.server_default.arg == "inactive"
     assert station.name == "Trạm Sạc Trung Tâm"
     assert station.address == "123 Nguyễn Huệ, Quận 1, TP.HCM"
     assert station.latitude == Decimal("10.773100")

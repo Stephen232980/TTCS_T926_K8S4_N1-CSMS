@@ -16,7 +16,11 @@ def test_charge_point_and_connector_model_defaults() -> None:
         code="CP-TEST-001",
         name="Trụ sạc số 1",
     )
-    assert cp.status == "offline"
+    charge_point_status = ChargePoint.__table__.c.status
+    assert charge_point_status.default is not None
+    assert charge_point_status.default.arg == "offline"
+    assert charge_point_status.server_default is not None
+    assert charge_point_status.server_default.arg == "offline"
     assert cp.code == "CP-TEST-001"
     assert cp.name == "Trụ sạc số 1"
 
@@ -24,7 +28,11 @@ def test_charge_point_and_connector_model_defaults() -> None:
         charge_point_id=cp.id,
         connector_number=1,
     )
-    assert conn.status == "Available"
+    connector_status = Connector.__table__.c.status
+    assert connector_status.default is not None
+    assert connector_status.default.arg == "Available"
+    assert connector_status.server_default is not None
+    assert connector_status.server_default.arg == "Available"
     assert conn.connector_number == 1
 
 
