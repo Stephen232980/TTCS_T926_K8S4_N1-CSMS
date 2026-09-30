@@ -280,7 +280,39 @@ Response `200 OK`:
 
 Kết quả này chỉ hỗ trợ UX; backend vẫn phải kiểm tra unique constraint khi tạo.
 
-### 6.2. Tạo charge point và connector
+### 6.2. Danh sách charge point theo station
+
+```text
+GET /api/v1/stations/{station_id}/charge-points?page=1&page_size=20
+```
+
+Quy tắc:
+
+- `station_owner` chỉ xem được charge point thuộc station do mình sở hữu.
+- `operator` và `admin` có phạm vi xem toàn cục.
+- `page` bắt đầu từ 1; `page_size` từ 1 đến 100.
+- Charge point được sắp theo thời gian tạo mới nhất; connector trong từng charge point
+  được sắp theo `connector_number` tăng dần.
+- Station không tồn tại trả `404 resource_not_found`.
+- Station tồn tại nhưng nằm ngoài ownership scope trả `403 permission_denied` và ghi
+  security log.
+
+Response `200 OK`:
+
+```json
+{
+  "items": [],
+  "page": 1,
+  "page_size": 20,
+  "total": 0,
+  "total_pages": 0
+}
+```
+
+Mỗi phần tử trong `items` dùng schema charge point và connector như response tạo mới
+bên dưới, bao gồm `code_locked_at`.
+
+### 6.3. Tạo charge point và connector
 
 ```text
 POST /api/v1/stations/{station_id}/charge-points
@@ -337,7 +369,7 @@ Response:
 }
 ```
 
-### 6.3. Sửa mã charge point
+### 6.4. Sửa mã charge point
 
 ```text
 PATCH /api/v1/charge-points/{charge_point_id}

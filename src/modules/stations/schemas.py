@@ -109,6 +109,13 @@ class ChargePointCodeAvailabilityResponse(BaseModel):
     available: bool
 
 
+class ChargePointListQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    page: int = Field(default=1, ge=1)
+    page_size: int = Field(default=20, ge=1, le=100)
+
+
 class ChargePointCreateRequest(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -160,3 +167,11 @@ class ChargePointResponse(BaseModel):
     connectors: list[ConnectorResponse]
     created_at: datetime
     updated_at: datetime
+
+
+class ChargePointListResponse(BaseModel):
+    items: list[ChargePointResponse]
+    page: int
+    page_size: int
+    total: int
+    total_pages: int

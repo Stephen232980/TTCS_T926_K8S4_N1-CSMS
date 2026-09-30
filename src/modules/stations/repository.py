@@ -8,6 +8,7 @@ from uuid import UUID
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from sqlalchemy.sql.elements import ColumnElement
 
 from src.modules.identity.authorization import ActorScope
@@ -36,6 +37,12 @@ def _idempotency_lock_id(actor_id: UUID, idempotency_key: UUID) -> int:
 @dataclass(frozen=True)
 class StationPage:
     items: list[Station]
+    total: int
+
+
+@dataclass(frozen=True)
+class ChargePointPage:
+    items: list[ChargePoint]
     total: int
 
 
@@ -205,6 +212,43 @@ class StationRepository:
             attribute_names=["connectors"],
         )
         return charge_point
+
+    async def list_charge_points_page(
+        self,
+        station_id: UUID,
+        scope: ActorScope,
+        *,
+        page: int,
+        page_size: int,
+    ) -> ChargePointPage | None:
+        station = await self.get_station_by_id(station_id, scope)
+        if station is None:
+            return None
+
+        offset = (page - 1) * page_size
+        items_statement = (
+            select(ChargePoint)
+            .where(ChargePoint.station_id == station.id)
+            .options(selectinload(ChargePoint.connectors))
+            .order_by(
+                ChargePoint.created_at.desc(),
+                ChargePoint.id.asc(),
+            )
+            .offset(offset)
+            .limit(page_size)
+        )
+        count_statement = (
+            select(func.count(ChargePoint.id))
+            .select_from(ChargePoint)
+            .where(ChargePoint.station_id == station.id)
+        )
+
+        items_result = await self._db_session.execute(items_statement)
+        total = await self._db_session.scalar(count_statement)
+        return ChargePointPage(
+            items=list(items_result.scalars().all()),
+            total=total or 0,
+        )
 
     async def update_charge_point_code(
         self,

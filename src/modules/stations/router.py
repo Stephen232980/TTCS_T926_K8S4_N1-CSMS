@@ -19,6 +19,8 @@ from src.modules.stations.exceptions import (
 from src.modules.stations.repository import StationRepository
 from src.modules.stations.schemas import (
     ChargePointCreateRequest,
+    ChargePointListQuery,
+    ChargePointListResponse,
     ChargePointResponse,
     ConnectorResponse,
     StationCreateRequest,
@@ -37,6 +39,7 @@ router = APIRouter(
 
 DatabaseSession = Annotated[AsyncSession, Depends(get_db_session)]
 StationListQueryDependency = Annotated[StationListQuery, Query()]
+ChargePointListQueryDependency = Annotated[ChargePointListQuery, Query()]
 IdempotencyKey = Annotated[UUID, Header(alias="Idempotency-Key")]
 
 
@@ -107,6 +110,67 @@ async def create_station(
             detail="idempotency_conflict",
         ) from error
     return StationResponse.model_validate(station)
+
+
+@router.get(
+    "/{station_id}/charge-points",
+    response_model=ChargePointListResponse,
+)
+@allow_roles("station_owner", "operator", "admin")
+async def list_charge_points(
+    station_id: UUID,
+    query: ChargePointListQueryDependency,
+    actor: CurrentActorDependency,
+    db_session: DatabaseSession,
+) -> ChargePointListResponse:
+    scope = build_actor_scope(actor)
+
+    try:
+        page_result = await StationRepository(db_session).list_charge_points_page(
+            station_id,
+            scope,
+            page=query.page,
+            page_size=query.page_size,
+        )
+    except StationOwnershipDeniedError as error:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="permission_denied",
+        ) from error
+
+    if page_result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="resource_not_found",
+        )
+
+    total_pages = (page_result.total + query.page_size - 1) // query.page_size
+    return ChargePointListResponse(
+        items=[
+            ChargePointResponse(
+                id=charge_point.id,
+                station_id=charge_point.station_id,
+                code=charge_point.code,
+                name=charge_point.name,
+                status=charge_point.status,
+                code_locked_at=charge_point.code_locked_at,
+                connectors=[
+                    ConnectorResponse.model_validate(connector)
+                    for connector in sorted(
+                        charge_point.connectors,
+                        key=lambda item: item.connector_number,
+                    )
+                ],
+                created_at=charge_point.created_at,
+                updated_at=charge_point.updated_at,
+            )
+            for charge_point in page_result.items
+        ],
+        page=query.page,
+        page_size=query.page_size,
+        total=page_result.total,
+        total_pages=total_pages,
+    )
 
 
 @router.post(
