@@ -48,9 +48,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("code", name="uq_charge_points_code"),
     )
-    op.create_index(
-        "ix_charge_points_code", "charge_points", ["code"], unique=True
-    )
+    op.create_index("ix_charge_points_code", "charge_points", ["code"], unique=True)
     op.create_index(
         "ix_charge_points_station_id", "charge_points", ["station_id"], unique=False
     )

@@ -34,7 +34,9 @@ def test_charge_point_and_connector_table_constraints() -> None:
     assert "ix_charge_points_station_id" in cp_indexes
 
     code_index = next(
-        idx for idx in ChargePoint.__table__.indexes if idx.name == "ix_charge_points_code"
+        idx
+        for idx in ChargePoint.__table__.indexes
+        if idx.name == "ix_charge_points_code"
     )
     assert code_index.unique
 
