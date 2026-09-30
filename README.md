@@ -437,7 +437,25 @@ curl.exe -i `
 Response thành công phải có header `Set-Cookie` với `HttpOnly`. Không gửi mật
 khẩu, token hoặc cookie thật khi nhờ người khác hỗ trợ.
 
-## 11. Tài liệu cần đọc
+## 11. CI/CD frontend
+
+Pull request và mọi lần push chạy ba bước frontend trong GitHub Actions:
+`npm run lint`, `npm test` và `npm run build`. Workflow cũng build image từ
+`frontend/Dockerfile`; image chỉ được đẩy lên GHCR khi merge vào `main`.
+
+Sau khi backend staging triển khai thành công, workflow chạy
+`scripts/deploy_frontend_staging.sh`. Script kiểm tra candidate trên cổng nội
+bộ, xác nhận trang chủ trả HTTP `200` và API proxy trả HTTP `401`, rồi mới thay
+container đang phục vụ. Nếu lần kiểm tra sau khi thay thất bại, container cũ
+được khôi phục.
+
+Staging cần bốn repository secrets đã dùng cho backend: `STAGING_HOST`,
+`STAGING_PORT`, `STAGING_USER`, `STAGING_SSH_KEY`. VM cần Docker, container
+backend tên `csms-app`, và NSG/firewall phải cho phép cổng `80` nếu cần truy cập
+frontend từ Internet. Nginx chuyển tiếp `/api/` đến backend qua Docker network,
+vì vậy frontend không cần cấu hình URL API riêng cho staging.
+
+## 12. Tài liệu cần đọc
 
 1. [Hướng dẫn giao backlog end-to-end](docs/BACKLOG_DELIVERY_GUIDE.md)
 2. [Kiến trúc hệ thống](docs/SYSTEM_ARCHITECTURE.md)
