@@ -439,10 +439,14 @@ khẩu, token hoặc cookie thật khi nhờ người khác hỗ trợ.
 
 ## 11. Tài liệu cần đọc
 
-1. [Kiến trúc hệ thống](docs/SYSTEM_ARCHITECTURE.md)
-2. [Kế hoạch Sprint 1](docs/SPRINT_1_EXECUTION.md)
-3. [Hướng dẫn task backend](docs/BACKEND_TASK_GUIDE.md)
-4. [Quy tắc đóng góp](CONTRIBUTING.md)
+1. [Hướng dẫn giao backlog end-to-end](docs/BACKLOG_DELIVERY_GUIDE.md)
+2. [Kiến trúc hệ thống](docs/SYSTEM_ARCHITECTURE.md)
+3. [Kế hoạch Sprint 1](docs/SPRINT_1_EXECUTION.md)
+4. [Hướng dẫn kỹ thuật backend](docs/BACKEND_TASK_GUIDE.md)
+5. [Quy tắc đóng góp](CONTRIBUTING.md)
 
-Trước mỗi task, đọc dependency và tiêu chí hoàn thành. Nếu tài liệu khác
-acceptance criteria trong backlog, acceptance criteria là nguồn kiểm tra cuối.
+Trước mỗi backlog, đọc đầy đủ dòng tương ứng trong
+`.local/project-inputs/Backlog CSMS.xlsx`, lập Coverage Matrix và kiểm tra
+dependency. Không dùng `Tasks.xlsx` để xác định hoặc thu hẹp phạm vi. Nếu tài
+liệu khác acceptance criteria trong backlog, acceptance criteria là nguồn kiểm
+tra cuối.

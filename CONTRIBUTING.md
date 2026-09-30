@@ -1,25 +1,35 @@
 # Quy tắc đóng góp cho CSMS
 
-Mọi thành viên backend tuân thủ tài liệu này để branch, commit, code, migration
-và Pull Request nhất quán. Phân công cụ thể sẽ được nhóm chốt riêng.
+Mọi thành viên tuân thủ tài liệu này để branch, commit, code, migration và Pull
+Request nhất quán. Mỗi backlog item được giao end-to-end, không chia trách nhiệm
+hoàn thành theo riêng backend/frontend. Quy trình phân tích AC/NFR, Coverage
+Matrix và bằng chứng hoàn thành nằm tại
+[`docs/BACKLOG_DELIVERY_GUIDE.md`](docs/BACKLOG_DELIVERY_GUIDE.md).
 
-## 1. Quy trình một task
+## 1. Nguồn yêu cầu và quy trình một backlog
+
+`.local/project-inputs/Backlog CSMS.xlsx` là nguồn bắt buộc cho phạm vi, AC,
+dependency và NFR. Không dùng `Tasks.xlsx` hoặc tài liệu kỹ thuật để thu hẹp
+backlog. Jira chỉ phản ánh giao việc/tiến độ hiện tại; Git/PR chỉ phản ánh trạng
+thái code.
 
 ```text
-đọc task -> kiểm tra dependency -> nhận task -> cập nhật main -> tạo branch
--> chốt API/database -> code và test -> tự kiểm tra -> commit -> push
--> Pull Request -> review -> merge
+đọc backlog -> lập Coverage Matrix -> kiểm tra dependency -> cập nhật main
+-> tạo branch -> chia task nhỏ -> chốt API/database -> triển khai end-to-end
+-> kiểm tra từng increment -> full gate -> chuẩn bị Pull Request -> review
 ```
 
-Không bắt đầu nếu dependency bắt buộc chưa merge. Khi nhận task, báo theo mẫu:
+Không bắt đầu nếu dependency bắt buộc chưa sẵn sàng hoặc AC/NFR chưa được bao
+phủ đầy đủ. Khi nhận backlog, báo theo mẫu:
 
 ```text
-Task: T-05 — Đăng nhập, session và khoá tạm
-Branch: feature/T-05-login
-Phạm vi: src/modules/identity và migration sessions
-API dự kiến: POST /api/v1/auth/login, POST /api/v1/auth/logout
-Dependency: T-04 đã merge
-Dự kiến mở PR: <ngày/giờ>
+Backlog: S-05 — <tên backlog>
+Branch: feature/S-05-<mo-ta-ngan>
+AC/NFR: <các tiêu chí được bao phủ>
+Phạm vi: backend, frontend, database, test và tài liệu liên quan
+API dự kiến: <method/path hoặc không có>
+Dependency: <backlog phụ thuộc và trạng thái>
+Kiểm tra dự kiến: <test/demo/quality gate>
 ```
 
 ## 2. Branch
@@ -27,13 +37,13 @@ Dự kiến mở PR: <ngày/giờ>
 ### Cú pháp
 
 ```text
-<loại>/T-<số>-<mô-tả-kebab-case>
+<loại>/<backlog-id>-<mô-tả-kebab-case>
 ```
 
 Biểu thức tham khảo:
 
 ```text
-^(feature|fix|test|refactor|chore|ci|docs)/T-[0-9]+-[a-z0-9-]+$
+^(feature|fix|test|refactor|chore|ci|docs)/(T|S|K)-[0-9]+-[a-z0-9-]+$
 ```
 
 Ví dụ hợp lệ:
@@ -73,7 +83,7 @@ dùng lại branch đã merge.
 ### Cú pháp
 
 ```text
-<loại>(T-<số>): <mô tả ngắn bằng tiếng Việt>
+<loại>(<backlog-id>): <mô tả ngắn bằng tiếng Việt>
 ```
 
 Tài liệu chung không thuộc task có thể dùng `docs: <mô tả>`.
@@ -241,22 +251,27 @@ test_owner_cannot_read_another_owners_station
 Mỗi task kiểm tra luồng thành công, input sai, quyền/ownership, constraint và
 idempotency nếu liên quan. Test phải độc lập và không phụ thuộc thứ tự chạy.
 
-## 9. Kiểm tra trước khi push
+## 9. Kiểm tra trước khi commit hoặc push
 
 ```powershell
-ruff check .
-mypy src
-pytest
+C:\Users\LENOVO\CSMS\.venv\Scripts\python.exe -m ruff check .
+C:\Users\LENOVO\CSMS\.venv\Scripts\python.exe -m ruff format --check .
+C:\Users\LENOVO\CSMS\.venv\Scripts\python.exe -m mypy src
+C:\Users\LENOVO\CSMS\.venv\Scripts\python.exe -m pytest -q
 ```
 
-Nếu đổi migration, chạy tiến/lùi. Nếu đổi Docker, chạy:
+Nếu đổi migration, đọc lại `upgrade()`/`downgrade()`, chạy
+`alembic upgrade head`, `alembic downgrade -1`, `alembic upgrade head` và
+`alembic check`. Nếu đổi Docker, chạy:
 
 ```powershell
 docker compose up --build -d
 docker compose ps
 ```
 
-Nếu đổi API, kiểm tra `/docs`, luồng thành công và luồng lỗi.
+Nếu đổi API, kiểm tra `/docs`, luồng thành công và luồng lỗi. Nếu có frontend,
+chạy `npm run lint`, `npm test`, `npm run build` từ thư mục `frontend`. Luôn chạy
+`git diff --check`.
 
 ## 10. Đồng bộ và push
 
@@ -289,15 +304,18 @@ xét chưa giải quyết.
 ## 12. Definition of Done
 
 ```text
-[ ] Dependency đã merge
-[ ] Code đúng phạm vi task
-[ ] Acceptance criteria có test hoặc demo lặp lại được
-[ ] Ruff, mypy và Pytest thành công
+[ ] Đã đọc đủ backlog và không dùng Tasks.xlsx để thu hẹp phạm vi
+[ ] Dependency bắt buộc đã sẵn sàng
+[ ] Mọi AC/NFR có task nhỏ và bằng chứng PASS
+[ ] Code đúng phạm vi backlog, bao gồm tích hợp frontend-backend nếu cần
+[ ] Ruff check/format, mypy và Pytest thành công
+[ ] Frontend lint, test và build thành công nếu có frontend
 [ ] Migration tiến/lùi thành công nếu có
 [ ] OpenAPI đúng nếu API thay đổi
 [ ] Không có secret hoặc dữ liệu nhạy cảm trong code/log
 [ ] Tài liệu được cập nhật nếu cách chạy thay đổi
-[ ] PR đã review và CI xanh
+[ ] Demo end-to-end thành công
+[ ] PR đã review, không còn comment chưa xử lý và CI xanh
 ```
 
 ## 13. Khi bị kẹt
