@@ -393,6 +393,11 @@ Xong khi: trụ hợp lệ giữ kết nối ít nhất 10 phút và staging ch�
 
 Ghi chú: mỗi connection/task có database session riêng.
 
+Ghi chú S-06: chỉ chấp nhận handshake nếu client đề nghị `ocpp1.6`; nếu client
+đề nghị nhiều subprotocol, máy chủ chọn `ocpp1.6` khi giá trị này có trong danh
+sách. Trạm `suspended` vẫn được kết nối để gửi trạng thái, nhưng không được bắt
+đầu phiên sạc. Handler `StartTransaction` phải đọc lại trạng thái trạm từ DB.
+
 ### T-13 — Từ chối trụ lạ
 
 Phụ thuộc: T-12.
@@ -403,6 +408,10 @@ Phụ thuộc: T-12.
 4. Test code lạ và sai subprotocol.
 
 Xong khi: trụ lạ bị đóng ngay và có log tra cứu được.
+
+Ghi chú S-06: từ chối code không tồn tại trước khi accept WebSocket, không gửi
+OCPP frame trên kết nối bị từ chối. Khi cùng một trụ mở kết nối mới, registry
+đóng socket cũ và giữ socket mới; cleanup của socket cũ không được xóa socket mới.
 
 ### T-14 — Đọc và ghi ba loại OCPP frame
 

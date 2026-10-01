@@ -1,0 +1,67 @@
+"""Registered charger WebSocket endpoint. S-06 owns connection admission."""
+
+import logging
+from datetime import UTC, datetime
+from uuid import uuid4
+
+from fastapi import APIRouter, WebSocket
+
+from src.modules.ocpp.connection_registry import OcppConnection, ocpp_connections
+from src.modules.ocpp.service import find_registered_charge_point
+
+OCPP_SUBPROTOCOL = "ocpp1.6"
+
+router = APIRouter(tags=["OCPP"])
+_logger = logging.getLogger("csms.ocpp")
+
+
+@router.websocket("/ocpp/{charge_point_code}")
+async def connect_charge_point(websocket: WebSocket, charge_point_code: str) -> None:
+    """Accept registered charge points and keep their WebSocket open."""
+    # S-06: only accept if the client offered the exact OCPP 1.6J subprotocol.
+    offered_subprotocols = set(websocket.scope.get("subprotocols") or [])
+    if OCPP_SUBPROTOCOL not in offered_subprotocols:
+        await websocket.close()
+        return
+
+    normalized_code = charge_point_code.strip().lower()
+    charge_point = await find_registered_charge_point(normalized_code)
+
+    if charge_point is None:
+        # S-06/T-13: record enough context to investigate an unknown charger.
+        correlation_id = str(uuid4())
+        remote_ip = websocket.client.host if websocket.client is not None else "unknown"
+        occurred_at = datetime.now(UTC).isoformat()
+        _logger.warning(
+            "S-06 rejected unknown charge point code=%r remote_ip=%s "
+            "occurred_at=%s correlation_id=%s",
+            charge_point_code,
+            remote_ip,
+            occurred_at,
+            correlation_id,
+        )
+        # Closing before accept rejects the HTTP upgrade; no OCPP frame is sent.
+        await websocket.close()
+        return
+
+    connection = OcppConnection(
+        charge_point_id=charge_point.charge_point_id,
+        station_id=charge_point.station_id,
+        charge_point_code=normalized_code,
+        station_status=charge_point.station_status,
+        websocket=websocket,
+        connected_at=datetime.now(UTC),
+    )
+
+    # S-06: suspended/non-active stations connect for status reporting only.
+    await websocket.accept(subprotocol=OCPP_SUBPROTOCOL)
+    await ocpp_connections.replace(connection)
+
+    try:
+        while True:
+            message = await websocket.receive()
+            if message["type"] == "websocket.disconnect":
+                break
+            # S-07 owns OCPP frame decoding and dispatch; S-06 manages socket life.
+    finally:
+        await ocpp_connections.remove(normalized_code, websocket)
