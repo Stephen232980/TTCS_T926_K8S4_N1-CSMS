@@ -39,6 +39,13 @@ export function AppShell({
     ? { label: 'Trạm sạc', icon: 'station' as IconName }
     : roleNavigation[homeRole]
 
+  const closeNavigation = useCallback((restoreFocus = true) => {
+    setIsNavigationOpen(false)
+    if (restoreFocus) {
+      menuButtonRef.current?.focus()
+    }
+  }, [])
+
   const handleLogout = async () => {
     if (isLoggingOut) return
     setIsLoggingOut(true)
@@ -50,13 +57,6 @@ export function AppShell({
       setIsLoggingOut(false)
     }
   }
-
-  const closeNavigation = useCallback((restoreFocus = true) => {
-    setIsNavigationOpen(false)
-    if (restoreFocus) {
-      menuButtonRef.current?.focus()
-    }
-  }, [])
 
   useEffect(() => {
     const mediaQuery = window.matchMedia?.('(max-width: 680px)')

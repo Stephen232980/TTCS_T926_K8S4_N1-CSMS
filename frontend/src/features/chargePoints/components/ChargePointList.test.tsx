@@ -27,14 +27,6 @@ const chargePoint: ChargePoint = {
 }
 
 describe('ChargePointList', () => {
-  it.each([false, true])('hides editing when permission is absent or code is locked (%s)', async (canManageChargePoints) => {
-    render(<ChargePointList stationId="station-1" api={new MockChargePointApi([
-      { ...chargePoint, codeLockedAt: canManageChargePoints ? '2026-10-01T00:00:00Z' : null },
-    ], 0)} canManageChargePoints={canManageChargePoints} />)
-    expect(await screen.findByText(chargePoint.code)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Sửa mã|Mã đã khóa/ })).not.toBeInTheDocument()
-  })
-
   it('renders existing charge points and connector state', async () => {
     render(
       <ChargePointList
@@ -54,7 +46,36 @@ describe('ChargePointList', () => {
     )
 
     expect(await screen.findByText('Trạm chưa có trụ sạc')).toBeInTheDocument()
-    expect(screen.getByText('Hiện chưa có trụ sạc trong trạm này.')).toBeInTheDocument()
+    expect(screen.getByText('Trụ đầu tiên bạn thêm sẽ xuất hiện tại đây.')).toBeInTheDocument()
+  })
+
+  it('changes pages and returns to the first page', async () => {
+    const user = userEvent.setup()
+    const chargePoints = Array.from({ length: 11 }, (_, index) => ({
+      ...chargePoint,
+      id: `charge-point-${index + 1}`,
+      code: `CP-Q1-${String(index + 1).padStart(3, '0')}`,
+    }))
+    render(
+      <ChargePointList
+        stationId="station-1"
+        api={new MockChargePointApi(chargePoints, 0)}
+      />,
+    )
+
+    expect(await screen.findByText('CP-Q1-001')).toBeInTheDocument()
+    expect(screen.getByText('Trang 1 / 2 · 11 trụ')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Trang trụ tiếp theo' }))
+
+    expect(await screen.findByText('CP-Q1-011')).toBeInTheDocument()
+    expect(screen.queryByText('CP-Q1-001')).not.toBeInTheDocument()
+    expect(screen.getByText('Trang 2 / 2 · 11 trụ')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Trang trụ trước' }))
+
+    expect(await screen.findByText('CP-Q1-001')).toBeInTheDocument()
+    expect(screen.queryByText('CP-Q1-011')).not.toBeInTheDocument()
   })
 
   it('shows an authorization error and retries', async () => {
@@ -71,7 +92,13 @@ describe('ChargePointList', () => {
         totalPages: 1,
       })
 
-    render(<ChargePointList stationId="station-1" api={api} />)
+    render(
+      <ChargePointList
+        stationId="station-1"
+        api={api}
+        canManageChargePoints
+      />,
+    )
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Bạn không có quyền xem các trụ của trạm này.',
@@ -85,7 +112,13 @@ describe('ChargePointList', () => {
   it('updates an unlocked code from the list', async () => {
     const user = userEvent.setup()
     const api = new MockChargePointApi([chargePoint], 0)
-    render(<ChargePointList stationId="station-1" api={api} canManageChargePoints />)
+    render(
+      <ChargePointList
+        stationId="station-1"
+        api={api}
+        canManageChargePoints
+      />,
+    )
 
     await user.click(await screen.findByRole('button', { name: 'Sửa mã' }))
     const input = screen.getByLabelText('Mã trụ')

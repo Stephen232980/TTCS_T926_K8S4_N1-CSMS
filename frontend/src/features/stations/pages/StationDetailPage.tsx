@@ -132,7 +132,7 @@ export function StationDetailPage({
           <section className="station-detail__charge-points" aria-labelledby="charge-points-title">
             <div className="station-detail__section-heading">
               <h2 id="charge-points-title">Trụ sạc và đầu nối</h2>
-              <p>Theo dõi các trụ thuộc trạm và trạng thái đầu nối.</p>
+              <p>Theo dõi các trụ thuộc trạm, trạng thái đầu nối và cập nhật mã khi còn được phép.</p>
             </div>
             {createdChargePoint && (
               <div className="charge-point-created" role="status">

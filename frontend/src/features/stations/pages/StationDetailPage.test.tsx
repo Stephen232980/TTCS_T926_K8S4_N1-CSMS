@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { MockChargePointApi } from '../../chargePoints/api/mockChargePointApi'
@@ -97,5 +97,30 @@ describe('StationDetailPage', () => {
       await screen.findByRole('heading', { name: station.name }),
     ).toBeInTheDocument()
     expect(getStation).toHaveBeenCalledTimes(2)
+  })
+
+  it('reloads the charge-point list after creating a charge point', async () => {
+    const user = userEvent.setup()
+    const chargePointApi = new MockChargePointApi([], 0)
+    const listChargePoints = vi.spyOn(chargePointApi, 'listChargePoints')
+    render(
+      <StationDetailPage
+        stationId={station.id}
+        onBack={() => undefined}
+        api={new MockStationApi([station], 0)}
+        chargePointApi={chargePointApi}
+        canManageChargePoints
+      />,
+    )
+
+    await screen.findByRole('heading', { name: station.name })
+    await user.type(screen.getByRole('textbox', { name: 'Mã trụ' }), 'CP-Q1-002')
+    await user.tab()
+    expect(await screen.findByText('Mã trụ có thể sử dụng.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Thêm trụ sạc' }))
+
+    expect(await screen.findByText('CP-Q1-002')).toBeInTheDocument()
+    expect(await screen.findByText('Đã thêm trụ sạc')).toBeInTheDocument()
+    await waitFor(() => expect(listChargePoints).toHaveBeenCalledTimes(2))
   })
 })

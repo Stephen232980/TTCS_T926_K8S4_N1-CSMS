@@ -115,7 +115,7 @@ export function ChargePointList({
       <div className="charge-point-list-state">
         <span className="charge-point-list-state__icon"><Icon name="charger" /></span>
         <strong>Trạm chưa có trụ sạc</strong>
-        <span>{canManageChargePoints ? 'Trụ đầu tiên bạn thêm sẽ xuất hiện tại đây.' : 'Hiện chưa có trụ sạc trong trạm này.'}</span>
+        <span>Trụ đầu tiên bạn thêm sẽ xuất hiện tại đây.</span>
       </div>
     )
   }
@@ -125,7 +125,9 @@ export function ChargePointList({
       <div className="charge-point-list" aria-live="polite">
         {result.items.map((chargePoint) => (
           <article className="charge-point-item" key={chargePoint.id}>
-            {canManageChargePoints && chargePoint.codeLockedAt == null && editingId === chargePoint.id ? (
+            {canManageChargePoints &&
+            chargePoint.codeLockedAt == null &&
+            editingId === chargePoint.id ? (
               <ChargePointCodeEditor
                 chargePoint={chargePoint}
                 api={api}
@@ -155,14 +157,16 @@ export function ChargePointList({
                   <span className={`charge-point-status charge-point-status--${chargePoint.status}`}>
                     {statusLabels[chargePoint.status] || chargePoint.status}
                   </span>
-                  {canManageChargePoints && chargePoint.codeLockedAt == null && (<button
-                    className="text-button"
-                    type="button"
-                    onClick={() => setEditingId(chargePoint.id)}
-                  >
-                    <Icon name="edit" />
-                    Sửa mã
-                  </button>)}
+                  {canManageChargePoints && chargePoint.codeLockedAt == null && (
+                    <button
+                      className="text-button"
+                      type="button"
+                      onClick={() => setEditingId(chargePoint.id)}
+                    >
+                      <Icon name="edit" />
+                      Sửa mã
+                    </button>
+                  )}
                   {chargePoint.codeLockedAt != null && <span>Mã đã khóa</span>}
                 </div>
               </>
