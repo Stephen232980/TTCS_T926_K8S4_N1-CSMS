@@ -39,7 +39,7 @@ export function StationListPage({
   onDismissNotice = () => undefined,
   onOpenStation = () => undefined,
   api = defaultStationApi,
-  canManageStations = true,
+  canManageStations = false,
 }: StationListPageProps) {
   const [stations, setStations] = useState<Station[]>([])
   const [searchInput, setSearchInput] = useState('')

@@ -24,9 +24,14 @@ function listErrorMessage(error: unknown): string {
 interface ChargePointListProps {
   stationId: string
   api: ChargePointApi
+  canManageChargePoints?: boolean
 }
 
-export function ChargePointList({ stationId, api }: ChargePointListProps) {
+export function ChargePointList({
+  stationId,
+  api,
+  canManageChargePoints = false,
+}: ChargePointListProps) {
   const [result, setResult] = useState<ChargePointPage | null>(null)
   const [page, setPage] = useState(1)
   const [isLoading, setIsLoading] = useState(true)
@@ -120,7 +125,9 @@ export function ChargePointList({ stationId, api }: ChargePointListProps) {
       <div className="charge-point-list" aria-live="polite">
         {result.items.map((chargePoint) => (
           <article className="charge-point-item" key={chargePoint.id}>
-            {editingId === chargePoint.id ? (
+            {canManageChargePoints &&
+            chargePoint.codeLockedAt == null &&
+            editingId === chargePoint.id ? (
               <ChargePointCodeEditor
                 chargePoint={chargePoint}
                 api={api}
@@ -150,15 +157,17 @@ export function ChargePointList({ stationId, api }: ChargePointListProps) {
                   <span className={`charge-point-status charge-point-status--${chargePoint.status}`}>
                     {statusLabels[chargePoint.status] || chargePoint.status}
                   </span>
-                  <button
-                    className="text-button"
-                    type="button"
-                    disabled={chargePoint.codeLockedAt != null}
-                    onClick={() => setEditingId(chargePoint.id)}
-                  >
-                    <Icon name="edit" />
-                    {chargePoint.codeLockedAt ? 'Mã đã khóa' : 'Sửa mã'}
-                  </button>
+                  {canManageChargePoints && chargePoint.codeLockedAt == null && (
+                    <button
+                      className="text-button"
+                      type="button"
+                      onClick={() => setEditingId(chargePoint.id)}
+                    >
+                      <Icon name="edit" />
+                      Sửa mã
+                    </button>
+                  )}
+                  {chargePoint.codeLockedAt != null && <span>Mã đã khóa</span>}
                 </div>
               </>
             )}

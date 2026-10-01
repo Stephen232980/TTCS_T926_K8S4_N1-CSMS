@@ -50,7 +50,6 @@
 .navigation-backdrop { display: none; }
 .system-state { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: .78rem; font-weight: 650; }
 .system-state span { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.avatar--button { border: 0; cursor: pointer; }
 .mobile-brand { display: none; align-items: center; gap: 9px; margin-right: auto; color: var(--ink); }
 .mobile-brand .brand__mark { width: 31px; height: 31px; border-radius: 9px; }
 .workspace { max-width: 1240px; margin: 0 auto; padding: 42px 40px 56px; }

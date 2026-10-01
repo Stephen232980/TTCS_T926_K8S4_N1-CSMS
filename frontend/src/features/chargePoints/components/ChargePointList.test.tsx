@@ -92,7 +92,13 @@ describe('ChargePointList', () => {
         totalPages: 1,
       })
 
-    render(<ChargePointList stationId="station-1" api={api} />)
+    render(
+      <ChargePointList
+        stationId="station-1"
+        api={api}
+        canManageChargePoints
+      />,
+    )
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Bạn không có quyền xem các trụ của trạm này.',
@@ -106,7 +112,13 @@ describe('ChargePointList', () => {
   it('updates an unlocked code from the list', async () => {
     const user = userEvent.setup()
     const api = new MockChargePointApi([chargePoint], 0)
-    render(<ChargePointList stationId="station-1" api={api} />)
+    render(
+      <ChargePointList
+        stationId="station-1"
+        api={api}
+        canManageChargePoints
+      />,
+    )
 
     await user.click(await screen.findByRole('button', { name: 'Sửa mã' }))
     const input = screen.getByLabelText('Mã trụ')

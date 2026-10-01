@@ -73,6 +73,7 @@ describe('StationListPage create flow', () => {
     const onNotice = vi.fn()
     render(
       <StationListPage
+        canManageStations
         notice=""
         onNotice={onNotice}
         api={new MockStationApi([], 0)}
@@ -112,7 +113,14 @@ describe('StationListPage create flow', () => {
       createStation,
       updateStation: vi.fn(),
     }
-    render(<StationListPage notice="" onNotice={() => undefined} api={api} />)
+    render(
+      <StationListPage
+        canManageStations
+        notice=""
+        onNotice={() => undefined}
+        api={api}
+      />,
+    )
 
     await user.click(
       await screen.findByRole('button', { name: 'Tạo trạm đầu tiên' }),
@@ -135,7 +143,14 @@ describe('StationListPage create flow', () => {
     vi.spyOn(api, 'createStation').mockRejectedValue(
       new StationApiError(422, 'validation_error'),
     )
-    render(<StationListPage notice="" onNotice={() => undefined} api={api} />)
+    render(
+      <StationListPage
+        canManageStations
+        notice=""
+        onNotice={() => undefined}
+        api={api}
+      />,
+    )
 
     await user.click(
       await screen.findByRole('button', { name: 'Tạo trạm đầu tiên' }),
@@ -182,7 +197,14 @@ describe('StationListPage edit flow', () => {
       ],
       0,
     )
-    render(<StationListPage notice="" onNotice={onNotice} api={api} />)
+    render(
+      <StationListPage
+        canManageStations
+        notice=""
+        onNotice={onNotice}
+        api={api}
+      />,
+    )
 
     const editButtons = await screen.findAllByRole('button', {
       name: 'Chỉnh sửa Trạm ban đầu',

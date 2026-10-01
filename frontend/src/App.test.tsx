@@ -6,6 +6,7 @@ import { AuthApiError, type AuthApi } from './features/auth/api/authApi'
 import type { AuthenticatedUser } from './features/auth/model/auth'
 import { SESSION_UNAUTHORIZED_EVENT } from './features/auth/sessionEvents'
 import { MockStationApi } from './features/stations/api/mockStationApi'
+import { MockChargePointApi } from './features/chargePoints/api/mockChargePointApi'
 
 const owner: AuthenticatedUser = {
   id: 'a4e67f4a-1c6c-4dfa-a01d-581b624749af',
@@ -36,6 +37,22 @@ class AppAuthApi implements AuthApi {
 
 describe('App', () => {
   it.each([
+    [['operator'], false],
+    [['admin'], false],
+    [['station_owner'], true],
+    [['driver', 'station_owner'], true],
+  ])('applies write permissions through station details for %s', async (roles, canWrite) => {
+    const user = userEvent.setup()
+    render(<App authApi={new AppAuthApi({ ...owner, roles })}
+      stationApi={new MockStationApi(undefined, 0)} chargePointApi={new MockChargePointApi([], 0)} />)
+    await screen.findByRole('heading', { name: 'Trạm sạc' })
+    expect(screen.getByRole('link', { name: 'Trạm sạc' })).toBeInTheDocument()
+    await user.click(await screen.findByRole('button', { name: 'Xem chi tiết Trạm Quận 1' }))
+    await screen.findByRole('heading', { name: 'Trạm Quận 1' })
+    expect(screen.queryByRole('heading', { name: 'Thêm trụ sạc' }) !== null).toBe(canWrite)
+  })
+
+  it.each([
     ['station_owner', 'Trạm sạc'],
     ['operator', 'Trạm sạc'],
     ['admin', 'Trạm sạc'],
@@ -60,12 +77,8 @@ describe('App', () => {
       await waitFor(() => expect(listStations).toHaveBeenCalled())
     }
     if (role === 'operator' || role === 'admin') {
-      expect(
-        screen.queryByRole('button', { name: /Chỉnh sửa/ }),
-      ).not.toBeInTheDocument()
-      expect(
-        screen.queryByRole('button', { name: 'Tạo trạm' }),
-      ).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /Chỉnh sửa/ })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Tạo trạm' })).not.toBeInTheDocument()
     }
   })
 

@@ -19,6 +19,20 @@ const station: Station = {
 }
 
 describe('StationDetailPage', () => {
+  it.each([false, true])('shows the create form only with permission (%s)', async (canManageChargePoints) => {
+    const chargePointApi = new MockChargePointApi([], 0)
+    const checkCode = vi.spyOn(chargePointApi, 'checkCodeAvailability')
+    render(<StationDetailPage stationId={station.id} onBack={() => undefined}
+      api={new MockStationApi([station], 0)} chargePointApi={chargePointApi}
+      canManageChargePoints={canManageChargePoints} />)
+    await screen.findByRole('heading', { name: station.name })
+    expect(screen.queryByRole('heading', { name: 'Thêm trụ sạc' }) !== null).toBe(canManageChargePoints)
+    if (!canManageChargePoints) {
+      expect(screen.queryByLabelText('Mã trụ')).not.toBeInTheDocument()
+      expect(checkCode).not.toHaveBeenCalled()
+    }
+  })
+
   it('loads and renders station details', async () => {
     render(
       <StationDetailPage
@@ -95,6 +109,7 @@ describe('StationDetailPage', () => {
         onBack={() => undefined}
         api={new MockStationApi([station], 0)}
         chargePointApi={chargePointApi}
+        canManageChargePoints
       />,
     )
 

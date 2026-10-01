@@ -33,6 +33,7 @@ interface StationDetailPageProps {
   onBack: () => void
   api?: StationApi
   chargePointApi?: ChargePointApi
+  canManageChargePoints?: boolean
 }
 
 export function StationDetailPage({
@@ -40,6 +41,7 @@ export function StationDetailPage({
   onBack,
   api = defaultStationApi,
   chargePointApi = defaultChargePointApi,
+  canManageChargePoints = false,
 }: StationDetailPageProps) {
   const [station, setStation] = useState<Station | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -144,19 +146,24 @@ export function StationDetailPage({
               key={chargePointReloadKey}
               stationId={station.id}
               api={chargePointApi}
+              canManageChargePoints={canManageChargePoints}
             />
-            <div className="station-detail__add-charge-point">
-              <h3>Thêm trụ sạc</h3>
-              <p>Khai báo mã trụ duy nhất và số đầu nối đi kèm.</p>
-            </div>
-            <ChargePointForm
-              stationId={station.id}
-              api={chargePointApi}
-              onCreated={(chargePoint) => {
-                setCreatedChargePoint(chargePoint)
-                setChargePointReloadKey((value) => value + 1)
-              }}
-            />
+            {canManageChargePoints && (
+              <>
+                <div className="station-detail__add-charge-point">
+                  <h3>Thêm trụ sạc</h3>
+                  <p>Khai báo mã trụ duy nhất và số đầu nối đi kèm.</p>
+                </div>
+                <ChargePointForm
+                  stationId={station.id}
+                  api={chargePointApi}
+                  onCreated={(chargePoint) => {
+                    setCreatedChargePoint(chargePoint)
+                    setChargePointReloadKey((value) => value + 1)
+                  }}
+                />
+              </>
+            )}
           </section>
         </>
       ) : null}
