@@ -33,10 +33,16 @@
 .nav-link--active { color: var(--accent-strong); background: var(--accent-soft); }
 .sidebar__footer { margin-top: auto; }
 .user-panel { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 16px 10px 0; border-top: 1px solid var(--line); }
-.user-panel div { display: grid; gap: 2px; }
+.user-panel div { min-width: 0; display: grid; gap: 2px; }
 .user-panel strong { color: var(--ink); font-size: .84rem; }
 .user-panel span:last-child { color: var(--muted); font-size: .72rem; }
+.user-panel__email { max-width: 164px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .avatar { width: 36px; height: 36px; flex: 0 0 auto; display: inline-grid; place-items: center; border-radius: 50%; background: #dff7ed; color: #087552; font-size: .72rem; font-weight: 800; }
+.logout-button { width: 100%; min-height: 44px; margin-top: 10px; padding: 0 10px; display: flex; align-items: center; gap: 10px; border: 0; border-radius: 10px; color: var(--danger-ink); background: transparent; cursor: pointer; font-size: .8rem; font-weight: 680; transition: color 160ms ease-out, background 160ms ease-out; }
+.logout-button:hover:not(:disabled) { background: var(--danger-surface); }
+.logout-button:disabled { color: var(--muted); cursor: wait; }
+.logout-button svg { width: 18px; flex: 0 0 auto; }
+.logout-error { margin: 10px 6px 0; color: var(--danger-ink); font-size: .7rem; line-height: 1.45; overflow-wrap: anywhere; }
 .main-content { min-height: 100svh; margin-left: 248px; }
 .topbar { height: 68px; padding: 0 36px; display: flex; align-items: center; justify-content: flex-end; gap: 18px; background: rgba(255,255,255,.94); border-bottom: 1px solid var(--line); }
 .menu-button { display: none; width: 44px; height: 44px; place-items: center; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); background: var(--surface); cursor: pointer; }
@@ -195,6 +201,8 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
   .sidebar { width: 82px; padding-inline: 12px; }
   .brand { justify-content: center; padding-inline: 0; }
   .brand > span:last-child, .nav-link span, .user-panel div { display: none; }
+  .logout-button { justify-content: center; padding: 0; }
+  .logout-button span, .logout-error { display: none; }
   .nav-link { justify-content: center; padding: 0; }
   .user-panel { justify-content: center; padding-inline: 0; }
   .main-content { margin-left: 82px; }
@@ -214,6 +222,8 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
   .sidebar--open { transform: translateX(0); }
   .sidebar .brand { justify-content: flex-start; padding-inline: 10px; }
   .sidebar .brand > span:last-child, .sidebar .nav-link span, .sidebar .user-panel div { display: initial; }
+  .sidebar .logout-button { justify-content: flex-start; padding: 0 10px; }
+  .sidebar .logout-button span, .sidebar .logout-error { display: initial; }
   .sidebar .nav-link { justify-content: flex-start; padding: 0 12px; }
   .sidebar .user-panel { justify-content: flex-start; padding-inline: 10px; }
   .sidebar .user-panel div { display: grid; }
