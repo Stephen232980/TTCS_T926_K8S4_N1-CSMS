@@ -46,6 +46,23 @@ export class HttpAuthApi implements AuthApi {
     await parseResponse<{ status: 'authenticated' }>(response)
   }
 
+  async logout(): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/api/v1/auth/logout`, {
+      method: 'POST',
+      credentials: 'include',
+    })
+
+    if (!response.ok) {
+      let detail: unknown
+      try {
+        detail = ((await response.json()) as ErrorResponse).detail
+      } catch {
+        detail = undefined
+      }
+      throw new AuthApiError(response.status, detail)
+    }
+  }
+
   async getCurrentUser(signal?: AbortSignal): Promise<AuthenticatedUser> {
     const response = await fetch(`${this.baseUrl}/api/v1/auth/me`, {
       credentials: 'include',

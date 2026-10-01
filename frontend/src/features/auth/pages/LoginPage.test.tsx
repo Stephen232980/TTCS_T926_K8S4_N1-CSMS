@@ -7,6 +7,7 @@ import { LoginPage } from './LoginPage'
 
 class LoginTestApi implements AuthApi {
   login = vi.fn<(input: LoginInput) => Promise<void>>()
+  logout = vi.fn<() => Promise<void>>()
 
   async getCurrentUser(): Promise<AuthenticatedUser> {
     throw new Error('Not used by LoginPage')

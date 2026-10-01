@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { AppShell } from './AppShell'
 
 const currentUser = {
@@ -13,7 +13,10 @@ describe('AppShell', () => {
   it('exposes and closes mobile navigation accessibly', async () => {
     const user = userEvent.setup()
     render(
-      <AppShell currentUser={currentUser}>
+      <AppShell
+        currentUser={currentUser}
+        onLogout={async () => undefined}
+      >
         <p>Nội dung</p>
       </AppShell>,
     )
@@ -40,9 +43,16 @@ describe('AppShell', () => {
     expect(document.body.style.overflow).toBe('')
   })
 
-  it('shows only working navigation for the current role', () => {
+  it('shows working navigation and the full account email', () => {
+    const longEmailUser = {
+      ...currentUser,
+      email: 'owner.demo.20261001@example.com',
+    }
     render(
-      <AppShell currentUser={currentUser}>
+      <AppShell
+        currentUser={longEmailUser}
+        onLogout={async () => undefined}
+      >
         <p>Nội dung</p>
       </AppShell>,
     )
@@ -52,6 +62,9 @@ describe('AppShell', () => {
     expect(screen.queryByText('Tổng quan')).not.toBeInTheDocument()
     expect(screen.queryByText('Cài đặt')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Mở tài khoản' })).not.toBeInTheDocument()
+    expect(screen.getByTitle(longEmailUser.email)).toHaveTextContent(
+      longEmailUser.email,
+    )
   })
 
   it.each([
@@ -59,7 +72,10 @@ describe('AppShell', () => {
     ['accountant', 'Khu vực kế toán'],
   ])('shows the %s navigation scope', (role, label) => {
     render(
-      <AppShell currentUser={{ ...currentUser, roles: [role] }}>
+      <AppShell
+        currentUser={{ ...currentUser, roles: [role] }}
+        onLogout={async () => undefined}
+      >
         <p>Nội dung</p>
       </AppShell>,
     )
@@ -68,5 +84,23 @@ describe('AppShell', () => {
       'aria-current',
       'page',
     )
+  })
+
+  it('keeps the session and reports a failed logout', async () => {
+    const user = userEvent.setup()
+    const onLogout = vi.fn().mockRejectedValue(new Error('network error'))
+    render(
+      <AppShell currentUser={currentUser} onLogout={onLogout}>
+        <p>Nội dung</p>
+      </AppShell>,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Đăng xuất' }))
+
+    expect(onLogout).toHaveBeenCalledOnce()
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Không thể đăng xuất. Vui lòng kiểm tra kết nối và thử lại.',
+    )
+    expect(screen.getByRole('button', { name: 'Đăng xuất' })).toBeEnabled()
   })
 })
