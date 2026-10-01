@@ -23,6 +23,7 @@ const defaultProps = {
   onEdit: () => undefined,
   onClearFilters: () => undefined,
   onRetry: () => undefined,
+  canManageStations: true,
 }
 
 describe('StationList', () => {
@@ -89,5 +90,28 @@ describe('StationList', () => {
     )
 
     expect(onView).toHaveBeenCalledWith(station)
+  })
+
+  it('keeps the read-only list free of edit actions', () => {
+    render(<StationList {...defaultProps} canManageStations={false} />)
+
+    expect(screen.getAllByText('Trạm Quận 1')).toHaveLength(2)
+    expect(
+      screen.queryByRole('button', { name: /Chỉnh sửa/ }),
+    ).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['suspended', 'Tạm ngưng'],
+    ['blocked', 'Đã khóa'],
+  ] as const)('renders the %s station status', (status, label) => {
+    render(
+      <StationList
+        {...defaultProps}
+        stations={[{ ...station, status }]}
+      />,
+    )
+
+    expect(screen.getAllByText(label)).toHaveLength(2)
   })
 })

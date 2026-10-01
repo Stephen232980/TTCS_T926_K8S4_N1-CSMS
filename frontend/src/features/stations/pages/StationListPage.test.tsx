@@ -15,6 +15,49 @@ async function fillCreateForm(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe('StationListPage create flow', () => {
+  it('keeps operator and admin access read-only', async () => {
+    const station: Station = {
+      id: 'station-1',
+      name: 'Trạm Quận 1',
+      address: '123 Nguyễn Huệ, Quận 1, TP.HCM',
+      latitude: 10.7731,
+      longitude: 106.7032,
+      status: 'active',
+      createdAt: '2026-09-20T08:30:00Z',
+      updatedAt: '2026-09-20T08:30:00Z',
+    }
+    render(
+      <StationListPage
+        notice=""
+        onNotice={() => undefined}
+        api={new MockStationApi([station], 0)}
+        canManageStations={false}
+      />,
+    )
+
+    expect(await screen.findAllByText('Trạm Quận 1')).toHaveLength(2)
+    expect(
+      screen.queryByRole('button', { name: /Tạo trạm|Chỉnh sửa/ }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('allows a status notice to be dismissed', async () => {
+    const user = userEvent.setup()
+    const onDismissNotice = vi.fn()
+    render(
+      <StationListPage
+        notice="Đã cập nhật trạm."
+        onNotice={() => undefined}
+        onDismissNotice={onDismissNotice}
+        api={new MockStationApi([], 0)}
+      />,
+    )
+
+    expect(screen.getByText('Đã cập nhật trạm.').closest('[role="status"]')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Đóng thông báo' }))
+    expect(onDismissNotice).toHaveBeenCalledOnce()
+  })
+
   it('creates a station and refreshes the first page', async () => {
     const user = userEvent.setup()
     const onNotice = vi.fn()

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { ChargePointApiError, type ChargePointApi } from '../api/chargePointApi'
@@ -91,6 +91,25 @@ describe('ChargePointForm', () => {
     })
   })
 
+  it('checks availability during submit when the field has not blurred', async () => {
+    const user = userEvent.setup()
+    const api = new MockChargePointApi([], 0)
+    const checkCodeAvailability = vi.spyOn(api, 'checkCodeAvailability')
+    const onCreated = vi.fn()
+    render(
+      <ChargePointForm stationId="station-1" api={api} onCreated={onCreated} />,
+    )
+
+    await user.type(screen.getByLabelText('Mã trụ'), 'CP-DIRECT-001')
+    fireEvent.submit(screen.getByRole('form', { name: 'Thêm trụ sạc' }))
+
+    await waitFor(() => expect(onCreated).toHaveBeenCalledOnce())
+    expect(checkCodeAvailability).toHaveBeenCalledWith(
+      'CP-DIRECT-001',
+      expect.any(AbortSignal),
+    )
+  })
+
   it('prevents duplicate submissions while create is pending', async () => {
     const user = userEvent.setup()
     const checkCodeAvailability = vi.fn().mockResolvedValue({
@@ -98,7 +117,12 @@ describe('ChargePointForm', () => {
       available: true,
     })
     const createChargePoint = vi.fn(() => new Promise<ChargePoint>(() => undefined))
-    const api: ChargePointApi = { checkCodeAvailability, createChargePoint }
+    const updateChargePoint = vi.fn()
+    const api: ChargePointApi = {
+      checkCodeAvailability,
+      createChargePoint,
+      updateChargePoint,
+    }
     render(
       <ChargePointForm
         stationId="station-1"

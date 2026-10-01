@@ -9,6 +9,7 @@ const chargePointResponse = {
   code: 'CP-Q1-001',
   name: null,
   status: 'offline',
+  code_locked_at: null,
   connectors: [
     {
       id: 'connector-1',
@@ -98,6 +99,36 @@ describe('HttpChargePointApi', () => {
         detail: 'charge_point_code_already_exists',
       }),
     )
+  })
+
+  it('updates a charge-point code and maps its lock state', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        ...chargePointResponse,
+        code: 'CP-Q1-002',
+        code_locked_at: '2026-09-30T11:00:00Z',
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await new HttpChargePointApi().updateChargePoint(
+      'charge/point-1',
+      { code: '  CP-Q1-002  ' },
+    )
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/charge-points/charge%2Fpoint-1',
+      {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: 'CP-Q1-002' }),
+      },
+    )
+    expect(result).toMatchObject({
+      code: 'CP-Q1-002',
+      codeLockedAt: '2026-09-30T11:00:00Z',
+    })
   })
 
   it('notifies the app when the session is unauthorized', async () => {

@@ -12,6 +12,7 @@ export interface ChargePoint {
   code: string
   name: string | null
   status: string
+  codeLockedAt?: string | null
   connectors: Connector[]
   createdAt: string
   updatedAt: string
@@ -25,4 +26,8 @@ export interface ChargePointCodeAvailability {
 export interface ChargePointInput {
   code: string
   connectorCount: number
+}
+
+export interface ChargePointUpdate {
+  code: string
 }

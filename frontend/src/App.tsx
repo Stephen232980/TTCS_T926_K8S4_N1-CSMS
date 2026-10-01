@@ -5,6 +5,7 @@ import { AuthApiError, type AuthApi } from './features/auth/api/authApi'
 import { HttpAuthApi } from './features/auth/api/httpAuthApi'
 import type { AuthenticatedUser } from './features/auth/model/auth'
 import { LoginPage } from './features/auth/pages/LoginPage'
+import { RoleHomePage } from './features/auth/pages/RoleHomePage'
 import { SESSION_UNAUTHORIZED_EVENT } from './features/auth/sessionEvents'
 import type { ChargePointApi } from './features/chargePoints/api/chargePointApi'
 import type { StationApi } from './features/stations/api/stationApi'
@@ -27,6 +28,7 @@ function App({ authApi = defaultAuthApi, stationApi, chargePointApi }: AppProps)
   const [currentUser, setCurrentUser] = useState<AuthenticatedUser | null>(null)
   const [sessionMessage, setSessionMessage] = useState('')
   const [notice, setNotice] = useState('')
+  const [noticeVersion, setNoticeVersion] = useState(0)
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null)
 
   const loadCurrentUser = useCallback(async () => {
@@ -72,9 +74,15 @@ function App({ authApi = defaultAuthApi, stationApi, chargePointApi }: AppProps)
       window.removeEventListener(SESSION_UNAUTHORIZED_EVENT, handleUnauthorized)
   }, [])
 
+  useEffect(() => {
+    if (!notice) return
+    const timeoutId = window.setTimeout(() => setNotice(''), 5000)
+    return () => window.clearTimeout(timeoutId)
+  }, [notice, noticeVersion])
+
   const showPrototypeNotice = (message: string) => {
     setNotice(message)
-    window.setTimeout(() => setNotice(''), 3200)
+    setNoticeVersion((current) => current + 1)
   }
 
   if (authStatus === 'checking') {
@@ -96,14 +104,16 @@ function App({ authApi = defaultAuthApi, stationApi, chargePointApi }: AppProps)
     )
   }
 
+  const primaryRole = currentUser.roles[0] ?? ''
+  const canManageStations = currentUser.roles.some((role) =>
+    ['admin', 'operator', 'station_owner'].includes(role),
+  )
+
   return (
-    <AppShell
-      currentUser={currentUser}
-      onUnavailableNavigation={(label) =>
-        showPrototypeNotice(`${label} chưa nằm trong prototype T-09.`)
-      }
-    >
-      {selectedStationId ? (
+    <AppShell currentUser={currentUser}>
+      {!canManageStations ? (
+        <RoleHomePage role={primaryRole} />
+      ) : selectedStationId ? (
         <StationDetailPage
           key={selectedStationId}
           stationId={selectedStationId}
@@ -115,8 +125,10 @@ function App({ authApi = defaultAuthApi, stationApi, chargePointApi }: AppProps)
         <StationListPage
           notice={notice}
           onNotice={showPrototypeNotice}
+          onDismissNotice={() => setNotice('')}
           onOpenStation={setSelectedStationId}
           api={stationApi}
+          canManageStations={currentUser.roles.includes('station_owner')}
         />
       )}
     </AppShell>

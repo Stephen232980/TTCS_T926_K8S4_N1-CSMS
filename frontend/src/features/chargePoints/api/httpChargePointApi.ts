@@ -2,6 +2,7 @@ import type {
   ChargePoint,
   ChargePointCodeAvailability,
   ChargePointInput,
+  ChargePointUpdate,
   Connector,
 } from '../model/chargePoint'
 import { ChargePointApiError, type ChargePointApi } from './chargePointApi'
@@ -21,6 +22,7 @@ interface ChargePointResponse {
   code: string
   name: string | null
   status: string
+  code_locked_at: string | null
   connectors: ConnectorResponse[]
   created_at: string
   updated_at: string
@@ -66,6 +68,7 @@ function mapChargePoint(response: ChargePointResponse): ChargePoint {
     code: response.code,
     name: response.name,
     status: response.status,
+    codeLockedAt: response.code_locked_at,
     connectors: response.connectors.map(mapConnector),
     createdAt: response.created_at,
     updatedAt: response.updated_at,
@@ -115,6 +118,23 @@ export class HttpChargePointApi implements ChargePointApi {
           code: input.code,
           connector_count: input.connectorCount,
         }),
+      },
+    )
+
+    return mapChargePoint(await parseResponse<ChargePointResponse>(response))
+  }
+
+  async updateChargePoint(
+    chargePointId: string,
+    input: ChargePointUpdate,
+  ): Promise<ChargePoint> {
+    const response = await fetch(
+      `${this.baseUrl}/api/v1/charge-points/${encodeURIComponent(chargePointId)}`,
+      {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: input.code.trim() }),
       },
     )
 

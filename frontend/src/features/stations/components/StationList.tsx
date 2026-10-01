@@ -9,13 +9,21 @@ interface StationListProps {
   onEdit: (station: Station) => void
   onClearFilters: () => void
   onRetry: () => void
+  canManageStations: boolean
+}
+
+const statusLabels: Record<StationStatus, string> = {
+  active: 'Đang hoạt động',
+  inactive: 'Chưa hoạt động',
+  suspended: 'Tạm ngưng',
+  blocked: 'Đã khóa',
 }
 
 function StatusBadge({ status }: { status: StationStatus }) {
   return (
     <span className={`status-badge status-badge--${status}`}>
       <span aria-hidden="true" />
-      {status === 'active' ? 'Đang hoạt động' : 'Chưa hoạt động'}
+      {statusLabels[status]}
     </span>
   )
 }
@@ -24,7 +32,8 @@ function StationCards({
   stations,
   onView,
   onEdit,
-}: Pick<StationListProps, 'stations' | 'onView' | 'onEdit'>) {
+  canManageStations,
+}: Pick<StationListProps, 'stations' | 'onView' | 'onEdit' | 'canManageStations'>) {
   return (
     <div className="station-cards">
       {stations.map((station) => (
@@ -46,13 +55,15 @@ function StationCards({
               Xem chi tiết
               <Icon name="chevronRight" />
             </button>
-            <button
-              className="text-button text-button--muted"
-              type="button"
-              onClick={() => onEdit(station)}
-            >
-              <Icon name="edit" /> Chỉnh sửa
-            </button>
+            {canManageStations && (
+              <button
+                className="text-button text-button--muted"
+                type="button"
+                onClick={() => onEdit(station)}
+              >
+                <Icon name="edit" /> Chỉnh sửa
+              </button>
+            )}
           </div>
         </article>
       ))}
@@ -64,7 +75,8 @@ function StationTable({
   stations,
   onView,
   onEdit,
-}: Pick<StationListProps, 'stations' | 'onView' | 'onEdit'>) {
+  canManageStations,
+}: Pick<StationListProps, 'stations' | 'onView' | 'onEdit' | 'canManageStations'>) {
   return (
     <div className="station-table-wrap">
       <table className="station-table">
@@ -74,7 +86,7 @@ function StationTable({
             <th scope="col">Địa chỉ</th>
             <th scope="col">Tọa độ</th>
             <th scope="col">Trạng thái</th>
-            <th scope="col"><span className="sr-only">Thao tác</span></th>
+            {canManageStations && <th scope="col"><span className="sr-only">Thao tác</span></th>}
           </tr>
         </thead>
         <tbody>
@@ -95,16 +107,18 @@ function StationTable({
                 {station.latitude.toFixed(4)}, {station.longitude.toFixed(4)}
               </td>
               <td><StatusBadge status={station.status} /></td>
-              <td>
-                <button
-                  className="icon-button"
-                  type="button"
-                  aria-label={`Chỉnh sửa ${station.name}`}
-                  onClick={() => onEdit(station)}
-                >
-                  <Icon name="edit" />
-                </button>
-              </td>
+              {canManageStations && (
+                <td>
+                  <button
+                    className="icon-button"
+                    type="button"
+                    aria-label={`Chỉnh sửa ${station.name}`}
+                    onClick={() => onEdit(station)}
+                  >
+                    <Icon name="edit" />
+                  </button>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
@@ -121,11 +135,17 @@ export function StationList({
   onEdit,
   onClearFilters,
   onRetry,
+  canManageStations,
 }: StationListProps) {
   return (
-    <div className="data-surface" aria-live="polite">
+    <div className="data-surface" aria-live="polite" aria-busy={isLoading}>
       {isLoading ? (
-        <div className="skeleton-list" aria-label="Đang tải danh sách trạm">
+        <div
+          className="skeleton-list"
+          role="status"
+          aria-label="Đang tải danh sách trạm"
+        >
+          <span className="sr-only">Đang tải danh sách trạm</span>
           {[0, 1].map((item) => <div className="skeleton-row" key={item} />)}
         </div>
       ) : error ? (
@@ -143,8 +163,8 @@ export function StationList({
         </div>
       ) : (
         <>
-          <StationTable stations={stations} onView={onView} onEdit={onEdit} />
-          <StationCards stations={stations} onView={onView} onEdit={onEdit} />
+          <StationTable stations={stations} onView={onView} onEdit={onEdit} canManageStations={canManageStations} />
+          <StationCards stations={stations} onView={onView} onEdit={onEdit} canManageStations={canManageStations} />
         </>
       )}
     </div>

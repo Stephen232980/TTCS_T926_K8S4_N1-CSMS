@@ -13,6 +13,8 @@ export type IconName =
   | 'chevronLeft'
   | 'chevronRight'
   | 'edit'
+  | 'menu'
+  | 'close'
 
 const paths: Record<IconName, ReactNode> = {
   bolt: <path d="m13 2-8 11h6l-1 9 8-12h-6l1-8Z" />,
@@ -27,6 +29,8 @@ const paths: Record<IconName, ReactNode> = {
   chevronLeft: <path d="m15 18-6-6 6-6" />,
   chevronRight: <path d="m9 18 6-6-6-6" />,
   edit: <path d="M13.5 6.5 17.5 10.5M4 20h4l11-11a2.8 2.8 0 0 0-4-4L4 16v4Z" />,
+  menu: <path d="M4 7h16M4 12h16M4 17h16" />,
+  close: <path d="m6 6 12 12M18 6 6 18" />,
 }
 
 export function Icon({ name }: { name: IconName }) {
