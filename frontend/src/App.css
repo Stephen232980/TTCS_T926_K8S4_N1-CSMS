@@ -33,10 +33,16 @@
 .nav-link--active { color: var(--accent-strong); background: var(--accent-soft); }
 .sidebar__footer { margin-top: auto; }
 .user-panel { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 16px 10px 0; border-top: 1px solid var(--line); }
-.user-panel div { display: grid; gap: 2px; }
+.user-panel div { min-width: 0; display: grid; gap: 2px; }
 .user-panel strong { color: var(--ink); font-size: .84rem; }
 .user-panel span:last-child { color: var(--muted); font-size: .72rem; }
+.user-panel__email { max-width: 164px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .avatar { width: 36px; height: 36px; flex: 0 0 auto; display: inline-grid; place-items: center; border-radius: 50%; background: #dff7ed; color: #087552; font-size: .72rem; font-weight: 800; }
+.logout-button { width: 100%; min-height: 44px; margin-top: 10px; padding: 0 10px; display: flex; align-items: center; gap: 10px; border: 0; border-radius: 10px; color: var(--danger-ink); background: transparent; cursor: pointer; font-size: .8rem; font-weight: 680; transition: color 160ms ease-out, background 160ms ease-out; }
+.logout-button:hover:not(:disabled) { background: var(--danger-surface); }
+.logout-button:disabled { color: var(--muted); cursor: wait; }
+.logout-button svg { width: 18px; flex: 0 0 auto; }
+.logout-error { margin: 10px 6px 0; color: var(--danger-ink); font-size: .7rem; line-height: 1.45; overflow-wrap: anywhere; }
 .main-content { min-height: 100svh; margin-left: 248px; }
 .topbar { height: 68px; padding: 0 36px; display: flex; align-items: center; justify-content: flex-end; gap: 18px; background: rgba(255,255,255,.94); border-bottom: 1px solid var(--line); }
 .menu-button { display: none; width: 44px; height: 44px; place-items: center; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); background: var(--surface); cursor: pointer; }
@@ -44,7 +50,6 @@
 .navigation-backdrop { display: none; }
 .system-state { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: .78rem; font-weight: 650; }
 .system-state span { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.avatar--button { border: 0; cursor: pointer; }
 .mobile-brand { display: none; align-items: center; gap: 9px; margin-right: auto; color: var(--ink); }
 .mobile-brand .brand__mark { width: 31px; height: 31px; border-radius: 9px; }
 .workspace { max-width: 1240px; margin: 0 auto; padding: 42px 40px 56px; }
@@ -139,6 +144,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .role-home__icon svg { width: 22px; }
 .role-home__state h2 { margin: 0; color: var(--ink); font-size: 1rem; }
 .role-home__state p { max-width: 52ch; margin: 0; color: var(--muted); font-size: .82rem; line-height: 1.5; }
+.empty-station-onboarding { min-height: 300px; padding: clamp(28px, 4vw, 52px); display: grid; place-items: center; align-content: center; gap: 12px; text-align: center; background: #f8fbfa; }
+.empty-station-onboarding__icon { width: 52px; height: 52px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 14px; color: var(--on-accent); background: var(--accent-strong); box-shadow: 0 12px 28px rgba(4,120,87,.22); }
+.empty-station-onboarding__icon svg { width: 25px; }
+.empty-station-onboarding h2 { margin: 4px 0 0; color: var(--ink); font-size: clamp(1.15rem, 2vw, 1.4rem); letter-spacing: -.025em; }
+.empty-station-onboarding p { max-width: 48ch; margin: 0 0 10px; color: var(--muted); font-size: .84rem; line-height: 1.55; }
+.empty-station-onboarding__action { width: fit-content; }
 .station-cards { display: none; }
 .station-card { padding: 18px; border-bottom: 1px solid var(--line); }
 .station-card:last-child { border-bottom: 0; }
@@ -169,6 +180,34 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .station-detail__charge-points h2 { margin: 0 0 7px; color: var(--ink); font-size: 1.05rem; letter-spacing: -.015em; }
 .station-detail__charge-points p { margin: 0; color: var(--muted); font-size: .82rem; }
 .station-detail__section-heading { margin-bottom: 22px; }
+.station-detail__add-charge-point { margin: 26px 0 18px; padding-top: 24px; border-top: 1px solid var(--line); }
+.station-detail__add-charge-point h3 { margin: 0 0 6px; color: var(--ink); font-size: .92rem; }
+.station-detail__add-charge-point p { line-height: 1.5; }
+.charge-point-list-wrap { min-width: 0; }
+.charge-point-list { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.charge-point-item { min-width: 0; padding: 16px 18px; display: grid; grid-template-columns: minmax(180px, .9fr) minmax(240px, 1.3fr) auto; align-items: center; gap: 18px; border-bottom: 1px solid var(--row-line); }
+.charge-point-item:last-child { border-bottom: 0; }
+.charge-point-item__identity { min-width: 0; display: flex; align-items: center; gap: 12px; }
+.charge-point-item__identity > div { min-width: 0; display: grid; gap: 4px; }
+.charge-point-item__identity strong { color: var(--ink); font-size: .85rem; overflow-wrap: anywhere; }
+.charge-point-item__identity span { color: var(--muted); font-size: .72rem; overflow-wrap: anywhere; }
+.charge-point-item__icon, .charge-point-list-state__icon { width: 36px; height: 36px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 10px; color: var(--accent-strong); background: var(--accent-soft); }
+.charge-point-item__icon svg, .charge-point-list-state__icon svg { width: 18px; }
+.charge-point-item__connectors { min-width: 0; display: grid; gap: 7px; }
+.charge-point-item__connectors > span { color: var(--muted); font-size: .7rem; font-weight: 680; }
+.charge-point-item__connectors > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.connector-chip { padding: 4px 7px; border-radius: 7px; color: var(--data-ink); background: var(--hover); font-size: .68rem; white-space: nowrap; }
+.charge-point-item__actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.charge-point-status { color: var(--muted); font-size: .71rem; font-weight: 720; white-space: nowrap; }
+.charge-point-status--online, .charge-point-status--available { color: var(--success-ink); }
+.charge-point-status--faulted { color: var(--danger-ink); }
+.charge-point-item > .charge-point-code-editor { grid-column: 1 / -1; }
+.charge-point-list-state { min-height: 152px; padding: 24px; display: grid; place-items: center; align-content: center; gap: 7px; border: 1px solid var(--line); border-radius: 12px; color: var(--muted); text-align: center; }
+.charge-point-list-state strong { color: var(--ink); font-size: .86rem; }
+.charge-point-list-state > span:not(.sr-only, .charge-point-list-state__icon) { font-size: .76rem; }
+.charge-point-list-state .skeleton-row { width: 100%; }
+.charge-point-list-state--error { color: var(--danger-ink); background: var(--danger-surface-subtle); border-color: #f1d6d6; }
+.charge-point-list-state--error button { min-height: 44px; border: 0; color: var(--danger-ink); background: transparent; cursor: pointer; font-weight: 720; }
 .charge-point-form { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(160px, .6fr); gap: 18px; align-items: start; }
 .field-help { color: var(--muted); font-size: .73rem; line-height: 1.4; }
 .charge-point-form__actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
@@ -189,6 +228,8 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
   .sidebar { width: 82px; padding-inline: 12px; }
   .brand { justify-content: center; padding-inline: 0; }
   .brand > span:last-child, .nav-link span, .user-panel div { display: none; }
+  .logout-button { justify-content: center; padding: 0; }
+  .logout-button span, .logout-error { display: none; }
   .nav-link { justify-content: center; padding: 0; }
   .user-panel { justify-content: center; padding-inline: 0; }
   .main-content { margin-left: 82px; }
@@ -208,6 +249,8 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
   .sidebar--open { transform: translateX(0); }
   .sidebar .brand { justify-content: flex-start; padding-inline: 10px; }
   .sidebar .brand > span:last-child, .sidebar .nav-link span, .sidebar .user-panel div { display: initial; }
+  .sidebar .logout-button { justify-content: flex-start; padding: 0 10px; }
+  .sidebar .logout-button span, .sidebar .logout-error { display: initial; }
   .sidebar .nav-link { justify-content: flex-start; padding: 0 12px; }
   .sidebar .user-panel { justify-content: flex-start; padding-inline: 10px; }
   .sidebar .user-panel div { display: grid; }
@@ -220,6 +263,8 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
   .workspace { padding: 28px 18px 42px; }
   .page-heading { align-items: flex-start; }
   .page-heading h1 { font-size: 1.45rem; }
+  .page-heading > .primary-button { width: auto; padding: 0 16px; }
+  .page-heading > .primary-button span { display: inline; }
   .primary-button { width: 42px; padding: 0; }
   .primary-button span { display: none; }
   .toolbar { align-items: stretch; flex-direction: column; }
@@ -236,12 +281,17 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
   .station-cards { display: block; }
   .station-card__header { flex-direction: column; }
   .station-card__actions { align-items: flex-start; flex-direction: column; }
+  .empty-station-onboarding { min-height: 0; padding: 34px 22px; }
+  .empty-station-onboarding__action { width: 100%; }
+  .empty-station-onboarding__action span { display: inline; }
   .station-detail__heading { flex-direction: column; }
   .station-detail__facts { grid-template-columns: minmax(0, 1fr); }
   .station-detail__facts div { border-right: 0; border-bottom: 1px solid var(--line); }
   .station-detail__facts div:last-child { border-bottom: 0; }
   .station-detail__charge-points { padding: 20px 18px; }
   .charge-point-form { grid-template-columns: minmax(0, 1fr); }
+  .charge-point-item { grid-template-columns: minmax(0, 1fr); align-items: start; }
+  .charge-point-item__actions { justify-content: space-between; }
   .charge-point-form__actions { grid-column: auto; }
   .charge-point-form__actions .primary-button { width: 100%; }
   .charge-point-created { align-items: flex-start; flex-direction: column; }

@@ -39,7 +39,7 @@ export function StationListPage({
   onDismissNotice = () => undefined,
   onOpenStation = () => undefined,
   api = defaultStationApi,
-  canManageStations = true,
+  canManageStations = false,
 }: StationListPageProps) {
   const [stations, setStations] = useState<Station[]>([])
   const [searchInput, setSearchInput] = useState('')
@@ -57,6 +57,7 @@ export function StationListPage({
   const [submitError, setSubmitError] = useState('')
   const submitInFlight = useRef(false)
   const pageSize = 2
+  const hasActiveFilters = Boolean(search.trim() || status)
 
   useEffect(() => {
     if (searchInput === search) return
@@ -102,9 +103,13 @@ export function StationListPage({
 
   const resultSummary = useMemo(() => {
     if (isLoading) return 'Đang đồng bộ dữ liệu trạm…'
-    if (total === 0) return 'Không có trạm phù hợp'
+    if (total === 0) {
+      return hasActiveFilters
+        ? 'Không có trạm phù hợp bộ lọc'
+        : ''
+    }
     return `${total} trạm trong phạm vi quản lý`
-  }, [isLoading, total])
+  }, [hasActiveFilters, isLoading, total])
 
   const prepareRequest = () => {
     setIsLoading(true)
@@ -209,9 +214,9 @@ export function StationListPage({
       <div className="page-heading">
         <div>
           <h1 id="page-title">Trạm sạc</h1>
-          <p>{resultSummary}</p>
+          {resultSummary && <p>{resultSummary}</p>}
         </div>
-        {canManageStations && (
+        {canManageStations && (total > 0 || hasActiveFilters) && (
           <button
             className="primary-button"
             type="button"
@@ -260,12 +265,14 @@ export function StationListPage({
         />
       )}
 
-      <StationFilters
-        search={searchInput}
-        status={status}
-        onSearchChange={handleSearch}
-        onStatusChange={handleStatus}
-      />
+      {(total > 0 || hasActiveFilters) && (
+        <StationFilters
+          search={searchInput}
+          status={status}
+          onSearchChange={handleSearch}
+          onStatusChange={handleStatus}
+        />
+      )}
 
       <StationList
         stations={stations}
@@ -275,6 +282,8 @@ export function StationListPage({
         onEdit={openEditForm}
         onClearFilters={handleClearFilters}
         onRetry={handleRetry}
+        onCreate={openCreateForm}
+        hasActiveFilters={hasActiveFilters}
         canManageStations={canManageStations}
       />
 

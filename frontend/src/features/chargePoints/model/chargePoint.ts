@@ -31,3 +31,11 @@ export interface ChargePointInput {
 export interface ChargePointUpdate {
   code: string
 }
+
+export interface ChargePointPage {
+  items: ChargePoint[]
+  page: number
+  pageSize: number
+  total: number
+  totalPages: number
+}

@@ -4,6 +4,7 @@ import { Icon } from './components/icons/Icon'
 import { AuthApiError, type AuthApi } from './features/auth/api/authApi'
 import { HttpAuthApi } from './features/auth/api/httpAuthApi'
 import type { AuthenticatedUser } from './features/auth/model/auth'
+import { getHomeRole, getPermissions } from './features/auth/model/permissions'
 import { LoginPage } from './features/auth/pages/LoginPage'
 import { RoleHomePage } from './features/auth/pages/RoleHomePage'
 import { SESSION_UNAUTHORIZED_EVENT } from './features/auth/sessionEvents'
@@ -85,6 +86,14 @@ function App({ authApi = defaultAuthApi, stationApi, chargePointApi }: AppProps)
     setNoticeVersion((current) => current + 1)
   }
 
+  const handleLogout = async () => {
+    await authApi.logout()
+    setCurrentUser(null)
+    setSelectedStationId(null)
+    setSessionMessage('Bạn đã đăng xuất an toàn.')
+    setAuthStatus('anonymous')
+  }
+
   if (authStatus === 'checking') {
     return (
       <main className="auth-checking" aria-live="polite">
@@ -104,14 +113,15 @@ function App({ authApi = defaultAuthApi, stationApi, chargePointApi }: AppProps)
     )
   }
 
-  const primaryRole = currentUser.roles[0] ?? ''
-  const canManageStations = currentUser.roles.some((role) =>
-    ['admin', 'operator', 'station_owner'].includes(role),
-  )
+  const primaryRole = getHomeRole(currentUser)
+  const permissions = getPermissions(currentUser)
 
   return (
-    <AppShell currentUser={currentUser}>
-      {!canManageStations ? (
+    <AppShell
+      currentUser={currentUser}
+      onLogout={handleLogout}
+    >
+      {!permissions.canViewStations ? (
         <RoleHomePage role={primaryRole} />
       ) : selectedStationId ? (
         <StationDetailPage
@@ -120,6 +130,7 @@ function App({ authApi = defaultAuthApi, stationApi, chargePointApi }: AppProps)
           onBack={() => setSelectedStationId(null)}
           api={stationApi}
           chargePointApi={chargePointApi}
+          canManageChargePoints={permissions.canManageChargePoints}
         />
       ) : (
         <StationListPage
@@ -128,7 +139,7 @@ function App({ authApi = defaultAuthApi, stationApi, chargePointApi }: AppProps)
           onDismissNotice={() => setNotice('')}
           onOpenStation={setSelectedStationId}
           api={stationApi}
-          canManageStations={currentUser.roles.includes('station_owner')}
+          canManageStations={permissions.canManageStations}
         />
       )}
     </AppShell>

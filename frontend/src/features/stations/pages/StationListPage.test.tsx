@@ -16,28 +16,38 @@ async function fillCreateForm(user: ReturnType<typeof userEvent.setup>) {
 
 describe('StationListPage create flow', () => {
   it('keeps operator and admin access read-only', async () => {
-    const station: Station = {
-      id: 'station-1',
-      name: 'Trạm Quận 1',
-      address: '123 Nguyễn Huệ, Quận 1, TP.HCM',
-      latitude: 10.7731,
-      longitude: 106.7032,
-      status: 'active',
-      createdAt: '2026-09-20T08:30:00Z',
-      updatedAt: '2026-09-20T08:30:00Z',
-    }
     render(
       <StationListPage
         notice=""
         onNotice={() => undefined}
-        api={new MockStationApi([station], 0)}
+        api={new MockStationApi([], 0)}
         canManageStations={false}
       />,
     )
 
-    expect(await screen.findAllByText('Trạm Quận 1')).toHaveLength(2)
     expect(
-      screen.queryByRole('button', { name: /Tạo trạm|Chỉnh sửa/ }),
+      await screen.findByText('Hiện chưa có trạm nào trong phạm vi theo dõi.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Tạo trạm|Chỉnh sửa/ })).not.toBeInTheDocument()
+  })
+
+  it('shows first-station onboarding without irrelevant filters', async () => {
+    render(
+      <StationListPage canManageStations
+        notice=""
+        onNotice={() => undefined}
+        api={new MockStationApi([], 0)}
+      />,
+    )
+
+    expect(
+      await screen.findByRole('heading', {
+        name: 'Chưa có trạm sạc',
+      }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('searchbox', { name: 'Tìm trạm' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Thiết lập không gian vận hành đầu tiên của bạn'),
     ).not.toBeInTheDocument()
   })
 
@@ -45,7 +55,7 @@ describe('StationListPage create flow', () => {
     const user = userEvent.setup()
     const onDismissNotice = vi.fn()
     render(
-      <StationListPage
+      <StationListPage canManageStations
         notice="Đã cập nhật trạm."
         onNotice={() => undefined}
         onDismissNotice={onDismissNotice}
@@ -62,14 +72,16 @@ describe('StationListPage create flow', () => {
     const user = userEvent.setup()
     const onNotice = vi.fn()
     render(
-      <StationListPage
+      <StationListPage canManageStations
         notice=""
         onNotice={onNotice}
         api={new MockStationApi([], 0)}
       />,
     )
 
-    await user.click(screen.getByRole('button', { name: 'Tạo trạm' }))
+    await user.click(
+      await screen.findByRole('button', { name: 'Tạo trạm đầu tiên' }),
+    )
     await fillCreateForm(user)
     await user.click(
       within(screen.getByRole('form', { name: 'Tạo trạm mới' })).getByRole(
@@ -100,9 +112,11 @@ describe('StationListPage create flow', () => {
       createStation,
       updateStation: vi.fn(),
     }
-    render(<StationListPage notice="" onNotice={() => undefined} api={api} />)
+    render(<StationListPage canManageStations notice="" onNotice={() => undefined} api={api} />)
 
-    await user.click(screen.getByRole('button', { name: 'Tạo trạm' }))
+    await user.click(
+      await screen.findByRole('button', { name: 'Tạo trạm đầu tiên' }),
+    )
     await fillCreateForm(user)
     await user.dblClick(
       within(screen.getByRole('form', { name: 'Tạo trạm mới' })).getByRole(
@@ -121,9 +135,11 @@ describe('StationListPage create flow', () => {
     vi.spyOn(api, 'createStation').mockRejectedValue(
       new StationApiError(422, 'validation_error'),
     )
-    render(<StationListPage notice="" onNotice={() => undefined} api={api} />)
+    render(<StationListPage canManageStations notice="" onNotice={() => undefined} api={api} />)
 
-    await user.click(screen.getByRole('button', { name: 'Tạo trạm' }))
+    await user.click(
+      await screen.findByRole('button', { name: 'Tạo trạm đầu tiên' }),
+    )
     await fillCreateForm(user)
     await user.click(
       within(screen.getByRole('form', { name: 'Tạo trạm mới' })).getByRole(
@@ -166,7 +182,7 @@ describe('StationListPage edit flow', () => {
       ],
       0,
     )
-    render(<StationListPage notice="" onNotice={onNotice} api={api} />)
+    render(<StationListPage canManageStations notice="" onNotice={onNotice} api={api} />)
 
     const editButtons = await screen.findAllByRole('button', {
       name: 'Chỉnh sửa Trạm ban đầu',

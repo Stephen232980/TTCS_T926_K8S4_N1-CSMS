@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Icon, type IconName } from '../components/icons/Icon'
 import type { AuthenticatedUser } from '../features/auth/model/auth'
+import { getHomeRole, getPermissions } from '../features/auth/model/permissions'
 
 const roleNavigation: Record<string, { label: string; icon: IconName }> = {
   driver: { label: 'Khu vực tài xế', icon: 'session' },
@@ -10,6 +11,7 @@ const roleNavigation: Record<string, { label: string; icon: IconName }> = {
 interface AppShellProps {
   children: ReactNode
   currentUser: AuthenticatedUser
+  onLogout: () => Promise<void>
 }
 
 const roleLabels: Record<string, string> = {
@@ -23,15 +25,30 @@ const roleLabels: Record<string, string> = {
 export function AppShell({
   children,
   currentUser,
+  onLogout,
 }: AppShellProps) {
   const [isNavigationOpen, setIsNavigationOpen] = useState(false)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [logoutError, setLogoutError] = useState('')
   const sidebarRef = useRef<HTMLElement>(null)
   const menuButtonRef = useRef<HTMLButtonElement>(null)
   const initials = currentUser.email.slice(0, 2).toUpperCase()
-  const roleLabel = roleLabels[currentUser.roles[0] ?? ''] ?? 'Người dùng'
-  const navigationItem = roleNavigation[currentUser.roles[0] ?? ''] ?? {
-    label: 'Trạm sạc',
-    icon: 'station' as IconName,
+  const homeRole = getHomeRole(currentUser)
+  const roleLabel = roleLabels[homeRole] ?? 'Người dùng'
+  const navigationItem = getPermissions(currentUser).canViewStations
+    ? { label: 'Trạm sạc', icon: 'station' as IconName }
+    : roleNavigation[homeRole]
+
+  const handleLogout = async () => {
+    if (isLoggingOut) return
+    setIsLoggingOut(true)
+    setLogoutError('')
+    try {
+      await onLogout()
+    } catch {
+      setLogoutError('Không thể đăng xuất. Vui lòng kiểm tra kết nối và thử lại.')
+      setIsLoggingOut(false)
+    }
   }
 
   const closeNavigation = useCallback((restoreFocus = true) => {
@@ -98,22 +115,42 @@ export function AppShell({
           <span>CSMS</span>
         </a>
         <nav aria-label="Điều hướng chính">
-          <a
-            className="nav-link nav-link--active"
-            aria-label={navigationItem.label}
-            aria-current="page"
-            href="#stations"
-            onClick={() => closeNavigation()}
-          >
-            <Icon name={navigationItem.icon} />
-            <span>{navigationItem.label}</span>
-          </a>
+          {(navigationItem ? [navigationItem] : []).map((item) => (
+            <a
+              key={item.label}
+              className="nav-link nav-link--active"
+              aria-label={item.label}
+              aria-current="page"
+              href="#stations"
+              onClick={() => closeNavigation()}
+            >
+              <Icon name={item.icon} />
+              <span>{item.label}</span>
+            </a>
+          ))}
         </nav>
         <div className="sidebar__footer">
           <div className="user-panel">
             <span className="avatar">{initials}</span>
-            <div><strong>{roleLabel}</strong><span>{currentUser.email}</span></div>
+            <div>
+              <strong>{roleLabel}</strong>
+              <span className="user-panel__email" title={currentUser.email}>
+                {currentUser.email}
+              </span>
+            </div>
           </div>
+          {logoutError && (
+            <p className="logout-error" role="alert">{logoutError}</p>
+          )}
+          <button
+            className="logout-button"
+            type="button"
+            disabled={isLoggingOut}
+            onClick={handleLogout}
+          >
+            <Icon name="logout" />
+            <span>{isLoggingOut ? 'Đang đăng xuất…' : 'Đăng xuất'}</span>
+          </button>
         </div>
       </aside>
       {isNavigationOpen && (
