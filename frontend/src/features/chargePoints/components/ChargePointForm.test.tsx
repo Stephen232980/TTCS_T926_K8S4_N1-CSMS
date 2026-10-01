@@ -119,6 +119,7 @@ describe('ChargePointForm', () => {
     const createChargePoint = vi.fn(() => new Promise<ChargePoint>(() => undefined))
     const updateChargePoint = vi.fn()
     const api: ChargePointApi = {
+      listChargePoints: vi.fn(),
       checkCodeAvailability,
       createChargePoint,
       updateChargePoint,

@@ -2,6 +2,7 @@ import type {
   ChargePoint,
   ChargePointCodeAvailability,
   ChargePointInput,
+  ChargePointPage,
   ChargePointUpdate,
   Connector,
 } from '../model/chargePoint'
@@ -31,6 +32,14 @@ interface ChargePointResponse {
 interface CodeAvailabilityResponse {
   code: string
   available: boolean
+}
+
+interface ChargePointListResponse {
+  items: ChargePointResponse[]
+  page: number
+  page_size: number
+  total: number
+  total_pages: number
 }
 
 interface ErrorResponse {
@@ -82,6 +91,30 @@ export class HttpChargePointApi implements ChargePointApi {
 
   constructor(baseUrl = configuredBaseUrl) {
     this.baseUrl = baseUrl.replace(/\/$/, '')
+  }
+
+  async listChargePoints(
+    stationId: string,
+    page = 1,
+    pageSize = 20,
+    signal?: AbortSignal,
+  ): Promise<ChargePointPage> {
+    const searchParams = new URLSearchParams({
+      page: String(page),
+      page_size: String(pageSize),
+    })
+    const response = await fetch(
+      `${this.baseUrl}/api/v1/stations/${encodeURIComponent(stationId)}/charge-points?${searchParams.toString()}`,
+      { credentials: 'include', signal },
+    )
+    const payload = await parseResponse<ChargePointListResponse>(response)
+    return {
+      items: payload.items.map(mapChargePoint),
+      page: payload.page,
+      pageSize: payload.page_size,
+      total: payload.total,
+      totalPages: payload.total_pages,
+    }
   }
 
   async checkCodeAvailability(
