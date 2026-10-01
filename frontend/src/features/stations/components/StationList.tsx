@@ -9,6 +9,8 @@ interface StationListProps {
   onEdit: (station: Station) => void
   onClearFilters: () => void
   onRetry: () => void
+  onCreate: () => void
+  hasActiveFilters: boolean
   canManageStations: boolean
 }
 
@@ -135,6 +137,8 @@ export function StationList({
   onEdit,
   onClearFilters,
   onRetry,
+  onCreate,
+  hasActiveFilters,
   canManageStations,
 }: StationListProps) {
   return (
@@ -155,12 +159,32 @@ export function StationList({
           <button type="button" onClick={onRetry}>Thử lại</button>
         </div>
       ) : stations.length === 0 ? (
-        <div className="state-message">
-          <span className="state-message__icon"><Icon name="search" /></span>
-          <h2>Không tìm thấy trạm</h2>
-          <p>Thử đổi từ khóa hoặc chọn trạng thái khác.</p>
-          <button type="button" onClick={onClearFilters}>Xóa bộ lọc</button>
-        </div>
+        hasActiveFilters ? (
+          <div className="state-message">
+            <span className="state-message__icon"><Icon name="search" /></span>
+            <h2>Không tìm thấy trạm</h2>
+            <p>Thử đổi từ khóa hoặc chọn trạng thái khác.</p>
+            <button type="button" onClick={onClearFilters}>Xóa bộ lọc</button>
+          </div>
+        ) : (
+          <div className="empty-station-onboarding">
+            <span className="empty-station-onboarding__icon">
+              <Icon name="station" />
+            </span>
+            <h2>Chưa có trạm sạc</h2>
+            <p>
+              {canManageStations
+                ? 'Tạo trạm đầu tiên để bắt đầu quản lý trụ sạc và đầu nối.'
+                : 'Hiện chưa có trạm nào trong phạm vi theo dõi.'}
+            </p>
+            {canManageStations && (
+              <button className="primary-button empty-station-onboarding__action" type="button" onClick={onCreate}>
+                <Icon name="plus" />
+                <span>Tạo trạm đầu tiên</span>
+              </button>
+            )}
+          </div>
+        )
       ) : (
         <>
           <StationTable stations={stations} onView={onView} onEdit={onEdit} canManageStations={canManageStations} />

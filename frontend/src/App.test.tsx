@@ -24,6 +24,10 @@ class AppAuthApi implements AuthApi {
     this.currentUser = owner
   }
 
+  async logout(): Promise<void> {
+    this.currentUser = null
+  }
+
   async getCurrentUser(): Promise<AuthenticatedUser> {
     if (this.currentUser === null) throw new AuthApiError(401)
     return this.currentUser
@@ -53,7 +57,7 @@ describe('App', () => {
     if (role === 'driver' || role === 'accountant') {
       expect(listStations).not.toHaveBeenCalled()
     } else {
-      expect(listStations).toHaveBeenCalled()
+      await waitFor(() => expect(listStations).toHaveBeenCalled())
     }
     if (role === 'operator' || role === 'admin') {
       expect(
@@ -146,5 +150,21 @@ describe('App', () => {
     expect(screen.getByRole('status')).toHaveTextContent(
       'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.',
     )
+  })
+
+  it('logs out and returns to the login page', async () => {
+    const user = userEvent.setup()
+    const authApi = new AppAuthApi(owner)
+    render(<App authApi={authApi} stationApi={new MockStationApi()} />)
+
+    await user.click(await screen.findByRole('button', { name: 'Đăng xuất' }))
+
+    expect(
+      await screen.findByRole('heading', { name: 'Đăng nhập' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Bạn đã đăng xuất an toàn.',
+    )
+    expect(authApi.currentUser).toBeNull()
   })
 })

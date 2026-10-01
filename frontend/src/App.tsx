@@ -85,6 +85,14 @@ function App({ authApi = defaultAuthApi, stationApi, chargePointApi }: AppProps)
     setNoticeVersion((current) => current + 1)
   }
 
+  const handleLogout = async () => {
+    await authApi.logout()
+    setCurrentUser(null)
+    setSelectedStationId(null)
+    setSessionMessage('Bạn đã đăng xuất an toàn.')
+    setAuthStatus('anonymous')
+  }
+
   if (authStatus === 'checking') {
     return (
       <main className="auth-checking" aria-live="polite">
@@ -110,7 +118,10 @@ function App({ authApi = defaultAuthApi, stationApi, chargePointApi }: AppProps)
   )
 
   return (
-    <AppShell currentUser={currentUser}>
+    <AppShell
+      currentUser={currentUser}
+      onLogout={handleLogout}
+    >
       {!canManageStations ? (
         <RoleHomePage role={primaryRole} />
       ) : selectedStationId ? (
