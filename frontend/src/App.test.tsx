@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { AuthApiError, type AuthApi } from './features/auth/api/authApi'
 import type { AuthenticatedUser } from './features/auth/model/auth'
@@ -31,6 +31,40 @@ class AppAuthApi implements AuthApi {
 }
 
 describe('App', () => {
+  it.each([
+    ['station_owner', 'Trạm sạc'],
+    ['operator', 'Trạm sạc'],
+    ['admin', 'Trạm sạc'],
+    ['driver', 'Khu vực tài xế'],
+    ['accountant', 'Khu vực kế toán'],
+  ])('routes the %s role to its permitted screen', async (role, heading) => {
+    const stationApi = new MockStationApi(undefined, 0)
+    const listStations = vi.spyOn(stationApi, 'listStations')
+    render(
+      <App
+        authApi={new AppAuthApi({ ...owner, roles: [role] })}
+        stationApi={stationApi}
+      />,
+    )
+
+    expect(
+      await screen.findByRole('heading', { name: heading }),
+    ).toBeInTheDocument()
+    if (role === 'driver' || role === 'accountant') {
+      expect(listStations).not.toHaveBeenCalled()
+    } else {
+      expect(listStations).toHaveBeenCalled()
+    }
+    if (role === 'operator' || role === 'admin') {
+      expect(
+        screen.queryByRole('button', { name: /Chỉnh sửa/ }),
+      ).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole('button', { name: 'Tạo trạm' }),
+      ).not.toBeInTheDocument()
+    }
+  })
+
   it('loads and filters an injected station API', async () => {
     const user = userEvent.setup()
     render(

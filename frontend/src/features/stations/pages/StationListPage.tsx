@@ -30,6 +30,7 @@ interface StationListPageProps {
   onDismissNotice?: () => void
   onOpenStation?: (stationId: string) => void
   api?: StationApi
+  canManageStations?: boolean
 }
 
 export function StationListPage({
@@ -38,6 +39,7 @@ export function StationListPage({
   onDismissNotice = () => undefined,
   onOpenStation = () => undefined,
   api = defaultStationApi,
+  canManageStations = true,
 }: StationListPageProps) {
   const [stations, setStations] = useState<Station[]>([])
   const [searchInput, setSearchInput] = useState('')
@@ -209,16 +211,18 @@ export function StationListPage({
           <h1 id="page-title">Trạm sạc</h1>
           <p>{resultSummary}</p>
         </div>
-        <button
-          className="primary-button"
-          type="button"
-          aria-label="Tạo trạm"
-          onClick={openCreateForm}
-          disabled={isSubmitting}
-        >
-          <Icon name="plus" />
-          <span>Tạo trạm</span>
-        </button>
+        {canManageStations && (
+          <button
+            className="primary-button"
+            type="button"
+            aria-label="Tạo trạm"
+            onClick={openCreateForm}
+            disabled={isSubmitting}
+          >
+            <Icon name="plus" />
+            <span>Tạo trạm</span>
+          </button>
+        )}
       </div>
 
       {notice && (
@@ -234,7 +238,7 @@ export function StationListPage({
         </div>
       )}
 
-      {isCreateFormOpen && (
+      {canManageStations && isCreateFormOpen && (
         <StationForm
           mode="create"
           isSubmitting={isSubmitting}
@@ -244,7 +248,7 @@ export function StationListPage({
         />
       )}
 
-      {editingStation && (
+      {canManageStations && editingStation && (
         <StationForm
           key={editingStation.id}
           mode="edit"
@@ -271,6 +275,7 @@ export function StationListPage({
         onEdit={openEditForm}
         onClearFilters={handleClearFilters}
         onRetry={handleRetry}
+        canManageStations={canManageStations}
       />
 
       {!isLoading && !error && totalPages > 0 && (

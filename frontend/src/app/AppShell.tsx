@@ -2,18 +2,14 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Icon, type IconName } from '../components/icons/Icon'
 import type { AuthenticatedUser } from '../features/auth/model/auth'
 
-const navigation: Array<{ label: string; icon: IconName; active?: boolean }> = [
-  { label: 'Tổng quan', icon: 'dashboard' },
-  { label: 'Trạm sạc', icon: 'station', active: true },
-  { label: 'Trụ sạc', icon: 'charger' },
-  { label: 'Phiên sạc', icon: 'session' },
-  { label: 'Báo cáo', icon: 'report' },
-]
+const roleNavigation: Record<string, { label: string; icon: IconName }> = {
+  driver: { label: 'Khu vực tài xế', icon: 'session' },
+  accountant: { label: 'Khu vực kế toán', icon: 'report' },
+}
 
 interface AppShellProps {
   children: ReactNode
   currentUser: AuthenticatedUser
-  onUnavailableNavigation: (label: string) => void
 }
 
 const roleLabels: Record<string, string> = {
@@ -27,13 +23,16 @@ const roleLabels: Record<string, string> = {
 export function AppShell({
   children,
   currentUser,
-  onUnavailableNavigation,
 }: AppShellProps) {
   const [isNavigationOpen, setIsNavigationOpen] = useState(false)
   const sidebarRef = useRef<HTMLElement>(null)
   const menuButtonRef = useRef<HTMLButtonElement>(null)
   const initials = currentUser.email.slice(0, 2).toUpperCase()
   const roleLabel = roleLabels[currentUser.roles[0] ?? ''] ?? 'Người dùng'
+  const navigationItem = roleNavigation[currentUser.roles[0] ?? ''] ?? {
+    label: 'Trạm sạc',
+    icon: 'station' as IconName,
+  }
 
   const closeNavigation = useCallback((restoreFocus = true) => {
     setIsNavigationOpen(false)
@@ -99,40 +98,18 @@ export function AppShell({
           <span>CSMS</span>
         </a>
         <nav aria-label="Điều hướng chính">
-          {navigation.map((item) => (
-            <a
-              key={item.label}
-              className={item.active ? 'nav-link nav-link--active' : 'nav-link'}
-              aria-label={item.label}
-              aria-current={item.active ? 'page' : undefined}
-              href={item.active ? '#stations' : `#${item.label.toLowerCase()}`}
-              onClick={(event) => {
-                if (!item.active) {
-                  event.preventDefault()
-                  onUnavailableNavigation(item.label)
-                }
-                closeNavigation()
-              }}
-            >
-              <Icon name={item.icon} />
-              <span>{item.label}</span>
-            </a>
-          ))}
+          <a
+            className="nav-link nav-link--active"
+            aria-label={navigationItem.label}
+            aria-current="page"
+            href="#stations"
+            onClick={() => closeNavigation()}
+          >
+            <Icon name={navigationItem.icon} />
+            <span>{navigationItem.label}</span>
+          </a>
         </nav>
         <div className="sidebar__footer">
-          <a
-            className="nav-link"
-            aria-label="Cài đặt"
-            href="#settings"
-            onClick={(event) => {
-              event.preventDefault()
-              closeNavigation()
-              onUnavailableNavigation('Cài đặt')
-            }}
-          >
-            <Icon name="settings" />
-            <span>Cài đặt</span>
-          </a>
           <div className="user-panel">
             <span className="avatar">{initials}</span>
             <div><strong>{roleLabel}</strong><span>{currentUser.email}</span></div>
@@ -168,14 +145,9 @@ export function AppShell({
             <strong>CSMS</strong>
           </div>
           <div className="system-state">Cổng quản lý CSMS</div>
-          <button
-            className="avatar avatar--button"
-            type="button"
-            aria-label="Mở tài khoản"
-            onClick={() => onUnavailableNavigation('Tài khoản')}
-          >
+          <span className="avatar" aria-label={`Tài khoản ${currentUser.email}`}>
             {initials}
-          </button>
+          </span>
         </header>
         {children}
       </main>
