@@ -57,7 +57,7 @@ describe('App', () => {
     if (role === 'driver' || role === 'accountant') {
       expect(listStations).not.toHaveBeenCalled()
     } else {
-      expect(listStations).toHaveBeenCalled()
+      await waitFor(() => expect(listStations).toHaveBeenCalled())
     }
     if (role === 'operator' || role === 'admin') {
       expect(
