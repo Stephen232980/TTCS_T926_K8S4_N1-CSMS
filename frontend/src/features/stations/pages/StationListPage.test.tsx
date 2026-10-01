@@ -15,6 +15,32 @@ async function fillCreateForm(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe('StationListPage create flow', () => {
+  it('keeps operator and admin access read-only', async () => {
+    const station: Station = {
+      id: 'station-1',
+      name: 'Trạm Quận 1',
+      address: '123 Nguyễn Huệ, Quận 1, TP.HCM',
+      latitude: 10.7731,
+      longitude: 106.7032,
+      status: 'active',
+      createdAt: '2026-09-20T08:30:00Z',
+      updatedAt: '2026-09-20T08:30:00Z',
+    }
+    render(
+      <StationListPage
+        notice=""
+        onNotice={() => undefined}
+        api={new MockStationApi([station], 0)}
+        canManageStations={false}
+      />,
+    )
+
+    expect(await screen.findAllByText('Trạm Quận 1')).toHaveLength(2)
+    expect(
+      screen.queryByRole('button', { name: /Tạo trạm|Chỉnh sửa/ }),
+    ).not.toBeInTheDocument()
+  })
+
   it('allows a status notice to be dismissed', async () => {
     const user = userEvent.setup()
     const onDismissNotice = vi.fn()

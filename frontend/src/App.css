@@ -134,6 +134,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .state-message p { margin: 0 0 16px; color: var(--muted); font-size: .82rem; }
 .state-message button, .text-button { min-height: 44px; border: 0; color: var(--accent-strong); background: transparent; cursor: pointer; font-weight: 720; }
 .state-message--error { color: var(--danger-ink); background: var(--danger-surface-subtle); }
+.role-home__state { min-height: 300px; padding: 42px 24px; box-sizing: border-box; display: grid; place-items: center; align-content: center; gap: 10px; border: 1px solid var(--line); border-radius: 14px; text-align: center; background: var(--surface); }
+.role-home__icon { width: 46px; height: 46px; display: grid; place-items: center; margin-bottom: 4px; border-radius: 12px; color: var(--accent-strong); background: var(--accent-soft); }
+.role-home__icon svg { width: 22px; }
+.role-home__state h2 { margin: 0; color: var(--ink); font-size: 1rem; }
+.role-home__state p { max-width: 52ch; margin: 0; color: var(--muted); font-size: .82rem; line-height: 1.5; }
 .station-cards { display: none; }
 .station-card { padding: 18px; border-bottom: 1px solid var(--line); }
 .station-card:last-child { border-bottom: 0; }

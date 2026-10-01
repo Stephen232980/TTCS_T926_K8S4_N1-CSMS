@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { AppShell } from './AppShell'
 
 const currentUser = {
@@ -13,10 +13,7 @@ describe('AppShell', () => {
   it('exposes and closes mobile navigation accessibly', async () => {
     const user = userEvent.setup()
     render(
-      <AppShell
-        currentUser={currentUser}
-        onUnavailableNavigation={() => undefined}
-      >
+      <AppShell currentUser={currentUser}>
         <p>Nội dung</p>
       </AppShell>,
     )
@@ -43,22 +40,33 @@ describe('AppShell', () => {
     expect(document.body.style.overflow).toBe('')
   })
 
-  it('reports unavailable settings and account actions', async () => {
-    const user = userEvent.setup()
-    const onUnavailableNavigation = vi.fn()
+  it('shows only working navigation for the current role', () => {
     render(
-      <AppShell
-        currentUser={currentUser}
-        onUnavailableNavigation={onUnavailableNavigation}
-      >
+      <AppShell currentUser={currentUser}>
         <p>Nội dung</p>
       </AppShell>,
     )
 
-    await user.click(screen.getByRole('link', { name: 'Cài đặt' }))
-    await user.click(screen.getByRole('button', { name: 'Mở tài khoản' }))
+    expect(screen.getAllByRole('link')).toHaveLength(2)
+    expect(screen.getByRole('link', { name: 'Trạm sạc' })).toBeInTheDocument()
+    expect(screen.queryByText('Tổng quan')).not.toBeInTheDocument()
+    expect(screen.queryByText('Cài đặt')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Mở tài khoản' })).not.toBeInTheDocument()
+  })
 
-    expect(onUnavailableNavigation).toHaveBeenNthCalledWith(1, 'Cài đặt')
-    expect(onUnavailableNavigation).toHaveBeenNthCalledWith(2, 'Tài khoản')
+  it.each([
+    ['driver', 'Khu vực tài xế'],
+    ['accountant', 'Khu vực kế toán'],
+  ])('shows the %s navigation scope', (role, label) => {
+    render(
+      <AppShell currentUser={{ ...currentUser, roles: [role] }}>
+        <p>Nội dung</p>
+      </AppShell>,
+    )
+
+    expect(screen.getByRole('link', { name: label })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
   })
 })

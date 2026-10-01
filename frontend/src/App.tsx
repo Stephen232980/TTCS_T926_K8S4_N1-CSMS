@@ -5,6 +5,7 @@ import { AuthApiError, type AuthApi } from './features/auth/api/authApi'
 import { HttpAuthApi } from './features/auth/api/httpAuthApi'
 import type { AuthenticatedUser } from './features/auth/model/auth'
 import { LoginPage } from './features/auth/pages/LoginPage'
+import { RoleHomePage } from './features/auth/pages/RoleHomePage'
 import { SESSION_UNAUTHORIZED_EVENT } from './features/auth/sessionEvents'
 import type { ChargePointApi } from './features/chargePoints/api/chargePointApi'
 import type { StationApi } from './features/stations/api/stationApi'
@@ -103,14 +104,16 @@ function App({ authApi = defaultAuthApi, stationApi, chargePointApi }: AppProps)
     )
   }
 
+  const primaryRole = currentUser.roles[0] ?? ''
+  const canManageStations = currentUser.roles.some((role) =>
+    ['admin', 'operator', 'station_owner'].includes(role),
+  )
+
   return (
-    <AppShell
-      currentUser={currentUser}
-      onUnavailableNavigation={(label) =>
-        showPrototypeNotice(`${label} chưa nằm trong prototype T-09.`)
-      }
-    >
-      {selectedStationId ? (
+    <AppShell currentUser={currentUser}>
+      {!canManageStations ? (
+        <RoleHomePage role={primaryRole} />
+      ) : selectedStationId ? (
         <StationDetailPage
           key={selectedStationId}
           stationId={selectedStationId}
@@ -125,6 +128,7 @@ function App({ authApi = defaultAuthApi, stationApi, chargePointApi }: AppProps)
           onDismissNotice={() => setNotice('')}
           onOpenStation={setSelectedStationId}
           api={stationApi}
+          canManageStations={currentUser.roles.includes('station_owner')}
         />
       )}
     </AppShell>
