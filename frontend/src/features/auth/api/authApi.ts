@@ -2,6 +2,7 @@ import type { AuthenticatedUser, LoginInput } from '../model/auth'
 
 export interface AuthApi {
   login(input: LoginInput): Promise<void>
+  logout(): Promise<void>
   getCurrentUser(signal?: AbortSignal): Promise<AuthenticatedUser>
 }
 
