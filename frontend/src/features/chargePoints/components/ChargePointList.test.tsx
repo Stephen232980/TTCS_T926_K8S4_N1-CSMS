@@ -49,6 +49,35 @@ describe('ChargePointList', () => {
     expect(screen.getByText('Trụ đầu tiên bạn thêm sẽ xuất hiện tại đây.')).toBeInTheDocument()
   })
 
+  it('changes pages and returns to the first page', async () => {
+    const user = userEvent.setup()
+    const chargePoints = Array.from({ length: 11 }, (_, index) => ({
+      ...chargePoint,
+      id: `charge-point-${index + 1}`,
+      code: `CP-Q1-${String(index + 1).padStart(3, '0')}`,
+    }))
+    render(
+      <ChargePointList
+        stationId="station-1"
+        api={new MockChargePointApi(chargePoints, 0)}
+      />,
+    )
+
+    expect(await screen.findByText('CP-Q1-001')).toBeInTheDocument()
+    expect(screen.getByText('Trang 1 / 2 · 11 trụ')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Trang trụ tiếp theo' }))
+
+    expect(await screen.findByText('CP-Q1-011')).toBeInTheDocument()
+    expect(screen.queryByText('CP-Q1-001')).not.toBeInTheDocument()
+    expect(screen.getByText('Trang 2 / 2 · 11 trụ')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Trang trụ trước' }))
+
+    expect(await screen.findByText('CP-Q1-001')).toBeInTheDocument()
+    expect(screen.queryByText('CP-Q1-011')).not.toBeInTheDocument()
+  })
+
   it('shows an authorization error and retries', async () => {
     const user = userEvent.setup()
     const api = new MockChargePointApi([chargePoint], 0)
