@@ -23,6 +23,8 @@ const defaultProps = {
   onEdit: () => undefined,
   onClearFilters: () => undefined,
   onRetry: () => undefined,
+  onCreate: () => undefined,
+  hasActiveFilters: false,
   canManageStations: true,
 }
 
@@ -50,7 +52,7 @@ describe('StationList', () => {
     expect(onRetry).toHaveBeenCalledOnce()
   })
 
-  it('renders the empty state and clears filters', async () => {
+  it('renders the filtered empty state and clears filters', async () => {
     const user = userEvent.setup()
     const onClearFilters = vi.fn()
     render(
@@ -58,6 +60,7 @@ describe('StationList', () => {
         {...defaultProps}
         stations={[]}
         onClearFilters={onClearFilters}
+        hasActiveFilters
       />,
     )
 
@@ -65,6 +68,23 @@ describe('StationList', () => {
     await user.click(screen.getByRole('button', { name: 'Xóa bộ lọc' }))
 
     expect(onClearFilters).toHaveBeenCalledOnce()
+  })
+
+  it('onboards a new owner and opens station creation', async () => {
+    const user = userEvent.setup()
+    const onCreate = vi.fn()
+    render(
+      <StationList {...defaultProps} stations={[]} onCreate={onCreate} />,
+    )
+
+    expect(
+      screen.getByRole('heading', { name: 'Chưa có trạm sạc' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Xóa bộ lọc')).not.toBeInTheDocument()
+    await user.click(
+      screen.getByRole('button', { name: 'Tạo trạm đầu tiên' }),
+    )
+    expect(onCreate).toHaveBeenCalledOnce()
   })
 
   it('renders responsive station views and reports edit actions', async () => {
@@ -92,13 +112,17 @@ describe('StationList', () => {
     expect(onView).toHaveBeenCalledWith(station)
   })
 
-  it('keeps the read-only list free of edit actions', () => {
-    render(<StationList {...defaultProps} canManageStations={false} />)
+  it('keeps the read-only list free of create and edit actions', () => {
+    render(
+      <StationList
+        {...defaultProps}
+        stations={[]}
+        canManageStations={false}
+      />,
+    )
 
-    expect(screen.getAllByText('Trạm Quận 1')).toHaveLength(2)
-    expect(
-      screen.queryByRole('button', { name: /Chỉnh sửa/ }),
-    ).not.toBeInTheDocument()
+    expect(screen.getByText('Hiện chưa có trạm nào trong phạm vi theo dõi.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Tạo trạm|Chỉnh sửa/ })).not.toBeInTheDocument()
   })
 
   it.each([

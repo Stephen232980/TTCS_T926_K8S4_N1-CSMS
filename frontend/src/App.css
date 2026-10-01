@@ -139,6 +139,12 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .role-home__icon svg { width: 22px; }
 .role-home__state h2 { margin: 0; color: var(--ink); font-size: 1rem; }
 .role-home__state p { max-width: 52ch; margin: 0; color: var(--muted); font-size: .82rem; line-height: 1.5; }
+.empty-station-onboarding { min-height: 300px; padding: clamp(28px, 4vw, 52px); display: grid; place-items: center; align-content: center; gap: 12px; text-align: center; background: #f8fbfa; }
+.empty-station-onboarding__icon { width: 52px; height: 52px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 14px; color: var(--on-accent); background: var(--accent-strong); box-shadow: 0 12px 28px rgba(4,120,87,.22); }
+.empty-station-onboarding__icon svg { width: 25px; }
+.empty-station-onboarding h2 { margin: 4px 0 0; color: var(--ink); font-size: clamp(1.15rem, 2vw, 1.4rem); letter-spacing: -.025em; }
+.empty-station-onboarding p { max-width: 48ch; margin: 0 0 10px; color: var(--muted); font-size: .84rem; line-height: 1.55; }
+.empty-station-onboarding__action { width: fit-content; }
 .station-cards { display: none; }
 .station-card { padding: 18px; border-bottom: 1px solid var(--line); }
 .station-card:last-child { border-bottom: 0; }
@@ -220,6 +226,8 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
   .workspace { padding: 28px 18px 42px; }
   .page-heading { align-items: flex-start; }
   .page-heading h1 { font-size: 1.45rem; }
+  .page-heading > .primary-button { width: auto; padding: 0 16px; }
+  .page-heading > .primary-button span { display: inline; }
   .primary-button { width: 42px; padding: 0; }
   .primary-button span { display: none; }
   .toolbar { align-items: stretch; flex-direction: column; }
@@ -236,6 +244,9 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
   .station-cards { display: block; }
   .station-card__header { flex-direction: column; }
   .station-card__actions { align-items: flex-start; flex-direction: column; }
+  .empty-station-onboarding { min-height: 0; padding: 34px 22px; }
+  .empty-station-onboarding__action { width: 100%; }
+  .empty-station-onboarding__action span { display: inline; }
   .station-detail__heading { flex-direction: column; }
   .station-detail__facts { grid-template-columns: minmax(0, 1fr); }
   .station-detail__facts div { border-right: 0; border-bottom: 1px solid var(--line); }
