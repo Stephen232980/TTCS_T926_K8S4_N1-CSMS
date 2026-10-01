@@ -31,6 +31,39 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe('HttpChargePointApi', () => {
+  it('lists a paginated station charge-point response', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        items: [chargePointResponse],
+        page: 1,
+        page_size: 10,
+        total: 1,
+        total_pages: 1,
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const controller = new AbortController()
+
+    const result = await new HttpChargePointApi().listChargePoints(
+      'station/1',
+      1,
+      10,
+      controller.signal,
+    )
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/stations/station%2F1/charge-points?page=1&page_size=10',
+      { credentials: 'include', signal: controller.signal },
+    )
+    expect(result).toMatchObject({
+      page: 1,
+      pageSize: 10,
+      total: 1,
+      totalPages: 1,
+      items: [{ code: 'CP-Q1-001', connectors: [{ connectorNumber: 1 }] }],
+    })
+  })
+
   it('checks a trimmed code with cookie credentials', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({ code: 'CP-Q1-001', available: true }),

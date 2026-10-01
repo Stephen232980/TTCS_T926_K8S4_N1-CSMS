@@ -37,6 +37,24 @@ describe('MockChargePointApi', () => {
     )
   })
 
+  it('lists only charge points from the requested station', async () => {
+    const api = new MockChargePointApi([], 0)
+    await api.createChargePoint('station-1', {
+      code: 'CP-STATION-1',
+      connectorCount: 1,
+    })
+    await api.createChargePoint('station-2', {
+      code: 'CP-STATION-2',
+      connectorCount: 2,
+    })
+
+    await expect(api.listChargePoints('station-1', 1, 10)).resolves.toMatchObject({
+      total: 1,
+      totalPages: 1,
+      items: [{ code: 'CP-STATION-1' }],
+    })
+  })
+
   it('updates an unlocked code and rejects a locked code', async () => {
     const unlocked = {
       id: 'charge-point-1',

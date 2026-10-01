@@ -169,6 +169,34 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .station-detail__charge-points h2 { margin: 0 0 7px; color: var(--ink); font-size: 1.05rem; letter-spacing: -.015em; }
 .station-detail__charge-points p { margin: 0; color: var(--muted); font-size: .82rem; }
 .station-detail__section-heading { margin-bottom: 22px; }
+.station-detail__add-charge-point { margin: 26px 0 18px; padding-top: 24px; border-top: 1px solid var(--line); }
+.station-detail__add-charge-point h3 { margin: 0 0 6px; color: var(--ink); font-size: .92rem; }
+.station-detail__add-charge-point p { line-height: 1.5; }
+.charge-point-list-wrap { min-width: 0; }
+.charge-point-list { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.charge-point-item { min-width: 0; padding: 16px 18px; display: grid; grid-template-columns: minmax(180px, .9fr) minmax(240px, 1.3fr) auto; align-items: center; gap: 18px; border-bottom: 1px solid var(--row-line); }
+.charge-point-item:last-child { border-bottom: 0; }
+.charge-point-item__identity { min-width: 0; display: flex; align-items: center; gap: 12px; }
+.charge-point-item__identity > div { min-width: 0; display: grid; gap: 4px; }
+.charge-point-item__identity strong { color: var(--ink); font-size: .85rem; overflow-wrap: anywhere; }
+.charge-point-item__identity span { color: var(--muted); font-size: .72rem; overflow-wrap: anywhere; }
+.charge-point-item__icon, .charge-point-list-state__icon { width: 36px; height: 36px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 10px; color: var(--accent-strong); background: var(--accent-soft); }
+.charge-point-item__icon svg, .charge-point-list-state__icon svg { width: 18px; }
+.charge-point-item__connectors { min-width: 0; display: grid; gap: 7px; }
+.charge-point-item__connectors > span { color: var(--muted); font-size: .7rem; font-weight: 680; }
+.charge-point-item__connectors > div { display: flex; flex-wrap: wrap; gap: 6px; }
+.connector-chip { padding: 4px 7px; border-radius: 7px; color: var(--data-ink); background: var(--hover); font-size: .68rem; white-space: nowrap; }
+.charge-point-item__actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; }
+.charge-point-status { color: var(--muted); font-size: .71rem; font-weight: 720; white-space: nowrap; }
+.charge-point-status--online, .charge-point-status--available { color: var(--success-ink); }
+.charge-point-status--faulted { color: var(--danger-ink); }
+.charge-point-item > .charge-point-code-editor { grid-column: 1 / -1; }
+.charge-point-list-state { min-height: 152px; padding: 24px; display: grid; place-items: center; align-content: center; gap: 7px; border: 1px solid var(--line); border-radius: 12px; color: var(--muted); text-align: center; }
+.charge-point-list-state strong { color: var(--ink); font-size: .86rem; }
+.charge-point-list-state > span:not(.sr-only, .charge-point-list-state__icon) { font-size: .76rem; }
+.charge-point-list-state .skeleton-row { width: 100%; }
+.charge-point-list-state--error { color: var(--danger-ink); background: var(--danger-surface-subtle); border-color: #f1d6d6; }
+.charge-point-list-state--error button { min-height: 44px; border: 0; color: var(--danger-ink); background: transparent; cursor: pointer; font-weight: 720; }
 .charge-point-form { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(160px, .6fr); gap: 18px; align-items: start; }
 .field-help { color: var(--muted); font-size: .73rem; line-height: 1.4; }
 .charge-point-form__actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; }
@@ -242,6 +270,8 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
   .station-detail__facts div:last-child { border-bottom: 0; }
   .station-detail__charge-points { padding: 20px 18px; }
   .charge-point-form { grid-template-columns: minmax(0, 1fr); }
+  .charge-point-item { grid-template-columns: minmax(0, 1fr); align-items: start; }
+  .charge-point-item__actions { justify-content: space-between; }
   .charge-point-form__actions { grid-column: auto; }
   .charge-point-form__actions .primary-button { width: 100%; }
   .charge-point-created { align-items: flex-start; flex-direction: column; }

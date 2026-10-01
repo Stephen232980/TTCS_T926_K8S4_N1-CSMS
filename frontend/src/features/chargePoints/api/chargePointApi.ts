@@ -2,6 +2,7 @@ import type {
   ChargePoint,
   ChargePointCodeAvailability,
   ChargePointInput,
+  ChargePointPage,
   ChargePointUpdate,
 } from '../model/chargePoint'
 
@@ -18,6 +19,13 @@ export class ChargePointApiError extends Error {
 }
 
 export interface ChargePointApi {
+  listChargePoints(
+    stationId: string,
+    page?: number,
+    pageSize?: number,
+    signal?: AbortSignal,
+  ): Promise<ChargePointPage>
+
   checkCodeAvailability(
     code: string,
     signal?: AbortSignal,

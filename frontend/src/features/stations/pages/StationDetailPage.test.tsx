@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
+import { MockChargePointApi } from '../../chargePoints/api/mockChargePointApi'
 import { StationApiError } from '../api/httpStationApi'
 import { MockStationApi } from '../api/mockStationApi'
 import type { Station } from '../model/station'
@@ -24,6 +25,7 @@ describe('StationDetailPage', () => {
         stationId={station.id}
         onBack={() => undefined}
         api={new MockStationApi([station], 0)}
+        chargePointApi={new MockChargePointApi([], 0)}
       />,
     )
 
@@ -46,6 +48,7 @@ describe('StationDetailPage', () => {
         stationId={station.id}
         onBack={onBack}
         api={new MockStationApi([station], 0)}
+        chargePointApi={new MockChargePointApi([], 0)}
       />,
     )
 
@@ -67,6 +70,7 @@ describe('StationDetailPage', () => {
         stationId={station.id}
         onBack={() => undefined}
         api={api}
+        chargePointApi={new MockChargePointApi([], 0)}
       />,
     )
 

@@ -37,6 +37,29 @@ export class MockChargePointApi implements ChargePointApi {
     this.latency = latency
   }
 
+  async listChargePoints(
+    stationId: string,
+    page = 1,
+    pageSize = 20,
+    signal?: AbortSignal,
+  ) {
+    await wait(this.latency, signal)
+    const matchingItems = this.chargePoints.filter(
+      (item) => item.stationId === stationId,
+    )
+    const start = (page - 1) * pageSize
+    return {
+      items: matchingItems.slice(start, start + pageSize).map((item) => ({
+        ...item,
+        connectors: item.connectors.map((connector) => ({ ...connector })),
+      })),
+      page,
+      pageSize,
+      total: matchingItems.length,
+      totalPages: Math.ceil(matchingItems.length / pageSize),
+    }
+  }
+
   async checkCodeAvailability(code: string, signal?: AbortSignal) {
     await wait(this.latency, signal)
     const normalizedCode = code.trim()
