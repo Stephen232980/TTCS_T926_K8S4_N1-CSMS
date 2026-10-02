@@ -13,6 +13,7 @@ from src.modules.charging.models import (
     AuthorizationAttempt,
     ChargingCard,
     ChargingSession,
+    ChargingSessionEvent,
     MeterSample,
     PendingChargingMessage,
 )
@@ -140,8 +141,15 @@ def numeric_sample(sample: SamplePayload) -> tuple[Decimal, str] | None:
 
 
 async def store_samples(
-    session: AsyncSession, transaction: ChargingSession, blocks: Sequence[MeterBlock]
+    session: AsyncSession,
+    transaction: ChargingSession,
+    blocks: Sequence[MeterBlock],
+    *,
+    backfill: bool = False,
 ) -> None:
+    if backfill:
+        await store_recovery_samples(session, transaction, blocks)
+        return
     previous = (
         await session.scalars(
             select(MeterSample)
@@ -214,6 +222,65 @@ async def store_samples(
             latest[key] = (block.timestamp, value)
 
 
+async def store_recovery_samples(
+    session: AsyncSession, transaction: ChargingSession, blocks: Sequence[MeterBlock]
+) -> None:
+    """Late buffered samples retain their timestamps, including gaps before newest data."""
+    values = (
+        await session.scalars(
+            select(MeterSample).where(MeterSample.session_id == transaction.id)
+        )
+    ).all()
+    series: dict[tuple[str, str, str], dict[datetime, Decimal]] = {}
+    for item in values:
+        series.setdefault((item.measurand, item.phase, item.location), {})[
+            item.timestamp
+        ] = item.value
+    for block in sorted(blocks, key=lambda item: item.timestamp):
+        if block.timestamp < transaction.started_at or (
+            transaction.ended_at is not None and block.timestamp > transaction.ended_at
+        ):
+            continue
+        for sample in block.sampledValue:
+            numeric = numeric_sample(sample)
+            if numeric is None:
+                continue
+            value, unit = numeric
+            key = (sample.measurand, sample.phase, sample.location)
+            points = series.setdefault(key, {})
+            if block.timestamp in points:
+                if points[block.timestamp] != value:
+                    review(transaction, "conflicting_meter_timestamp")
+                continue
+            if sample.measurand == "Energy.Active.Import.Register":
+                before = [stamp for stamp in points if stamp < block.timestamp]
+                after = [stamp for stamp in points if stamp > block.timestamp]
+                previous = (
+                    points[max(before)]
+                    if before
+                    else transaction.meter_start_wh
+                    if key == ("Energy.Active.Import.Register", "", "Outlet")
+                    else None
+                )
+                following = points[min(after)] if after else None
+                if (previous is not None and value < previous) or (
+                    following is not None and value > following
+                ):
+                    review(transaction, "meter_regression")
+            session.add(
+                MeterSample(
+                    session_id=transaction.id,
+                    timestamp=block.timestamp,
+                    measurand=sample.measurand,
+                    phase=sample.phase,
+                    location=sample.location,
+                    value=value,
+                    unit=unit,
+                )
+            )
+            points[block.timestamp] = value
+
+
 async def start_transaction(
     session: AsyncSession, charger: ChargePoint, frame: Frame, payload: StartPayload
 ) -> dict[str, object]:
@@ -241,6 +308,7 @@ async def start_transaction(
         old.ended_at = datetime.now(UTC)
         old.stop_reason = "ReplacedByNewTransaction"
         review(old, "replaced_open_session")
+        old.abnormal_since = None
         logger.warning(
             "ocpp_open_session_replaced transaction=%s charger=%s", old.id, charger.id
         )
@@ -280,16 +348,27 @@ async def meter_values(
         .where(
             ChargingSession.charge_point_id == charger.id,
             Connector.connector_number == payload.connectorId,
-            ChargingSession.ended_at.is_(None),
         )
     )
     if payload.transactionId is not None:
         statement = statement.where(ChargingSession.id == payload.transactionId)
+    else:
+        statement = statement.where(ChargingSession.ended_at.is_(None))
     transaction = await session.scalar(statement.with_for_update(of=ChargingSession))
-    if transaction is None:
+    if (
+        transaction is None
+        or transaction.manual_closed_at is not None
+        or (transaction.ended_at is not None and transaction.recovery_at is None)
+    ):
         pending(session, charger, frame, "no_matching_open_session")
     else:
-        await store_samples(session, transaction, payload.meterValue)
+        await store_samples(
+            session,
+            transaction,
+            payload.meterValue,
+            backfill=payload.transactionId is not None
+            and transaction.recovery_at is not None,
+        )
     return {}
 
 
@@ -314,10 +393,33 @@ async def stop_transaction(
             else "already_closed_transaction",
         )
         return {}
-    await store_samples(session, transaction, payload.transactionData)
+    was_abnormal = transaction.abnormal_since is not None
     transaction.meter_stop_wh = Decimal(payload.meterStop)
     transaction.ended_at = payload.timestamp
     transaction.stop_reason = payload.reason
+    await store_samples(
+        session,
+        transaction,
+        payload.transactionData,
+        backfill=transaction.recovery_at is not None,
+    )
+    transaction.abnormal_since = None
+    transaction.review_reasons = [
+        reason
+        for reason in transaction.review_reasons
+        if reason not in ("offline_timeout", "available_with_open_session")
+    ]
+    if was_abnormal or transaction.recovery_at is not None:
+        session.add(
+            ChargingSessionEvent(
+                session_id=transaction.id,
+                action="late_stop",
+                details={
+                    "meter_stop_wh": str(payload.meterStop),
+                    "ended_at": payload.timestamp.isoformat(),
+                },
+            )
+        )
     if payload.timestamp < transaction.started_at:
         review(transaction, "stop_before_start")
     if (

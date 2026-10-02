@@ -57,7 +57,7 @@ describe('App', () => {
     ['operator', 'Trạm sạc'],
     ['admin', 'Trạm sạc'],
     ['driver', 'Tìm trạm sạc'],
-    ['accountant', 'Khu vực kế toán'],
+    ['accountant', 'Phiên sạc'],
   ])('routes the %s role to its permitted screen', async (role, heading) => {
     const stationApi = new MockStationApi(undefined, 0)
     const listStations = vi.spyOn(stationApi, 'listStations')

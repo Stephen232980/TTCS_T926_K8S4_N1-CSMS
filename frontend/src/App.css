@@ -405,3 +405,19 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .charging-session > .ocpp-facts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 680px) { .charging-session > .ocpp-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .charging-chart-heading select { width: 100%; min-width: 0; box-sizing: border-box; }
+.charging-session-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
+.charging-session-actions button { min-height: 44px; }
+.charging-session-actions .primary-button { width: auto; padding: 0 16px; }
+.charging-session > .text-button { margin-right: 20px; }
+.charging-close-form { margin-top: 20px; padding: 24px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; max-width: 720px; }
+.charging-close-form h3 { margin-top: 0; }
+.charging-close-form .form-field { margin-top: 20px; }
+.charging-close-form textarea { width: 100%; box-sizing: border-box; padding: 12px; font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--field-border); border-radius: 8px; resize: vertical; }
+.charging-close-confirm { display: flex; align-items: flex-start; gap: 12px; margin-top: 20px; line-height: 1.6; }
+.charging-close-confirm input { flex: 0 0 auto; margin-top: 6px; accent-color: var(--accent-strong); }
+.charging-abnormal-note { font-weight: 600; }
+.charging-history { margin-top: 20px; }
+.charging-history ol { padding-left: 24px; }
+.charging-history li { padding: 12px 0; }
+.charging-history p { margin: 6px 0 0; }
+@media (max-width: 680px) { .charging-close-form { padding: 16px; } .charging-close-form .ocpp-facts { grid-template-columns: 1fr; } .charging-close-form .charging-session-actions button { flex: 1 1 100%; padding: 10px 16px; } }

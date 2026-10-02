@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     auth_cookie_secure: bool = False
     ocpp_heartbeat_interval_seconds: int = Field(default=60, gt=0)
     ocpp_reply_cleanup_interval_seconds: int = Field(default=3600, gt=0)
+    charging_abnormal_offline_seconds: int = Field(default=21600, gt=0)
+    charging_recovery_scan_interval_seconds: int = Field(default=60, gt=0)
 
     model_config = SettingsConfigDict(
         env_file=".env",
