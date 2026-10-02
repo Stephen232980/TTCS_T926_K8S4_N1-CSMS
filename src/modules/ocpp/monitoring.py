@@ -8,6 +8,7 @@ from uuid import UUID
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 from sqlalchemy import literal, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import set_committed_value
 from sqlalchemy.sql.elements import ColumnElement
 
 from src.modules.stations.models import ChargePoint, Connector, ConnectorError
@@ -67,24 +68,43 @@ def expired(now: datetime) -> ColumnElement[bool]:
 
 
 async def mark_seen(
-    session: AsyncSession, charger_id: UUID, now: datetime | None = None
+    session: AsyncSession,
+    charger_id: UUID,
+    now: datetime | None = None,
+    *,
+    locked_charger: ChargePoint | None = None,
 ) -> None:
     now = now or datetime.now(UTC)
     # Expired connector observations remain unknown after reconnection until reported anew.
-    await session.scalar(
-        select(ChargePoint.id).where(ChargePoint.id == charger_id).with_for_update()
-    )
-    stale = select(ChargePoint.id).where(ChargePoint.id == charger_id, expired(now))
-    await session.execute(
-        update(Connector)
-        .where(Connector.charge_point_id.in_(stale), Connector.archived_at.is_(None))
-        .values(
-            status="unknown",
-            raw_ocpp_status=None,
-            status_updated_at=now,
-            updated_at=Connector.updated_at,
+    if locked_charger is None:
+        row = (
+            await session.execute(
+                select(ChargePoint.last_seen_at, ChargePoint.heartbeat_interval_seconds)
+                .where(ChargePoint.id == charger_id)
+                .with_for_update()
+            )
+        ).first()
+        if row is None:
+            return
+        last_seen, interval = row
+    else:
+        last_seen, interval = (
+            locked_charger.last_seen_at,
+            locked_charger.heartbeat_interval_seconds,
         )
-    )
+    if last_seen is None or now - last_seen > timedelta(seconds=2 * interval):
+        await session.execute(
+            update(Connector)
+            .where(
+                Connector.charge_point_id == charger_id, Connector.archived_at.is_(None)
+            )
+            .values(
+                status="unknown",
+                raw_ocpp_status=None,
+                status_updated_at=now,
+                updated_at=Connector.updated_at,
+            )
+        )
     # Only this column changes on charge_points; no read/modify/write of the ORM record.
     await session.execute(
         text(
@@ -92,6 +112,8 @@ async def mark_seen(
         ),
         {"now": now, "id": charger_id},
     )
+    if locked_charger is not None:
+        set_committed_value(locked_charger, "last_seen_at", now)
 
 
 async def expire_chargers(session: AsyncSession, now: datetime | None = None) -> None:

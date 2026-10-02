@@ -70,7 +70,12 @@ async def test_every_text_frame_records_contact(monkeypatch, raw):
     )
     conn = connection(uuid4(), uuid4())
     await transport.handle_message(conn, raw)
-    record.assert_awaited_once_with(conn)
+    if raw.startswith("[2,"):
+        transport.dispatch_call.assert_awaited_once_with(
+            conn, decode_frame(raw), record_seen=True
+        )
+    else:
+        record.assert_awaited_once_with(conn)
 
 
 @pytest.mark.asyncio

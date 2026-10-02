@@ -6,6 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     database_url: str
+    database_pool_size: int = Field(default=20, ge=1, le=100)
 
     auth_max_failed_attempts: int = Field(default=5, gt=0)
     auth_lock_seconds: int = Field(default=900, gt=0)

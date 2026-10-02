@@ -18,7 +18,7 @@ async def record_contact(connection: OcppConnection) -> None:
         await mark_seen(session, connection.charge_point_id)
 
 
-async def handle_message(connection: OcppConnection, raw: str) -> None:
+async def record_contact_or_error(connection: OcppConnection) -> bool:
     try:
         await record_contact(connection)
     except SQLAlchemyError:
@@ -28,8 +28,16 @@ async def handle_message(connection: OcppConnection, raw: str) -> None:
         await connection.send(
             error_frame("", "InternalError", "Unable to record contact")
         )
-        return
+        return False
+    return True
+
+
+async def handle_message(connection: OcppConnection, raw: str) -> None:
+    # CALL contact and business changes share one transaction and one charger lock.
+    # Replies, malformed and oversized frames still record contact independently.
     if len(raw) > 65536:
+        if not await record_contact_or_error(connection):
+            return
         await connection.send(
             error_frame("", "FormationViolation", "Frame exceeds maximum size")
         )
@@ -37,11 +45,15 @@ async def handle_message(connection: OcppConnection, raw: str) -> None:
     try:
         frame = decode_frame(raw)
     except FrameError as error:
+        if not await record_contact_or_error(connection):
+            return
         await connection.send(
             error_frame(error.message_id, error.code, error.description)
         )
         return
     if frame.kind in (3, 4):
+        if not await record_contact_or_error(connection):
+            return
         future = connection.pending.get(frame.message_id)
         if future is not None and not future.done():
             future.set_result(frame)
@@ -53,7 +65,7 @@ async def handle_message(connection: OcppConnection, raw: str) -> None:
             )
         return
     try:
-        response = await dispatch_call(connection, frame)
+        response = await dispatch_call(connection, frame, record_seen=True)
     except SQLAlchemyError:
         logger.error(
             "ocpp_database_operation_failed charger=%s", connection.charge_point_id

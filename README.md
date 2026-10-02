@@ -487,3 +487,7 @@ Nhóm 2 bổ sung Heartbeat, trạng thái/lỗi đầu nối, offline theo lầ
 và màn hình SSE tự nối lại. Xem [phạm vi, API và kiểm chứng](docs/OCPP_MONITORING_DELIVERY.md).
 Cần nâng migration a721093e4f62 trước khi chạy. Bằng chứng hiện là kiểm thử
 cục bộ; trạng thái Jira/CI và nghiệm thu được kiểm tra riêng.
+
+## Nhóm 3: phiên sạc OCPP
+
+S-15, S-17, S-18, S-19, S-20 bổ sung xác thực thẻ, phiên sạc, số đo và kiểm tra dữ liệu; có màn hình quản lý phiên/thẻ/chờ đối chiếu dùng API thật. Nâng migration d830a62f194b trước khi chạy. Xem [Coverage Matrix, API, kiểm chứng và demo thủ công](docs/OCPP_CHARGING_DELIVERY.md). Đối chiếu/xử lý pending, đóng tay và điều khiển từ xa thuộc các nhóm tiếp theo. Bằng chứng local không thay thế Jira/CI.

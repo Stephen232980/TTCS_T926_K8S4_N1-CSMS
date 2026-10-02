@@ -148,7 +148,9 @@ async def test_inflight_reply_stays_on_old_socket(
     await registry.replace(old)
     started, release = asyncio.Event(), asyncio.Event()
 
-    async def delayed_dispatch(conn: OcppConnection, frame: Frame) -> str:
+    async def delayed_dispatch(
+        conn: OcppConnection, frame: Frame, *, record_seen: bool = False
+    ) -> str:
         started.set()
         await release.wait()
         return encode_frame(Frame(3, frame.message_id, {}))
