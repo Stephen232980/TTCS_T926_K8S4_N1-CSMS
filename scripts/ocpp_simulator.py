@@ -75,7 +75,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--code", required=True, help="Previously registered charger code"
     )
-    parser.add_argument("--hold", type=int, default=600, help="Duration in seconds; 0 runs until stopped")
+    parser.add_argument(
+        "--hold",
+        type=int,
+        default=600,
+        help="Duration in seconds; 0 runs until stopped",
+    )
     parser.add_argument("--message-id", default=str(uuid4()))
     parser.add_argument(
         "--monitor",

@@ -269,7 +269,11 @@ async def test_fifty_simultaneous_contact_and_status_updates():
                     Frame(
                         2,
                         str(uuid4()),
-                        {"connectorId": 0, "status": "Available", "errorCode": "NoError"},
+                        {
+                            "connectorId": 0,
+                            "status": "Available",
+                            "errorCode": "NoError",
+                        },
                         action="StatusNotification",
                     ),
                     session,
