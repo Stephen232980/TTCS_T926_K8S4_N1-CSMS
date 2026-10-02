@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.charging.router import router as charging_router
 from src.modules.identity.router import router as identity_router
+from src.modules.ocpp.control_router import router as control_router
 from src.modules.ocpp.lifecycle import ocpp_lifespan
 from src.modules.ocpp.monitor_router import router as monitor_router
 from src.modules.ocpp.router import router as ocpp_router
@@ -24,6 +25,7 @@ app.include_router(ocpp_router)
 app.include_router(monitor_router)
 app.include_router(discovery_router)
 app.include_router(charging_router)
+app.include_router(control_router)
 
 DatabaseSession = Annotated[AsyncSession, Depends(get_db_session)]
 

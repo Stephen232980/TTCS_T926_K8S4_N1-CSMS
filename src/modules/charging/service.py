@@ -407,7 +407,12 @@ async def stop_transaction(
     transaction.review_reasons = [
         reason
         for reason in transaction.review_reasons
-        if reason not in ("offline_timeout", "available_with_open_session")
+        if reason
+        not in (
+            "offline_timeout",
+            "available_with_open_session",
+            "remote_stop_not_confirmed",
+        )
     ]
     if was_abnormal or transaction.recovery_at is not None:
         session.add(

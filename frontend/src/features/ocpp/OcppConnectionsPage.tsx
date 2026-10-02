@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { notifySessionUnauthorized } from '../auth/sessionEvents'
+import { ControlAction } from './ControlAction'
+import { ControlAudit } from './ControlAudit'
 
 interface Connector {
   id: string; number: number; status: string; raw_ocpp_status: string | null; status_updated_at: string
@@ -19,7 +21,8 @@ const statusNames: Record<string, string> = {
 }
 const statusName = (value: string | null) => statusNames[value ?? 'unknown'] ?? value
 
-export function OcppConnectionsPage() {
+export function OcppConnectionsPage({ canControl = false, canAudit = false }: { canControl?: boolean; canAudit?: boolean }) {
+  const [auditVisible, setAuditVisible] = useState(false)
   const [result, setResult] = useState<Result | null>(null)
   const [page, setPage] = useState(1)
   const [revision, setRevision] = useState(0)
@@ -81,6 +84,7 @@ export function OcppConnectionsPage() {
     {!loading && result && result.items.length > 0 && visible.length === 0 && <p>Không có trụ khớp bộ lọc trong trang này.</p>}
     <div className="ocpp-list">
       {visible.map(connection => <article className="ocpp-row" key={connection.id}>
+        {canControl && <ControlAction chargerId={connection.id} label={connection.code} />}
         <div className="ocpp-row__heading"><div><h2>{connection.code}</h2><p>{connection.station_name}</p></div><span className={`status-badge status-badge--${connection.online ? 'active' : 'inactive'}`}><span aria-hidden="true" />{connection.online ? 'Trực tuyến' : 'Ngoại tuyến'}</span></div>
         <dl className="ocpp-facts"><div><dt>Liên lạc cuối</dt><dd>{time(connection.last_seen_at)}</dd></div><div><dt>Trạng thái cả trụ</dt><dd>{statusName(connection.raw_ocpp_status)}</dd></div><div><dt>Nhà sản xuất / mẫu trụ</dt><dd>{connection.vendor ?? 'Chưa có'} / {connection.model ?? 'Chưa có'}</dd></div><div><dt>Khởi động gần nhất</dt><dd>{time(connection.last_boot_at)}</dd></div></dl>
         {connection.error_code && connection.error_code !== 'NoError' && <p className="ocpp-error">Lỗi trụ: {connection.error_code}{connection.vendor_error_code ? ` · ${connection.vendor_error_code}` : ''} · {time(connection.error_at)}</p>}
@@ -90,6 +94,7 @@ export function OcppConnectionsPage() {
         <details className="ocpp-details"><summary>Thông tin kết nối và khởi động</summary><p>{connection.connected ? 'Socket đang kết nối' : 'Socket chưa kết nối'} · {connection.boot_accepted ? 'Đã chấp nhận khởi động' : 'Chưa được chấp nhận khởi động'} · Firmware {connection.firmware_version ?? 'Chưa có'}</p><p>Kết nối từ: {time(connection.connected_at)}</p></details>
       </article>)}
     </div>
+    {canAudit && <><button className="secondary-button" aria-expanded={auditVisible} onClick={() => setAuditVisible(value => !value)}>Nhật ký điều khiển</button>{auditVisible && <ControlAudit />}</>}
     {result && result.total_pages > 1 && <nav className="station-form__actions" aria-label="Phân trang kết nối"><button className="secondary-button" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Trang trước</button><span>Trang {page} / {result.total_pages}</span><button className="secondary-button" disabled={page >= result.total_pages} onClick={() => setPage(p => p + 1)}>Trang sau</button></nav>}
   </section>
 }

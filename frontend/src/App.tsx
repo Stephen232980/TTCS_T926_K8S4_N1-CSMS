@@ -138,7 +138,7 @@ function App({ authApi = defaultAuthApi, stationApi, chargePointApi }: AppProps)
       ) : !permissions.canViewStations ? (
         primaryRole === 'driver' ? <DriverMapPage /> : <RoleHomePage role={primaryRole} />
       ) : workspace === 'ocpp' ? (
-        <OcppConnectionsPage />
+        <OcppConnectionsPage canControl={permissions.canControlChargers} canAudit={permissions.canViewControlAudit} />
       ) : workspace === 'charging' ? (
         <ChargingSessionsPage canManage={permissions.canViewStations} canClose={permissions.canCloseChargingSessions} />
       ) : selectedStationId ? (

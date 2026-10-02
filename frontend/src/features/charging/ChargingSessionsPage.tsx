@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { MeterChart } from './MeterChart'
 import { ManualCloseForm } from './ManualCloseForm'
+import { ControlAction } from '../ocpp/ControlAction'
 import { notifySessionUnauthorized } from '../auth/sessionEvents'
 
 interface Session {
@@ -22,6 +23,7 @@ const reviews: Record<string, string> = {
   replaced_open_session: 'Đầu nối nhận phiên mới khi phiên cũ chưa đóng', stop_meter_below_start: 'Số đo cuối nhỏ hơn số đo đầu',
   meter_regression: 'Số đo điện năng giảm', conflicting_meter_timestamp: 'Hai số đo khác nhau cùng mốc thời gian', stop_before_start: 'Thời điểm kết thúc trước lúc bắt đầu', reservation_not_verified: 'Mã đặt chỗ chưa được đối chiếu',
   negative_start_meter: 'Số đo bắt đầu không hợp lệ',
+  remote_stop_not_confirmed: 'Trụ nhận lệnh dừng nhưng chưa gửi tin kết thúc sau 2 phút — cần kiểm tra',
   offline_timeout: 'Trụ ngoại tuyến quá ngưỡng, chưa nhận tin kết thúc', available_with_open_session: 'Đầu nối báo sẵn sàng nhưng phiên vẫn đang mở', manual_closure: 'Phiên được đóng tay bằng số đo cuối đã lưu',
 }
 const quantities: Record<string, string> = { 'Energy.Active.Import.Register': 'Điện năng tích lũy', 'Power.Active.Import': 'Công suất nạp', 'Power.Offered': 'Công suất cấp', 'Current.Import': 'Dòng điện', Voltage: 'Điện áp', SoC: 'Mức pin', Frequency: 'Tần số', Temperature: 'Nhiệt độ' }
@@ -168,6 +170,7 @@ export function ChargingSessionsPage({ canManage = true, canClose = false }: { c
         {item.review_reasons.length > 0 && <ul className="charging-review" aria-label={`Lý do xem xét phiên ${item.id}`}>{item.review_reasons.map(reason => <li key={reason}>{reviews[reason] ?? reason}</li>)}</ul>}
         {item.abnormal_since && !item.ended_at && <p className="charging-abnormal-note">Bất thường từ {clock(item.abnormal_since)} · Chưa chốt điện năng</p>}
         {item.manual_close_reason && <p>Đã đóng tay · Lý do: {item.manual_close_reason}</p>}
+        {canClose && !item.ended_at && <ControlAction sessionId={item.id} label={`phiên ${item.id}`} onDone={() => setRevision(r => r + 1)} />}
         {canClose && item.abnormal_since && !item.ended_at && <div className="charging-session-actions"><button className="secondary-button" onClick={() => { setClosing(closing === item.id ? null : item.id); setNotice('') }} aria-expanded={closing === item.id}>Đóng tay phiên {item.id}</button></div>}
         {canClose && closing === item.id && !item.ended_at && item.abnormal_since && <ManualCloseForm sessionId={item.id} latestMeter={item.latest_meter_wh} startMeter={item.meter_start_wh} meterAt={item.latest_meter_at} onCancel={() => setClosing(null)} onSubmit={reason => closeSession(item.id, reason)} />}
         <button className="text-button" aria-expanded={historyId === item.id} onClick={() => setHistoryId(historyId === item.id ? null : item.id)}>{historyId === item.id ? 'Ẩn lịch sử phục hồi' : `Xem lịch sử phục hồi phiên ${item.id}`}</button>

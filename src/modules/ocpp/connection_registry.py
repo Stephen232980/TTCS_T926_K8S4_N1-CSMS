@@ -27,18 +27,35 @@ class OcppConnection:
             await self.websocket.send_text(raw)
 
     async def call(
-        self, action: str, payload: dict[str, object], timeout: float = 30
+        self,
+        action: str,
+        payload: dict[str, object],
+        timeout: float = 30,
+        message_id: str | None = None,
     ) -> Frame:
         from uuid import uuid4
 
-        message_id = str(uuid4())
+        message_id = message_id or str(uuid4())
         future: asyncio.Future[Frame] = asyncio.get_running_loop().create_future()
         self.pending[message_id] = future
         try:
-            await self.send(encode_frame(Frame(2, message_id, payload, action=action)))
-            return await asyncio.wait_for(future, timeout)
+            async with asyncio.timeout(timeout):
+                await self.send(
+                    encode_frame(Frame(2, message_id, payload, action=action))
+                )
+                try:
+                    return await future
+                except asyncio.CancelledError:
+                    task = asyncio.current_task()
+                    if task is not None and task.cancelling() == 0:
+                        raise ConnectionError(
+                            "Charger disconnected during command"
+                        ) from None
+                    raise
         finally:
             self.pending.pop(message_id, None)
+            if not future.done():
+                future.cancel()
 
     def cancel_pending(self) -> None:
         for future in self.pending.values():
@@ -84,6 +101,7 @@ class OcppConnectionRegistry:
         async with self._lock:
             current = self._connections.get(charge_point_code)
             if current is not None and current.websocket is websocket:
+                current.cancel_pending()
                 del self._connections[charge_point_code]
 
     async def get(self, charge_point_code: str) -> OcppConnection | None:
