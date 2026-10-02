@@ -420,4 +420,21 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .charging-history ol { padding-left: 24px; }
 .charging-history li { padding: 12px 0; }
 .charging-history p { margin: 6px 0 0; }
+.remote-control { margin: 16px 0; }
+.remote-control__confirmation { max-width: 720px; margin-top: 16px; padding: 20px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.remote-control__confirmation h3 { margin-top: 0; }
+.remote-control__confirmation p { line-height: 1.6; }
+.remote-control__confirmation label { display: grid; gap: 8px; }
+.remote-control__confirmation select { min-height: 44px; padding: 10px; font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--field-border); border-radius: 8px; }
+.remote-control__buttons { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 20px; }
+.remote-control__buttons .primary-button { width: auto; padding: 12px 20px; }
+.control-audit { margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--line); }
+.control-audit__filters { display: flex; flex-wrap: wrap; align-items: end; gap: 16px; }
+.control-audit__filters label { display: grid; gap: 8px; flex: 1 1 200px; }
+.control-audit__filters input { width: 100%; min-width: 0; box-sizing: border-box; min-height: 44px; padding: 10px; font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--field-border); border-radius: 8px; }
+.control-audit__entries { padding: 0; list-style: none; }
+.control-audit__entries li { padding: 20px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.control-audit .pagination { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+.control-audit .pagination button { width: auto; height: auto; min-height: 44px; padding: 10px 16px; }
+@media (max-width: 680px) { .remote-control__confirmation { padding: 16px; } .remote-control__buttons button { flex: 1 1 100%; } }
 @media (max-width: 680px) { .charging-close-form { padding: 16px; } .charging-close-form .ocpp-facts { grid-template-columns: 1fr; } .charging-close-form .charging-session-actions button { flex: 1 1 100%; padding: 10px 16px; } }

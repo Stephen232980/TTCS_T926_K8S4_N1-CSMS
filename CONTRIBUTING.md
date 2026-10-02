@@ -359,3 +359,7 @@ S-15, S-17, S-18, S-19, S-20 bổ sung xác thực thẻ, phiên sạc, số đo
 ## Nhóm 4: phục hồi phiên sạc
 
 S-21 và S-25 bổ sung giữ phiên khi nối lại, nhận tin/số đo muộn theo transactionId, đánh dấu bất thường khi offline quá ngưỡng (mặc định 6 giờ), đóng tay có lý do và lịch sử. Giao diện có bộ lọc bất thường, xác nhận đóng tay và quyền đọc cho kế toán. Nâng migration e41b9027c6a8 trước khi chạy. Xem [AC, API, cấu hình và kiểm thử thủ công](docs/OCPP_RECOVERY_DELIVERY.md). Đóng tay hồ sơ không gửi lệnh dừng tới trụ; pending không khớp vẫn không tự gán phiên. Bằng chứng local không thay Jira/CI.
+
+## Nhóm 5: điều khiển từ xa
+
+S-16, S-23, S-27 thêm Reset, dừng phiên từ xa và nhật ký bất biến. Operator/admin gửi lệnh; admin lọc nhật ký. Accepted không tự đóng phiên; chờ StopTransaction thật, sau 2 phút thiếu tin kết thúc thì cần kiểm tra. Nâng migration f52c813d7a09. Xem [AC, API và test thủ công](docs/OCPP_CONTROL_DELIVERY.md). Bằng chứng local không thay Jira/CI.
