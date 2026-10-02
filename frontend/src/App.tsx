@@ -34,7 +34,7 @@ function App({ authApi = defaultAuthApi, stationApi, chargePointApi }: AppProps)
   const [notice, setNotice] = useState('')
   const [noticeVersion, setNoticeVersion] = useState(0)
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null)
-  const [workspace, setWorkspace] = useState<'stations' | 'ocpp' | 'charging'>('stations')
+  const [workspace, setWorkspace] = useState<'stations' | 'ocpp' | 'charging' | 'driver'>('stations')
 
   const loadCurrentUser = useCallback(async () => {
     const user = await authApi.getCurrentUser()
@@ -132,11 +132,14 @@ function App({ authApi = defaultAuthApi, stationApi, chargePointApi }: AppProps)
         <button className={workspace === 'stations' ? 'text-button workspace-switch__active' : 'text-button'} aria-pressed={workspace === 'stations'} onClick={() => setWorkspace('stations')}>Trạm sạc</button>
         <button className={workspace === 'ocpp' ? 'text-button workspace-switch__active' : 'text-button'} aria-pressed={workspace === 'ocpp'} onClick={() => setWorkspace('ocpp')}>Kết nối trụ</button>
         <button className={workspace === 'charging' ? 'text-button workspace-switch__active' : 'text-button'} aria-pressed={workspace === 'charging'} onClick={() => setWorkspace('charging')}>Phiên sạc</button>
+        {permissions.canUseDriver && <button className={workspace === 'driver' ? 'text-button workspace-switch__active' : 'text-button'} aria-pressed={workspace === 'driver'} onClick={() => setWorkspace('driver')}>Tài xế</button>}
       </nav>}
       {!permissions.canViewStations && permissions.canViewCharging ? (
         <ChargingSessionsPage canManage={false} canClose={false} />
       ) : !permissions.canViewStations ? (
         primaryRole === 'driver' ? <DriverMapPage /> : <RoleHomePage role={primaryRole} />
+      ) : workspace === 'driver' && permissions.canUseDriver ? (
+        <DriverMapPage />
       ) : workspace === 'ocpp' ? (
         <OcppConnectionsPage canControl={permissions.canControlChargers} canAudit={permissions.canViewControlAudit} />
       ) : workspace === 'charging' ? (

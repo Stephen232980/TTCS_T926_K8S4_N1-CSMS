@@ -336,6 +336,9 @@ async def start_transaction(
     await StationRepository(session).lock_charge_point_code_for_charging(
         charger.id, locked_at=datetime.now(UTC)
     )
+    from src.modules.charging.driver import attach_remote_start
+
+    await attach_remote_start(session, transaction, card)
     return {"transactionId": transaction.id, "idTagInfo": {"status": result}}
 
 

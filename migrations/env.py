@@ -9,6 +9,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from src.config import settings
+from src.modules.charging import driver_models  # noqa: F401
 from src.modules.charging import models as charging_models  # noqa: F401
 from src.modules.identity import models  # noqa: F401
 from src.modules.ocpp import control_models  # noqa: F401

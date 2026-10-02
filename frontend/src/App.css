@@ -433,6 +433,22 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .control-audit__filters label { display: grid; gap: 8px; flex: 1 1 200px; }
 .control-audit__filters input { width: 100%; min-width: 0; box-sizing: border-box; min-height: 44px; padding: 10px; font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--field-border); border-radius: 8px; }
 .control-audit__entries { padding: 0; list-style: none; }
+.driver-charging, .driver-connectors { margin-bottom: 32px; padding: 24px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.driver-charging h2, .driver-connectors h2 { margin-top: 0; }
+.driver-charging a { color: var(--accent-strong); text-underline-offset: 3px; }
+.driver-charging p, .driver-connectors p { line-height: 1.6; }
+.driver-session-values { display: flex; flex-wrap: wrap; gap: 24px 64px; font-variant-numeric: tabular-nums; }
+.driver-session-values dt { color: var(--muted); }
+.driver-session-values dd { margin: 8px 0 0; font-size: 1.8rem; font-weight: 700; }
+.driver-session-values dd span { font-size: 1rem; font-weight: 400; }
+.driver-connectors > label { display: block; margin-bottom: 8px; }
+.driver-connectors select { width: 100%; max-width: 640px; min-height: 44px; padding: 10px; font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--field-border); border-radius: 8px; }
+.driver-selected-connector { overflow-wrap: anywhere; }
+.driver-connectors .driver-plug-confirm { display: flex; align-items: flex-start; gap: 12px; margin: 20px 0; line-height: 1.6; }
+.driver-plug-confirm input { width: 20px; height: 20px; flex: 0 0 auto; margin-top: 4px; accent-color: var(--accent-strong); }
+.driver-connectors .primary-button { width: auto; padding: 12px 20px; }
+.driver-start-status { color: var(--accent-strong); font-weight: 600; }
+@media (max-width: 680px) { .driver-charging, .driver-connectors { padding: 16px; } .driver-connectors .primary-button { width: 100%; } .driver-session-location { overflow-wrap: anywhere; } }
 .control-audit__entries li { padding: 20px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
 .control-audit .pagination { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
 .control-audit .pagination button { width: auto; height: auto; min-height: 44px; padding: 10px 16px; }
