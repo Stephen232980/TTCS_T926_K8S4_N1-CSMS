@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DriverMapPage } from './DriverMapPage'
 
 vi.mock('../../components/maps/StationMap', () => ({ StationMap: () => <div aria-label="Bản đồ trạm sạc" /> }))
+vi.mock('./DriverCharging', () => ({ DriverCharging: () => <div /> }))
 afterEach(() => vi.unstubAllGlobals())
 const data = { items: [{ id: 'one', name: 'Trạm thật', address: 'Địa chỉ trạm', latitude: 10.7, longitude: 106.7 }], page: 1, total: 1, total_pages: 1 }
 describe('DriverMapPage', () => {

@@ -35,7 +35,7 @@ export function ControlAudit() {
     {!data && !error && <p role="status">Đang tải nhật ký…</p>}
     {data?.total === 0 && <p>Chưa có lệnh phù hợp với bộ lọc.</p>}
     <ol className="control-audit__entries">{data?.items.map(entry => <li key={entry.id}>
-      <strong>{entry.action === 'Reset' ? `Khởi động ${entry.payload.type === 'Hard' ? 'cứng' : 'mềm'}` : 'Dừng từ xa'} · {entry.charge_point_code}{entry.transaction_id !== null && ` · Phiên #${entry.transaction_id}`}</strong>
+      <strong>{entry.action === 'Reset' ? `Khởi động ${entry.payload.type === 'Hard' ? 'cứng' : 'mềm'}` : entry.action === 'RemoteStartTransaction' ? 'Bắt đầu từ ứng dụng' : 'Dừng từ xa'} · {entry.charge_point_code}{entry.transaction_id !== null && ` · Phiên #${entry.transaction_id}`}</strong>
       <p>{entry.actor} · {new Date(entry.created_at).toLocaleString('vi-VN')}</p><p>{controlStatuses[entry.status] ?? entry.status}</p>
       {entry.received_at && <p>Kết quả lúc {new Date(entry.received_at).toLocaleString('vi-VN')}</p>}
     </li>)}</ol>

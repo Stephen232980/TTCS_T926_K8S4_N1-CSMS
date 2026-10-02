@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { StationMap, type MapStation } from '../../components/maps/StationMap'
 import { notifySessionUnauthorized } from '../auth/sessionEvents'
+import { DriverCharging } from './DriverCharging'
 
 interface Result { items: MapStation[]; page: number; total: number; total_pages: number }
 export function DriverMapPage() {
@@ -31,7 +32,8 @@ export function DriverMapPage() {
     return () => { window.clearTimeout(timer); controller.abort() }
   }, [query, page, revision])
   return <section className="workspace driver-map-page" aria-labelledby="page-title">
-    <header className="page-heading"><div><h1 id="page-title">Tìm trạm sạc</h1><p>Xem vị trí các trạm đang hoạt động và chọn trạm trên bản đồ.</p></div></header>
+    <DriverCharging stationId={selectedId} stationName={result?.items.find(station => station.id === selectedId)?.name} />
+    <header id="driver-stations" className="page-heading"><div><h1 id="page-title">Tìm trạm sạc</h1><p>Xem vị trí các trạm đang hoạt động và chọn trạm trên bản đồ.</p></div></header>
     <form className="driver-map-search" onSubmit={e => { e.preventDefault(); setQuery(search.trim()); setPage(1) }}>
       <label htmlFor="driver-station-search">Tên trạm hoặc địa chỉ</label>
       <input id="driver-station-search" type="search" maxLength={100} value={search} onChange={e => setSearch(e.target.value)} placeholder="Nhập khu vực bạn muốn tìm" />

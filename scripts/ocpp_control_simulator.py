@@ -16,12 +16,40 @@ async def run(
     outcome: str,
     omit_stop: bool,
     existing_transaction_id: int | None = None,
+    omit_start: bool = False,
+    start_delay: float = 1,
 ) -> None:
     async with connect(
         f"{url.rstrip('/')}/ocpp/{code}", subprotocols=["ocpp1.6"]
     ) as socket:
         pending: dict[str, asyncio.Future[dict[str, object]]] = {}
         transaction_id: int | None = existing_transaction_id
+        meter_wh = 1000
+
+        async def start_transaction(raw_tag: str, connector_number: int) -> None:
+            nonlocal transaction_id
+            await asyncio.sleep(start_delay)
+            result = await call(
+                "StartTransaction",
+                {
+                    "connectorId": connector_number,
+                    "idTag": raw_tag,
+                    "meterStart": meter_wh,
+                    "timestamp": datetime.now(UTC).isoformat(),
+                },
+            )
+            value = result.get("transactionId")
+            if isinstance(value, int):
+                transaction_id = value
+            print(f"Actual StartTransaction: {transaction_id}", flush=True)
+            await call(
+                "StatusNotification",
+                {
+                    "connectorId": connector_number,
+                    "status": "Charging",
+                    "errorCode": "NoError",
+                },
+            )
 
         async def call(action: str, payload: dict[str, object]) -> dict[str, object]:
             uid = str(uuid4())
@@ -36,16 +64,18 @@ async def run(
                 pending.pop(uid, None)
 
         async def stop_transaction() -> None:
+            nonlocal transaction_id
             if transaction_id is not None:
                 await call(
                     "StopTransaction",
                     {
                         "transactionId": transaction_id,
-                        "meterStop": 3500,
+                        "meterStop": max(3500, meter_wh),
                         "reason": "Remote",
                         "timestamp": datetime.now(UTC).isoformat(),
                     },
                 )
+                transaction_id = None
                 print("Sent actual StopTransaction, reason Remote.", flush=True)
                 await call(
                     "StatusNotification",
@@ -71,12 +101,19 @@ async def run(
                     if outcome == "Timeout":
                         continue
                     accepted = (
-                        action in ("Reset", "RemoteStopTransaction")
+                        action
+                        in ("Reset", "RemoteStopTransaction", "RemoteStartTransaction")
                         and outcome == "Accepted"
                     )
                     if action == "RemoteStopTransaction":
                         accepted = (
                             accepted and frame[3].get("transactionId") == transaction_id
+                        )
+                    if action == "RemoteStartTransaction":
+                        accepted = (
+                            accepted
+                            and transaction_id is None
+                            and frame[3].get("connectorId") == 1
                         )
                     await socket.send(
                         json.dumps(
@@ -89,6 +126,18 @@ async def run(
                     )
                     if accepted and action == "RemoteStopTransaction" and not omit_stop:
                         task = asyncio.create_task(stop_transaction())
+                        stops.add(task)
+                        task.add_done_callback(stops.discard)
+                    if (
+                        accepted
+                        and action == "RemoteStartTransaction"
+                        and not omit_start
+                    ):
+                        task = asyncio.create_task(
+                            start_transaction(
+                                frame[3]["idTag"], frame[3]["connectorId"]
+                            )
+                        )
                         stops.add(task)
                         task.add_done_callback(stops.discard)
 
@@ -131,7 +180,24 @@ async def run(
             )
             while True:
                 await call("Heartbeat", {})
-                await asyncio.sleep(15)
+                if transaction_id is not None:
+                    meter_wh += 50
+                    await call(
+                        "MeterValues",
+                        {
+                            "connectorId": 1,
+                            "transactionId": transaction_id,
+                            "meterValue": [
+                                {
+                                    "timestamp": datetime.now(UTC).isoformat(),
+                                    "sampledValue": [
+                                        {"value": str(meter_wh), "unit": "Wh"}
+                                    ],
+                                }
+                            ],
+                        },
+                    )
+                await asyncio.sleep(2)
         finally:
             receiver.cancel()
             for task in stops:
@@ -159,7 +225,20 @@ if __name__ == "__main__":
         action="store_true",
         help="Accept remote stop but omit StopTransaction to test the 2-minute review",
     )
+    parser.add_argument(
+        "--omit-start",
+        action="store_true",
+        help="Accept remote start without StartTransaction to test the 60-second wait",
+    )
+    parser.add_argument(
+        "--start-delay",
+        type=float,
+        default=1,
+        help="Delay actual StartTransaction by this many seconds",
+    )
     args = parser.parse_args()
+    if args.start_delay < 0 or args.start_delay > 120:
+        parser.error("--start-delay must be between 0 and 120")
     if args.id_tag and args.transaction_id is not None:
         parser.error("Use either --id-tag or --transaction-id")
     if args.transaction_id is not None and args.transaction_id <= 0:
@@ -172,5 +251,7 @@ if __name__ == "__main__":
             args.outcome,
             args.omit_stop,
             args.transaction_id,
+            args.omit_start,
+            args.start_delay,
         )
     )

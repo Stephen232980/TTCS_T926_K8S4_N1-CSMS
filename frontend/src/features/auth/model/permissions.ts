@@ -2,6 +2,7 @@ import type { AuthenticatedUser } from './auth'
 
 export function getPermissions(user: AuthenticatedUser) {
   return {
+    canUseDriver: user.roles.includes('driver'),
     canViewStations: user.roles.some((role) =>
       ['station_owner', 'operator', 'admin'].includes(role),
     ),

@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.charging.models import ChargingSession, ChargingSessionEvent
 from src.modules.identity.models import User
-from src.modules.ocpp.connection_registry import ocpp_connections
+from src.modules.ocpp.connection_registry import OcppConnection, ocpp_connections
 from src.modules.ocpp.control_models import ControlRequest, ControlResult
 from src.modules.stations.models import ChargePoint, Station
 from src.platform.database.session import SessionFactory
@@ -123,6 +123,19 @@ async def execute_command(
         ):
             await record_result(session, command_id, "Offline", now)
             return {"id": command_id, "status": "Offline"}
+    outcome = await send_command(connection, command_id, action, payload)
+    async with SessionFactory() as session, session.begin():
+        await record_result(session, command_id, outcome, datetime.now(UTC))
+        return {"id": command_id, "status": await command_status(session, command_id)}
+
+
+async def send_command(
+    connection: OcppConnection,
+    command_id: UUID,
+    action: str,
+    payload: dict[str, object],
+) -> str:
+    """Common response wait for Reset, RemoteStop and driver RemoteStart."""
     try:
         reply = await connection.call(
             action, payload, timeout=COMMAND_TIMEOUT, message_id=str(command_id)
@@ -133,9 +146,7 @@ async def execute_command(
         outcome = "Timeout"
     except (ConnectionError, OSError, RuntimeError, WebSocketDisconnect):
         outcome = "Disconnected"
-    async with SessionFactory() as session, session.begin():
-        await record_result(session, command_id, str(outcome), datetime.now(UTC))
-        return {"id": command_id, "status": await command_status(session, command_id)}
+    return str(outcome)
 
 
 async def scan_control_deadlines(
