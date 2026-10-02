@@ -27,3 +27,10 @@ Làm sớm phần bản đồ vị trí của S-47: tài xế xem trạm active,
 | API quản lý giữ phạm vi | Không cấp driver quyền API quản lý | Không hiện tạo/sửa cho driver | Test driver gọi /api/v1/stations trả 403 |
 
 Nguồn tile mặc định: OpenStreetMap, có attribution; VITE_MAP_TILE_URL và VITE_MAP_ATTRIBUTION cho đổi nhà cung cấp. Không tải hàng loạt tile. Vị trí người dùng chỉ được yêu cầu khi bấm định vị; không gửi vị trí lên API CSMS.
+
+## Nhóm giám sát S-09–S-12
+
+Nhóm 2 bổ sung Heartbeat, trạng thái/lỗi đầu nối, offline theo lần liên lạc cuối
+và màn hình SSE tự nối lại. Xem [phạm vi, API và kiểm chứng](OCPP_MONITORING_DELIVERY.md).
+Cần nâng migration a721093e4f62 trước khi chạy. Bằng chứng hiện là kiểm thử
+cục bộ; trạng thái Jira/CI và nghiệm thu được kiểm tra riêng.

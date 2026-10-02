@@ -9,7 +9,7 @@ from fastapi import APIRouter, WebSocket
 from src.modules.ocpp.connection_registry import OcppConnection, ocpp_connections
 from src.modules.ocpp.frames import error_frame
 from src.modules.ocpp.service import find_registered_charge_point
-from src.modules.ocpp.transport import handle_message
+from src.modules.ocpp.transport import handle_message, record_contact
 
 OCPP_SUBPROTOCOL = "ocpp1.6"
 
@@ -65,6 +65,7 @@ async def connect_charge_point(websocket: WebSocket, charge_point_code: str) -> 
                 break
             raw = message.get("text")
             if raw is None:
+                await record_contact(connection)
                 await connection.send(
                     error_frame("", "FormationViolation", "OCPP requires text frames")
                 )

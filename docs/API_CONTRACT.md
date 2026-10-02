@@ -431,3 +431,10 @@ Chủ trạm chọn vị trí trên bản đồ thay cho nhập kinh độ/vĩ �
 `GET /api/v1/driver/stations?page=1&page_size=100&search=...` cần phiên đăng nhập có role `driver`. Chỉ trả trạm `active` và `archived_at IS NULL`. Các field item: `id`, `name`, `address`, `latitude`, `longitude`; không trả `owner_id`, dữ liệu quản lý hay tài chính. Response gồm `items`, `page`, `total`, `total_pages`. Page >= 1, page_size 1..100, search tối đa 100 ký tự, tìm tên/địa chỉ không phân biệt hoa thường. 401/403/422 theo hành vi hiện tại. Tài xế vẫn không có quyền gọi API quản lý trạm.
 
 Đây là phần vị trí được làm sớm của S-47, chưa trả giá hoặc số đầu nối rảnh. API đang dùng DB CSMS, không lấy danh sách trạm ngoài hệ thống.
+
+## Nhóm giám sát S-09–S-12
+
+Nhóm 2 bổ sung Heartbeat, trạng thái/lỗi đầu nối, offline theo lần liên lạc cuối
+và màn hình SSE tự nối lại. Xem [phạm vi, API và kiểm chứng](OCPP_MONITORING_DELIVERY.md).
+Cần nâng migration a721093e4f62 trước khi chạy. Bằng chứng hiện là kiểm thử
+cục bộ; trạng thái Jira/CI và nghiệm thu được kiểm tra riêng.

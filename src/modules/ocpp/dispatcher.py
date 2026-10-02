@@ -14,6 +14,7 @@ from src.config import settings
 from src.modules.ocpp.connection_registry import OcppConnection
 from src.modules.ocpp.frames import Frame, encode_frame, error_frame
 from src.modules.ocpp.models import OcppMessageReply
+from src.modules.ocpp.monitoring import HeartbeatPayload, StatusPayload, report_status
 from src.modules.stations.models import ChargePoint, Station
 from src.platform.database.session import SessionFactory
 
@@ -126,6 +127,9 @@ async def process_call(
                 if "firmwareVersion" in frame.payload:
                     charge_point.firmware_version = boot.firmwareVersion
                 charge_point.last_boot_at = now
+                charge_point.heartbeat_interval_seconds = (
+                    settings.ocpp_heartbeat_interval_seconds
+                )
                 charge_point.status = "online"
                 charge_point.status_updated_at = now
             else:
@@ -140,6 +144,30 @@ async def process_call(
                         "interval": settings.ocpp_heartbeat_interval_seconds,
                     },
                 )
+            )
+    elif frame.action in ("Heartbeat", "StatusNotification"):
+        try:
+            if any(value is None for value in frame.payload.values()):
+                raise ValueError("Null property")
+            if frame.action == "Heartbeat":
+                HeartbeatPayload.model_validate(frame.payload)
+                charge_point.status = "online"
+                response = encode_frame(
+                    Frame(
+                        3,
+                        frame.message_id,
+                        {"currentTime": datetime.now(UTC).isoformat()},
+                    )
+                )
+            else:
+                status = StatusPayload.model_validate_json(json.dumps(frame.payload))
+                await report_status(session, charge_point, status)
+                response = encode_frame(Frame(3, frame.message_id, {}))
+        except (ValidationError, ValueError):
+            response = error_frame(
+                frame.message_id,
+                "PropertyConstraintViolation",
+                "Invalid monitoring payload",
             )
     else:
         logger.info(
