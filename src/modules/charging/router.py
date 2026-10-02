@@ -5,7 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
-from sqlalchemy import Row, func, select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -190,9 +190,13 @@ async def update_card(
 
 
 def session_row(
-    row: Row[tuple[ChargingSession, str, str, int, Decimal | None, datetime | None]],
+    transaction: ChargingSession,
+    name: str,
+    code: str,
+    number: int,
+    meter: Decimal | None,
+    timestamp: datetime | None,
 ) -> SessionResponse:
-    transaction, name, code, number, meter, timestamp = row
     return SessionResponse(
         id=transaction.id,
         station_name=name,
@@ -277,7 +281,9 @@ async def sessions(
         )
     ).all()
     return SessionPage(
-        items=[session_row(row) for row in rows],
+        items=[
+            session_row(row[0], row[1], row[2], row[3], row[4], row[5]) for row in rows
+        ],
         total=total,
         page=query.page,
         total_pages=(total + query.page_size - 1) // query.page_size,
