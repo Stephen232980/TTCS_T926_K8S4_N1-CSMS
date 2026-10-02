@@ -1,3 +1,4 @@
+import { StationMap } from '../../../components/maps/StationMap'
 import { useEffect, useState } from 'react'
 import { Icon } from '../../../components/icons/Icon'
 import type { ChargePointApi } from '../../chargePoints/api/chargePointApi'
@@ -125,9 +126,9 @@ export function StationDetailPage({
 
           <dl className="station-detail__facts">
             <div><dt>Mã trạm</dt><dd>{station.id}</dd></div>
-            <div><dt>Vĩ độ</dt><dd>{station.latitude.toFixed(6)}</dd></div>
-            <div><dt>Kinh độ</dt><dd>{station.longitude.toFixed(6)}</dd></div>
           </dl>
+
+          <StationMap stations={[station]} />
 
           <section className="station-detail__charge-points" aria-labelledby="charge-points-title">
             <div className="station-detail__section-heading">

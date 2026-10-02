@@ -413,3 +413,21 @@ Quy tắc:
 | Charge point/code availability | Đã chốt baseline, chờ T-10/T-11 |
 | Error contract chung | Đã chốt baseline, chưa triển khai exception handler |
 
+
+## Kết nối OCPP và màn hình vận hành
+
+WebSocket: /ocpp/{charge_point_code}, subprotocol ocpp1.6.
+GET /api/v1/ocpp/connections?page=1&page_size=50 dành cho owner/operator/admin;
+owner chỉ thấy trụ thuộc trạm của mình, driver nhận 403. page >= 1, page_size
+từ 1 đến 100. Trả items/total/page/total_pages và dữ liệu kết nối/Boot;
+xem [hợp đồng chi tiết](OCPP_FOUNDATION_DELIVERY.md).
+Các action OCPP ngoài BootNotification hiện trả NotImplemented sau Boot.
+
+
+## Bản đồ vị trí trạm — điều chỉnh 02/10/2026
+
+Chủ trạm chọn vị trí trên bản đồ thay cho nhập kinh độ/vĩ độ. POST/PATCH trạm vẫn gửi `latitude`/`longitude` dưới dạng number, giữ nguyên ràng buộc và DB; UI không hiện tọa độ thô.
+
+`GET /api/v1/driver/stations?page=1&page_size=100&search=...` cần phiên đăng nhập có role `driver`. Chỉ trả trạm `active` và `archived_at IS NULL`. Các field item: `id`, `name`, `address`, `latitude`, `longitude`; không trả `owner_id`, dữ liệu quản lý hay tài chính. Response gồm `items`, `page`, `total`, `total_pages`. Page >= 1, page_size 1..100, search tối đa 100 ký tự, tìm tên/địa chỉ không phân biệt hoa thường. 401/403/422 theo hành vi hiện tại. Tài xế vẫn không có quyền gọi API quản lý trạm.
+
+Đây là phần vị trí được làm sớm của S-47, chưa trả giá hoặc số đầu nối rảnh. API đang dùng DB CSMS, không lấy danh sách trạm ngoài hệ thống.

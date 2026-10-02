@@ -50,8 +50,8 @@ describe('StationDetailPage', () => {
       await screen.findByRole('heading', { name: station.name }),
     ).toBeInTheDocument()
     expect(screen.getByText(station.address)).toBeInTheDocument()
-    expect(screen.getByText('10.773100')).toBeInTheDocument()
-    expect(screen.getByText('106.703200')).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Bản đồ trạm sạc' })).toBeInTheDocument()
+    expect(screen.queryByText('Vĩ độ')).not.toBeInTheDocument()
   })
 
   it('returns to the station list', async () => {

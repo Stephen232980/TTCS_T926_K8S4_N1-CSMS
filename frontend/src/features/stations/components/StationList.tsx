@@ -44,10 +44,6 @@ function StationCards({
             <div><h2>{station.name}</h2><p>{station.address}</p></div>
             <StatusBadge status={station.status} />
           </div>
-          <dl>
-            <div><dt>Vĩ độ</dt><dd>{station.latitude.toFixed(4)}</dd></div>
-            <div><dt>Kinh độ</dt><dd>{station.longitude.toFixed(4)}</dd></div>
-          </dl>
           <div className="station-card__actions">
             <button
               className="text-button"
@@ -86,7 +82,6 @@ function StationTable({
           <tr>
             <th scope="col">Tên trạm</th>
             <th scope="col">Địa chỉ</th>
-            <th scope="col">Tọa độ</th>
             <th scope="col">Trạng thái</th>
             {canManageStations && <th scope="col"><span className="sr-only">Thao tác</span></th>}
           </tr>
@@ -105,9 +100,6 @@ function StationTable({
                 </button>
               </td>
               <td>{station.address}</td>
-              <td className="coordinates">
-                {station.latitude.toFixed(4)}, {station.longitude.toFixed(4)}
-              </td>
               <td><StatusBadge status={station.status} /></td>
               {canManageStations && (
                 <td>

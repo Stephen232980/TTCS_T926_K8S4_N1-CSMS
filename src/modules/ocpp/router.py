@@ -7,7 +7,9 @@ from uuid import uuid4
 from fastapi import APIRouter, WebSocket
 
 from src.modules.ocpp.connection_registry import OcppConnection, ocpp_connections
+from src.modules.ocpp.frames import error_frame
 from src.modules.ocpp.service import find_registered_charge_point
+from src.modules.ocpp.transport import handle_message
 
 OCPP_SUBPROTOCOL = "ocpp1.6"
 
@@ -61,6 +63,16 @@ async def connect_charge_point(websocket: WebSocket, charge_point_code: str) -> 
             message = await websocket.receive()
             if message["type"] == "websocket.disconnect":
                 break
-            # S-07 owns OCPP frame decoding and dispatch; S-06 manages socket life.
+            raw = message.get("text")
+            if raw is None:
+                await connection.send(
+                    error_frame("", "FormationViolation", "OCPP requires text frames")
+                )
+            else:
+                await handle_message(connection, raw)
+    except (OSError, RuntimeError):
+        # Replacement/disconnection can race a response to the original socket.
+        pass
     finally:
+        connection.cancel_pending()
         await ocpp_connections.remove(normalized_code, websocket)

@@ -1,3 +1,4 @@
+vi.mock('../../../components/maps/StationMap', () => ({ StationMap: ({ onPick }: { onPick?: (p: { latitude: number; longitude: number }) => void }) => <button type="button" onClick={() => onPick?.({ latitude: 10.7356, longitude: 106.7219 })}>Chọn vị trí thử</button> }))
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
@@ -10,8 +11,7 @@ import { StationListPage } from './StationListPage'
 async function fillCreateForm(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText('Tên trạm'), 'Trạm Quận 7')
   await user.type(screen.getByLabelText('Địa chỉ'), '10 Nguyễn Thị Thập')
-  await user.type(screen.getByLabelText('Vĩ độ'), '10.7356')
-  await user.type(screen.getByLabelText('Kinh độ'), '106.7219')
+    await user.click(screen.getByRole('button', { name: 'Chọn vị trí thử' }))
 }
 
 describe('StationListPage create flow', () => {

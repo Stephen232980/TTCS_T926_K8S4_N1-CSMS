@@ -189,3 +189,15 @@ typecheck, migration hoặc build thất bại; cần đổi ngoài backlog; c�
 đã merge; cần thao tác phá huỷ dữ liệu; cần push/merge/force-push chưa được phép;
 hoặc không thể chứng minh một AC. Không hiển thị `.env`, password, token, cookie,
 secret hoặc connection string thật.
+
+## Nền tảng OCPP Sprint 2–3
+
+Nhóm kết nối OCPP (S-06/07/08/13/14) được giao cùng màn hình Kết nối trụ.
+Xem [phạm vi, Coverage Matrix và cách kiểm thử](OCPP_FOUNDATION_DELIVERY.md). Registry hiện chạy
+một process; nâng migration trước khi khởi động. Kiểm tra trạng thái Jira riêng
+trước nghiệm thu. Phần bản đồ tài xế đã được tích hợp cùng trên nhánh cục bộ.
+
+
+## Điều chỉnh Sprint 2–3 (02/10/2026)
+
+Theo quyết định của người dùng, Sprint 2–3 triển khai theo chức năng với đầu ra DB/API/giao diện chạy thật. Quy tắc một story một nhánh và không làm sớm backlog tương lai được điều chỉnh trong phạm vi [kế hoạch chức năng](SPRINT_2_3_FUNCTION_PLAN.md); AC/NFR của story vẫn được giữ để đối chiếu. Bản đồ vị trí trạm cho tài xế được làm sớm theo yêu cầu mentor.

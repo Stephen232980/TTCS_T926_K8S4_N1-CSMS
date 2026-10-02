@@ -1,7 +1,10 @@
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from decimal import Decimal
+from typing import cast
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -14,6 +17,107 @@ from src.modules.identity.dependencies import get_current_actor
 from src.modules.identity.models import User
 from src.modules.stations.models import Station
 from src.platform.database.session import get_db_session
+
+
+@pytest.mark.asyncio
+async def test_driver_map_http_contract_without_database() -> None:
+    station = Station(
+        id=uuid4(),
+        owner_id=uuid4(),
+        name="Trạm hợp lệ",
+        address="Địa chỉ",
+        latitude=Decimal("10.7"),
+        longitude=Decimal("106.7"),
+        status="active",
+    )
+    session = AsyncMock(spec=AsyncSession)
+    session.scalar.return_value = 1
+    session.scalars.return_value = [station]
+    actor = CurrentActor(user_id=uuid4(), roles=frozenset({"driver"}))
+    async with station_api_client(cast(AsyncSession, session), actor) as client:
+        response = await client.get("/api/v1/driver/stations")
+        management = await client.get("/api/v1/stations")
+        invalid = await client.get("/api/v1/driver/stations?page=0")
+    assert response.status_code == 200
+    assert response.json() == {
+        "items": [
+            {
+                "id": str(station.id),
+                "name": "Trạm hợp lệ",
+                "address": "Địa chỉ",
+                "latitude": 10.7,
+                "longitude": 106.7,
+            }
+        ],
+        "page": 1,
+        "total": 1,
+        "total_pages": 1,
+    }
+    assert management.status_code == 403
+    assert invalid.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_driver_map_excludes_non_active_and_archived_stations(
+    db_session: AsyncSession,
+) -> None:
+    owner = User(
+        email=f"map-owner-{uuid4()}@example.com", password_hash="hashed-password"
+    )
+    db_session.add(owner)
+    await db_session.flush()
+    stations = [
+        Station(
+            owner_id=owner.id,
+            name=f"Map {status}",
+            address="Map address",
+            latitude=Decimal("10.7"),
+            longitude=Decimal("106.7"),
+            status=status,
+        )
+        for status in ("active", "inactive", "suspended", "blocked")
+    ]
+    stations.append(
+        Station(
+            owner_id=owner.id,
+            name="Map archived",
+            address="Map address",
+            latitude=Decimal("10.7"),
+            longitude=Decimal("106.7"),
+            status="active",
+            archived_at=datetime.now(UTC),
+        )
+    )
+    db_session.add_all(stations)
+    await db_session.flush()
+    actor = CurrentActor(user_id=uuid4(), roles=frozenset({"driver"}))
+    async with station_api_client(db_session, actor) as client:
+        response = await client.get(
+            "/api/v1/driver/stations", params={"search": "Map", "page_size": 1}
+        )
+        management = await client.get("/api/v1/stations")
+        invalid_page = await client.get("/api/v1/driver/stations", params={"page": 0})
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["total"] == 1
+    assert payload["items"][0]["id"] == str(stations[0].id)
+    assert set(payload["items"][0]) == {
+        "id",
+        "name",
+        "address",
+        "latitude",
+        "longitude",
+    }
+    assert management.status_code == 403
+    assert invalid_page.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_accountant_cannot_access_driver_map(db_session: AsyncSession) -> None:
+    actor = CurrentActor(user_id=uuid4(), roles=frozenset({"accountant"}))
+    async with station_api_client(db_session, actor) as client:
+        response = await client.get("/api/v1/driver/stations")
+    assert response.status_code == 403
 
 
 @asynccontextmanager
