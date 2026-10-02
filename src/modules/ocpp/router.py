@@ -55,9 +55,8 @@ async def connect_charge_point(websocket: WebSocket, charge_point_code: str) -> 
 
     # S-06: suspended/non-active stations connect for status reporting only.
     await websocket.accept(subprotocol=OCPP_SUBPROTOCOL)
-    await ocpp_connections.replace(connection)
-
     try:
+        await ocpp_connections.replace(connection)
         while True:
             message = await websocket.receive()
             if message["type"] == "websocket.disconnect":

@@ -163,3 +163,68 @@ async def test_active_station_can_start_a_session() -> None:
     )
 
     assert connection.can_start_session
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "close_error", [OSError("Peer disconnected"), RuntimeError("Already closed")]
+)
+async def test_new_connection_receives_messages_when_old_socket_close_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    close_error: Exception,
+) -> None:
+    registry = OcppConnectionRegistry()
+    registration = registered_charge_point()
+    old_socket = AsyncMock(spec=WebSocket)
+    old_socket.close.side_effect = close_error
+    await registry.replace(
+        OcppConnection(
+            charge_point_id=registration.charge_point_id,
+            station_id=registration.station_id,
+            charge_point_code="cp-01",
+            station_status="active",
+            websocket=cast(WebSocket, old_socket),
+            connected_at=datetime.now(UTC),
+        )
+    )
+    monkeypatch.setattr(
+        ocpp_router,
+        "find_registered_charge_point",
+        AsyncMock(return_value=registration),
+    )
+    monkeypatch.setattr(ocpp_router, "ocpp_connections", registry)
+    websocket = mock_websocket(["ocpp1.6"])
+
+    await ocpp_router.connect_charge_point(cast(WebSocket, websocket), "CP-01")
+
+    old_socket.close.assert_awaited_once()
+    websocket.accept.assert_awaited_once_with(subprotocol="ocpp1.6")
+    websocket.receive.assert_awaited_once()
+    assert await registry.get("cp-01") is None
+
+
+@pytest.mark.asyncio
+async def test_replacement_failure_cleans_up_new_connection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry = OcppConnectionRegistry()
+    original_replace = registry.replace
+
+    async def failing_replace(connection: OcppConnection) -> None:
+        await original_replace(connection)
+        raise ValueError("Unexpected replacement failure")
+
+    monkeypatch.setattr(registry, "replace", failing_replace)
+    monkeypatch.setattr(
+        ocpp_router,
+        "find_registered_charge_point",
+        AsyncMock(return_value=registered_charge_point()),
+    )
+    monkeypatch.setattr(ocpp_router, "ocpp_connections", registry)
+    websocket = mock_websocket(["ocpp1.6"])
+
+    with pytest.raises(ValueError, match="Unexpected replacement failure"):
+        await ocpp_router.connect_charge_point(cast(WebSocket, websocket), "CP-01")
+
+    websocket.receive.assert_not_awaited()
+    assert await registry.get("cp-01") is None

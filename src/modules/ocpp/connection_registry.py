@@ -46,7 +46,7 @@ class OcppConnectionRegistry:
                     code=1000,
                     reason="Replaced by a newer charge point connection.",
                 )
-            except RuntimeError:
+            except (OSError, RuntimeError):
                 # The prior socket may have disconnected while it was replaced.
                 pass
 
