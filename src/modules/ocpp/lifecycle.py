@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.config import settings
+from src.modules.charging.recovery import flag_abnormal_sessions
 from src.modules.ocpp.dispatcher import prune_replies
 from src.modules.ocpp.monitoring import expire_chargers
 from src.platform.database.session import SessionFactory
@@ -36,10 +37,24 @@ async def offline_loop() -> None:
 
 @asynccontextmanager
 async def ocpp_lifespan(app: FastAPI) -> AsyncIterator[None]:
-    tasks = [asyncio.create_task(cleanup_loop()), asyncio.create_task(offline_loop())]
+    tasks = [
+        asyncio.create_task(cleanup_loop()),
+        asyncio.create_task(offline_loop()),
+        asyncio.create_task(recovery_loop()),
+    ]
     try:
         yield
     finally:
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+
+
+async def recovery_loop() -> None:
+    while True:
+        try:
+            async with SessionFactory() as session, session.begin():
+                await flag_abnormal_sessions(session)
+        except SQLAlchemyError:
+            logging.getLogger("csms.ocpp").error("charging_recovery_scan_failed")
+        await asyncio.sleep(settings.charging_recovery_scan_interval_seconds)

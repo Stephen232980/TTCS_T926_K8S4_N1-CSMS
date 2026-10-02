@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { MeterChart } from './MeterChart'
+import { ManualCloseForm } from './ManualCloseForm'
 import { notifySessionUnauthorized } from '../auth/sessionEvents'
 
 interface Session {
@@ -8,6 +9,7 @@ interface Session {
   tag_tail: string; authorization_status: string; started_at: string; ended_at: string | null
   meter_start_wh: string; meter_stop_wh: string | null; energy_kwh: string | null
   latest_meter_wh: string | null; latest_meter_at: string | null; stop_reason: string | null; review_reasons: string[]
+  abnormal_since?: string | null; recovery_at?: string | null; manual_closed_at?: string | null; manual_close_reason?: string | null
 }
 interface Page<T> { items: T[]; total: number; page: number; total_pages: number }
 interface Card { id: string; tag_tail: string; driver_email: string; status: string; expires_at: string | null }
@@ -20,6 +22,7 @@ const reviews: Record<string, string> = {
   replaced_open_session: 'Đầu nối nhận phiên mới khi phiên cũ chưa đóng', stop_meter_below_start: 'Số đo cuối nhỏ hơn số đo đầu',
   meter_regression: 'Số đo điện năng giảm', conflicting_meter_timestamp: 'Hai số đo khác nhau cùng mốc thời gian', stop_before_start: 'Thời điểm kết thúc trước lúc bắt đầu', reservation_not_verified: 'Mã đặt chỗ chưa được đối chiếu',
   negative_start_meter: 'Số đo bắt đầu không hợp lệ',
+  offline_timeout: 'Trụ ngoại tuyến quá ngưỡng, chưa nhận tin kết thúc', available_with_open_session: 'Đầu nối báo sẵn sàng nhưng phiên vẫn đang mở', manual_closure: 'Phiên được đóng tay bằng số đo cuối đã lưu',
 }
 const quantities: Record<string, string> = { 'Energy.Active.Import.Register': 'Điện năng tích lũy', 'Power.Active.Import': 'Công suất nạp', 'Power.Offered': 'Công suất cấp', 'Current.Import': 'Dòng điện', Voltage: 'Điện áp', SoC: 'Mức pin', Frequency: 'Tần số', Temperature: 'Nhiệt độ' }
 const reasons: Record<string, string> = { no_matching_open_session: 'Không khớp phiên đang mở', unknown_transaction: 'Không tìm thấy phiên', already_closed_transaction: 'Phiên đã kết thúc' }
@@ -36,7 +39,30 @@ async function request<T>(path: string, signal?: AbortSignal, options?: RequestI
   return await response.json() as T
 }
 
-export function ChargingSessionsPage() {
+interface SessionEvent { id: string; action: string; actor: string | null; details: { reason?: string; energy_kwh?: string }; occurred_at: string }
+const eventNames: Record<string, string> = { reconnected: 'Trụ nối lại — giữ nguyên phiên', offline_timeout: 'Đánh dấu bất thường do ngoại tuyến', available_with_open_session: 'Đầu nối sẵn sàng nhưng chưa có tin kết thúc', charging_resumed: 'Đầu nối báo đang sạc trở lại', late_stop: 'Đã nhận tin kết thúc sau gián đoạn', manual_closure: 'Đóng tay bằng số đo cuối' }
+
+function SessionHistory({ id }: { id: number }) {
+  const [events, setEvents] = useState<SessionEvent[] | null>(null)
+  const [error, setError] = useState('')
+  const [retry, setRetry] = useState(0)
+  useEffect(() => {
+    const controller = new AbortController()
+    void request<SessionEvent[]>(`/sessions/${id}/events`, controller.signal).then(value => { if (!controller.signal.aborted) { setEvents(value); setError('') } }).catch(err => { if (!controller.signal.aborted) setError(err instanceof Error ? err.message : 'Không tải được lịch sử.') })
+    return () => controller.abort()
+  }, [id, retry])
+  return <section className="charging-history" aria-label={`Lịch sử phục hồi phiên ${id}`}>
+    <h3>Lịch sử phục hồi</h3>
+    {error && <div role="alert">{error}<button className="secondary-button" onClick={() => setRetry(r => r + 1)}>Tải lại lịch sử</button></div>}
+    {!events && !error && <p>Đang tải lịch sử…</p>}
+    {events?.length === 0 && <p>Chưa có sự kiện phục hồi.</p>}
+    {events && <ol>{events.map(event => <li key={event.id}><strong>{eventNames[event.action] ?? event.action}</strong><p>{clock(event.occurred_at)} · {event.actor ?? 'Hệ thống'}</p>{event.details.reason && <p>Lý do: {event.details.reason}</p>}{event.details.energy_kwh && <p>Điện năng chốt: {number(event.details.energy_kwh)} kWh</p>}</li>)}</ol>}
+  </section>
+}
+
+export function ChargingSessionsPage({ canManage = true, canClose = false }: { canManage?: boolean; canClose?: boolean }) {
+  const [closing, setClosing] = useState<number | null>(null)
+  const [historyId, setHistoryId] = useState<number | null>(null)
   const [mode, setMode] = useState<'sessions' | 'cards' | 'pending'>('sessions')
   const [state, setState] = useState('all')
   const [page, setPage] = useState(1)
@@ -118,22 +144,34 @@ export function ChargingSessionsPage() {
     } catch (err) { setMutationError(err instanceof Error ? err.message : 'Không cập nhật được thẻ.') }
     finally { setSaving(false) }
   }
-  const chooseMode = (value: typeof mode) => { setMode(value); setSelected(null); setNotice(''); setMutationError(''); setError('') }
+  const chooseMode = (value: typeof mode) => { setMode(value); setSelected(null); setClosing(null); setNotice(''); setMutationError(''); setError('') }
+
+  async function closeSession(id: number, reason: string) {
+    const result = await request<{ energy_kwh: string }>(`/sessions/${id}/close`, undefined, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }) })
+    setClosing(null); setNotice(`Đã đóng phiên #${id}, chốt ${number(result.energy_kwh)} kWh. Trụ không nhận lệnh dừng sạc.`); setRevision(r => r + 1)
+  }
 
   return <section className="workspace charging-workspace" aria-labelledby="charging-title">
     <header className="page-heading"><div><h1 id="charging-title">Phiên sạc</h1></div><button className="secondary-button" onClick={() => setRevision(r => r + 1)}>Làm mới</button></header>
-    <nav className="charging-tabs" aria-label="Quản lý phiên sạc">{([['sessions', 'Danh sách phiên'], ['cards', 'Thẻ tài xế'], ['pending', 'Chờ đối chiếu']] as const).map(([value, label]) => <button key={value} className="text-button" aria-pressed={mode === value} onClick={() => chooseMode(value)}>{label}</button>)}</nav>
+    {canManage && <nav className="charging-tabs" aria-label="Quản lý phiên sạc">{([['sessions', 'Danh sách phiên'], ['cards', 'Thẻ tài xế'], ['pending', 'Chờ đối chiếu']] as const).map(([value, label]) => <button key={value} className="text-button" aria-pressed={mode === value} onClick={() => chooseMode(value)}>{label}</button>)}</nav>}
     <p className="ocpp-refresh-note">{error ? 'Mất cập nhật · Dữ liệu có thể đã cũ.' : 'Tự cập nhật mỗi giây'}{updated ? ` · Cập nhật lúc ${clock(updated)}` : ''}</p>
     {error && <div className="form-submit-error" role="alert">{error}<button className="secondary-button" onClick={() => setRevision(r => r + 1)}>Thử lại</button></div>}
     {notice && <p role="status">{notice}</p>}{mutationError && <p className="form-submit-error" role="alert">{mutationError}</p>}
     {mode === 'sessions' && <>
-      <div className="ocpp-toolbar"><label>Trạng thái phiên<select value={state} onChange={e => { setState(e.target.value); setPage(1); setData(null); setSelected(null) }}><option value="all">Tất cả</option><option value="open">Đang mở</option><option value="closed">Đã kết thúc</option><option value="review">Cần xem xét</option></select></label><span>{data?.total ?? 0} phiên</span></div>
+      <div className="ocpp-toolbar"><label>Trạng thái phiên<select value={state} onChange={e => { setState(e.target.value); setPage(1); setData(null); setSelected(null); setClosing(null) }}><option value="all">Tất cả</option><option value="open">Đang mở</option><option value="abnormal">Bất thường — chưa kết thúc</option><option value="closed">Đã kết thúc</option><option value="review">Cần xem xét</option></select></label><span>{data?.total ?? 0} phiên</span></div>
+      {state === 'abnormal' && <p>Phiên còn mở khi trụ ngoại tuyến quá ngưỡng cấu hình. Hãy kiểm tra trụ; tin kết thúc đến muộn vẫn được tiếp nhận.</p>}
       {loading && !data && <p>Đang tải phiên sạc…</p>}
-      {!loading && !error && data?.items.length === 0 && <p>Chưa có phiên phù hợp. Phiên được tạo khi trụ gửi bản tin bắt đầu sạc.</p>}
+      {!loading && !error && data?.items.length === 0 && <p>{state === 'abnormal' ? 'Không có phiên bất thường chưa kết thúc.' : 'Chưa có phiên phù hợp. Phiên được tạo khi trụ gửi bản tin bắt đầu sạc.'}</p>}
       {data?.items.map(item => <article className="charging-session" key={item.id}>
         <div className="ocpp-row__heading"><div><h2>Phiên #{item.id}</h2><p>{item.station_name} · {item.charge_point_code} · Đầu nối {item.connector_number}</p></div><div className="charging-badges"><span className={`status-badge status-badge--${item.ended_at ? 'inactive' : 'active'}`}>{item.ended_at ? 'Đã kết thúc' : 'Đang mở'}</span>{item.review_reasons.length > 0 && <span className="status-badge status-badge--blocked">Cần xem xét</span>}</div></div>
         <dl className="ocpp-facts"><div><dt>Bắt đầu</dt><dd>{clock(item.started_at)}</dd></div><div><dt>Kết thúc</dt><dd>{clock(item.ended_at)}</dd></div><div><dt>Điện năng chốt</dt><dd>{item.energy_kwh !== null ? `${number(item.energy_kwh)} kWh` : 'Chưa chốt'}</dd></div></dl>
         {item.review_reasons.length > 0 && <ul className="charging-review" aria-label={`Lý do xem xét phiên ${item.id}`}>{item.review_reasons.map(reason => <li key={reason}>{reviews[reason] ?? reason}</li>)}</ul>}
+        {item.abnormal_since && !item.ended_at && <p className="charging-abnormal-note">Bất thường từ {clock(item.abnormal_since)} · Chưa chốt điện năng</p>}
+        {item.manual_close_reason && <p>Đã đóng tay · Lý do: {item.manual_close_reason}</p>}
+        {canClose && item.abnormal_since && !item.ended_at && <div className="charging-session-actions"><button className="secondary-button" onClick={() => { setClosing(closing === item.id ? null : item.id); setNotice('') }} aria-expanded={closing === item.id}>Đóng tay phiên {item.id}</button></div>}
+        {canClose && closing === item.id && !item.ended_at && item.abnormal_since && <ManualCloseForm sessionId={item.id} latestMeter={item.latest_meter_wh} startMeter={item.meter_start_wh} meterAt={item.latest_meter_at} onCancel={() => setClosing(null)} onSubmit={reason => closeSession(item.id, reason)} />}
+        <button className="text-button" aria-expanded={historyId === item.id} onClick={() => setHistoryId(historyId === item.id ? null : item.id)}>{historyId === item.id ? 'Ẩn lịch sử phục hồi' : `Xem lịch sử phục hồi phiên ${item.id}`}</button>
+        {historyId === item.id && <SessionHistory key={`${item.id}-${revision}`} id={item.id} />}
         <button className="text-button" aria-expanded={selected === item.id} onClick={() => { setSelected(selected === item.id ? null : item.id); setSamples(null); setSampleError(''); setSamplePage(1) }}>{selected === item.id ? 'Ẩn biểu đồ' : `Xem biểu đồ phiên ${item.id}`}</button>
         {selected === item.id && <div className="charging-detail">
           {sampleError && <p role="alert">{sampleError}</p>}{!samples && !sampleError && <p>Đang tải biểu đồ…</p>}

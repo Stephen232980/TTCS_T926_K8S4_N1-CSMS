@@ -82,6 +82,13 @@ class ChargingSession(Base):
     meter_stop_wh: Mapped[Decimal | None] = mapped_column(Numeric(24, 6))
     energy_kwh: Mapped[Decimal | None] = mapped_column(Numeric(24, 6))
     stop_reason: Mapped[str | None] = mapped_column(String(50))
+    recovery_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    abnormal_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    manual_closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    manual_close_reason: Mapped[str | None] = mapped_column(String(500))
+    closed_by: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT")
+    )
     review_reasons: Mapped[list[str]] = mapped_column(
         JSONB, default=list, server_default="[]"
     )
@@ -115,6 +122,22 @@ class MeterSample(Base):
     )
     value: Mapped[Decimal] = mapped_column(Numeric(24, 6))
     unit: Mapped[str] = mapped_column(String(10))
+
+
+class ChargingSessionEvent(Base):
+    __tablename__ = "charging_session_events"
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("charging_sessions.id", ondelete="CASCADE"), index=True
+    )
+    action: Mapped[str] = mapped_column(String(40))
+    actor_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    details: Mapped[dict[str, object]] = mapped_column(JSONB, default=dict)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
 
 class PendingChargingMessage(Base):

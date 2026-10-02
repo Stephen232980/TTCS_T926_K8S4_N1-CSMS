@@ -4,7 +4,7 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstraints
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,9 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.charging.models import (
     ChargingCard,
     ChargingSession,
+    ChargingSessionEvent,
     MeterSample,
     PendingChargingMessage,
 )
+from src.modules.charging.recovery import manual_close
 from src.modules.charging.service import tag_hash
 from src.modules.identity.authorization import allow_roles, build_actor_scope
 from src.modules.identity.dependencies import CurrentActorDependency, authorize_request
@@ -53,7 +55,7 @@ class CardResponse(BaseModel):
 class SessionQuery(BaseModel):
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=100)
-    state: Literal["all", "open", "closed", "review"] = "all"
+    state: Literal["all", "open", "closed", "review", "abnormal"] = "all"
 
 
 class SessionResponse(BaseModel):
@@ -72,6 +74,27 @@ class SessionResponse(BaseModel):
     latest_meter_at: datetime | None
     stop_reason: str | None
     review_reasons: list[str]
+    abnormal_since: datetime | None
+    recovery_at: datetime | None
+    manual_closed_at: datetime | None
+    manual_close_reason: str | None
+    closed_by: UUID | None
+
+
+class ManualCloseRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    reason: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)
+    ]
+
+
+def charging_owner(actor: CurrentActorDependency) -> UUID | None:
+    # Accounting access is local to charging reads, never a global management scope.
+    if "accountant" in actor.roles and actor.roles.isdisjoint(
+        {"station_owner", "operator", "admin"}
+    ):
+        return None
+    return build_actor_scope(actor).owner_id
 
 
 class SampleResponse(BaseModel):
@@ -213,11 +236,16 @@ def session_row(
         latest_meter_at=timestamp,
         stop_reason=transaction.stop_reason,
         review_reasons=transaction.review_reasons,
+        abnormal_since=transaction.abnormal_since,
+        recovery_at=transaction.recovery_at,
+        manual_closed_at=transaction.manual_closed_at,
+        manual_close_reason=transaction.manual_close_reason,
+        closed_by=transaction.closed_by,
     )
 
 
 @router.get("/sessions", response_model=SessionPage)
-@allow_roles("station_owner", "operator", "admin")
+@allow_roles("station_owner", "operator", "admin", "accountant")
 async def sessions(
     query: Annotated[SessionQuery, Query()],
     actor: CurrentActorDependency,
@@ -258,7 +286,7 @@ async def sessions(
             latest, (latest.c.session_id == ChargingSession.id) & (latest.c.rank == 1)
         )
     )
-    owner = build_actor_scope(actor).owner_id
+    owner = charging_owner(actor)
     if owner is not None:
         statement = statement.where(Station.owner_id == owner)
     if query.state == "open":
@@ -268,6 +296,11 @@ async def sessions(
     elif query.state == "review":
         statement = statement.where(
             func.jsonb_array_length(ChargingSession.review_reasons) > 0
+        )
+    elif query.state == "abnormal":
+        statement = statement.where(
+            ChargingSession.ended_at.is_(None),
+            ChargingSession.abnormal_since.is_not(None),
         )
     total = (
         await session.scalar(select(func.count()).select_from(statement.subquery()))
@@ -291,7 +324,7 @@ async def sessions(
 
 
 @router.get("/sessions/{transaction_id}/samples", response_model=SamplePage)
-@allow_roles("station_owner", "operator", "admin")
+@allow_roles("station_owner", "operator", "admin", "accountant")
 async def samples(
     transaction_id: int,
     query: Annotated[SessionQuery, Query()],
@@ -304,7 +337,7 @@ async def samples(
         .join(Station, Station.id == ChargePoint.station_id)
         .where(ChargingSession.id == transaction_id)
     )
-    owner = build_actor_scope(actor).owner_id
+    owner = charging_owner(actor)
     if owner is not None:
         scope = scope.where(Station.owner_id == owner)
     if await session.scalar(scope) is None:
@@ -325,6 +358,79 @@ async def samples(
         page=query.page,
         total_pages=(total + query.page_size - 1) // query.page_size,
     )
+
+
+@router.post("/sessions/{transaction_id}/close")
+@allow_roles("operator", "admin")
+async def close_session(
+    transaction_id: int,
+    body: ManualCloseRequest,
+    actor: CurrentActorDependency,
+    session: Database,
+) -> dict[str, object]:
+    charger_id = await session.scalar(
+        select(ChargingSession.charge_point_id).where(
+            ChargingSession.id == transaction_id
+        )
+    )
+    if charger_id is None:
+        raise HTTPException(404, "Không tìm thấy phiên.")
+    await session.scalar(
+        select(ChargePoint).where(ChargePoint.id == charger_id).with_for_update()
+    )
+    transaction = await session.scalar(
+        select(ChargingSession)
+        .where(ChargingSession.id == transaction_id)
+        .with_for_update()
+    )
+    if transaction is None:
+        raise HTTPException(404, "Không tìm thấy phiên.")
+    await manual_close(session, transaction, actor.user_id, body.reason)
+    await session.flush()
+    return {
+        "id": transaction.id,
+        "energy_kwh": str(transaction.energy_kwh),
+        "ended_at": transaction.ended_at.isoformat() if transaction.ended_at else None,
+    }
+
+
+@router.get("/sessions/{transaction_id}/events")
+@allow_roles("station_owner", "operator", "admin", "accountant")
+async def session_events(
+    transaction_id: int, actor: CurrentActorDependency, session: Database
+) -> list[dict[str, object]]:
+    scope = (
+        select(ChargingSession.id)
+        .join(ChargePoint, ChargePoint.id == ChargingSession.charge_point_id)
+        .join(Station, Station.id == ChargePoint.station_id)
+        .where(ChargingSession.id == transaction_id)
+    )
+    owner = charging_owner(actor)
+    if owner is not None:
+        scope = scope.where(Station.owner_id == owner)
+    if await session.scalar(scope) is None:
+        raise HTTPException(404, "Không tìm thấy phiên trong phạm vi quản lý.")
+    rows = (
+        await session.execute(
+            select(ChargingSessionEvent, User.email)
+            .outerjoin(User, User.id == ChargingSessionEvent.actor_id)
+            .where(ChargingSessionEvent.session_id == transaction_id)
+            .order_by(
+                ChargingSessionEvent.occurred_at.desc(), ChargingSessionEvent.id.desc()
+            )
+            .limit(100)
+        )
+    ).all()
+    return [
+        {
+            "id": str(row[0].id),
+            "action": row[0].action,
+            "actor": row[1],
+            "details": row[0].details,
+            "occurred_at": row[0].occurred_at.isoformat(),
+        }
+        for row in rows
+    ]
 
 
 @router.get("/pending")

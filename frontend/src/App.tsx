@@ -133,12 +133,14 @@ function App({ authApi = defaultAuthApi, stationApi, chargePointApi }: AppProps)
         <button className={workspace === 'ocpp' ? 'text-button workspace-switch__active' : 'text-button'} aria-pressed={workspace === 'ocpp'} onClick={() => setWorkspace('ocpp')}>Kết nối trụ</button>
         <button className={workspace === 'charging' ? 'text-button workspace-switch__active' : 'text-button'} aria-pressed={workspace === 'charging'} onClick={() => setWorkspace('charging')}>Phiên sạc</button>
       </nav>}
-      {!permissions.canViewStations ? (
+      {!permissions.canViewStations && permissions.canViewCharging ? (
+        <ChargingSessionsPage canManage={false} canClose={false} />
+      ) : !permissions.canViewStations ? (
         primaryRole === 'driver' ? <DriverMapPage /> : <RoleHomePage role={primaryRole} />
       ) : workspace === 'ocpp' ? (
         <OcppConnectionsPage />
       ) : workspace === 'charging' ? (
-        <ChargingSessionsPage />
+        <ChargingSessionsPage canManage={permissions.canViewStations} canClose={permissions.canCloseChargingSessions} />
       ) : selectedStationId ? (
         <StationDetailPage
           key={selectedStationId}

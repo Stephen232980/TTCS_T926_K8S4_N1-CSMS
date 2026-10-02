@@ -11,6 +11,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
+from src.modules.charging.recovery import note_connector_status, note_reconnection
 from src.modules.charging.service import charging_call
 from src.modules.ocpp.connection_registry import OcppConnection
 from src.modules.ocpp.frames import Frame, encode_frame, error_frame
@@ -48,6 +49,7 @@ async def process_call(
     record_seen: bool = False,
 ) -> str:
     """Caller owns the transaction; the charger row serializes simultaneous repeats."""
+    boot_was_accepted = connection.boot_accepted
     charge_point = await session.scalar(
         select(ChargePoint)
         .where(ChargePoint.id == connection.charge_point_id)
@@ -90,6 +92,8 @@ async def process_call(
                 and station.archived_at is None
                 and station.status != "blocked"
             )
+            if connection.boot_accepted and not boot_was_accepted:
+                await note_reconnection(session, charge_point.id)
         return cached.response
 
     if frame.action != "BootNotification" and not connection.boot_accepted:
@@ -134,6 +138,8 @@ async def process_call(
             connection.boot_accepted = accepted
             now = datetime.now(UTC)
             if accepted:
+                if not boot_was_accepted:
+                    await note_reconnection(session, charge_point.id)
                 charge_point.vendor = boot.chargePointVendor
                 charge_point.model = boot.chargePointModel
                 if "firmwareVersion" in frame.payload:
@@ -174,6 +180,9 @@ async def process_call(
             else:
                 status = StatusPayload.model_validate_json(json.dumps(frame.payload))
                 await report_status(session, charge_point, status)
+                await note_connector_status(
+                    session, charge_point.id, status.connectorId, status.status
+                )
                 response = encode_frame(Frame(3, frame.message_id, {}))
         except (ValidationError, ValueError):
             response = error_frame(

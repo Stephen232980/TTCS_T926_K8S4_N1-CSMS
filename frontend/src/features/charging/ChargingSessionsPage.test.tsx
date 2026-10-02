@@ -9,6 +9,54 @@ const page = { items: [transaction], total: 1, page: 1, total_pages: 1 }
 function response(data: unknown) { return { ok: true, status: 200, json: async () => data } }
 
 describe('ChargingSessionsPage', () => {
+  it('filters abnormal sessions, closes using the real API and displays history', async () => {
+    let closed = false
+    const fetch = vi.fn().mockImplementation(async (url: string, options: RequestInit) => {
+      if (options.method === 'POST') { closed = true; return response({ energy_kwh: '1' }) }
+      if (url.endsWith('/events')) return response([{ id: 'e1', action: 'manual_closure', actor: 'operator@example.com', details: { reason: 'Đã kiểm tra', energy_kwh: '1' }, occurred_at: '2026-10-02T02:00:00Z' }])
+      return response({ ...page, items: [{ ...transaction, abnormal_since: closed ? null : '2026-10-02T01:10:00Z', ended_at: closed ? '2026-10-02T02:00:00Z' : null, energy_kwh: closed ? '1' : null }] })
+    })
+    vi.stubGlobal('fetch', fetch)
+    const user = userEvent.setup()
+    render(<ChargingSessionsPage canClose />)
+    await screen.findByText('Phiên #42')
+    await user.selectOptions(screen.getByLabelText('Trạng thái phiên'), 'abnormal')
+    await user.click(await screen.findByRole('button', { name: 'Đóng tay phiên 42' }))
+    await user.type(screen.getByLabelText('Lý do đóng tay'), 'Đã kiểm tra')
+    await user.click(screen.getByRole('checkbox'))
+    await user.click(screen.getByRole('button', { name: 'Xác nhận đóng phiên' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('Đã đóng phiên #42, chốt 1 kWh')
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/sessions/42/close'), expect.objectContaining({ method: 'POST', body: JSON.stringify({ reason: 'Đã kiểm tra' }) }))
+    await user.click(screen.getByRole('button', { name: 'Xem lịch sử phục hồi phiên 42' }))
+    expect(await screen.findByText('Đóng tay bằng số đo cuối')).toBeInTheDocument()
+    expect(screen.getByText(/operator@example.com/)).toBeInTheDocument()
+  })
+
+  it('hides management and manual closure for accounting access', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({ ...page, items: [{ ...transaction, abnormal_since: '2026-10-02T01:10:00Z' }] })))
+    render(<ChargingSessionsPage canManage={false} canClose={false} />)
+    await screen.findByText('Phiên #42')
+    expect(screen.queryByRole('button', { name: 'Thẻ tài xế' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Chờ đối chiếu' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Đóng tay phiên 42' })).not.toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Bất thường — chưa kết thúc' })).toBeInTheDocument()
+  })
+
+  it('shows history loading errors and retries', async () => {
+    let retried = false
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => {
+      if (url.endsWith('/events')) { if (!retried) return { ok: false, status: 500, json: async () => ({}) }; return response([]) }
+      return response(page)
+    }))
+    const user = userEvent.setup()
+    render(<ChargingSessionsPage />)
+    await screen.findByText('Phiên #42')
+    await user.click(screen.getByRole('button', { name: 'Xem lịch sử phục hồi phiên 42' }))
+    await screen.findByRole('button', { name: 'Tải lại lịch sử' })
+    retried = true
+    await user.click(screen.getByRole('button', { name: 'Tải lại lịch sử' }))
+    expect(await screen.findByText('Chưa có sự kiện phục hồi.')).toBeInTheDocument()
+  })
   it('loads real API, shows review reasons and fetches meter detail', async () => {
     const fetch = vi.fn().mockImplementation(async (url: string) => response(url.includes('/samples') ? { items: [{ timestamp: '2026-10-02T01:01:00Z', measurand: 'Energy.Active.Import.Register', value: '2000', unit: 'Wh', phase: '', location: 'Outlet' }], total: 1, page: 1, total_pages: 1 } : page))
     vi.stubGlobal('fetch', fetch)

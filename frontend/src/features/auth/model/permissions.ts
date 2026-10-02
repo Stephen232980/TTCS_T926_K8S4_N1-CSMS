@@ -7,6 +7,8 @@ export function getPermissions(user: AuthenticatedUser) {
     ),
     canManageStations: user.roles.includes('station_owner'),
     canManageChargePoints: user.roles.includes('station_owner'),
+    canViewCharging: user.roles.some((role) => ['station_owner', 'operator', 'admin', 'accountant'].includes(role)),
+    canCloseChargingSessions: user.roles.some((role) => ['operator', 'admin'].includes(role)),
   }
 }
 
