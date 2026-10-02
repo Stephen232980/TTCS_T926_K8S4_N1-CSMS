@@ -11,10 +11,16 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
+from src.modules.charging.service import charging_call
 from src.modules.ocpp.connection_registry import OcppConnection
 from src.modules.ocpp.frames import Frame, encode_frame, error_frame
 from src.modules.ocpp.models import OcppMessageReply
-from src.modules.ocpp.monitoring import HeartbeatPayload, StatusPayload, report_status
+from src.modules.ocpp.monitoring import (
+    HeartbeatPayload,
+    StatusPayload,
+    mark_seen,
+    report_status,
+)
 from src.modules.stations.models import ChargePoint, Station
 from src.platform.database.session import SessionFactory
 
@@ -35,7 +41,11 @@ class BootPayload(BaseModel):
 
 
 async def process_call(
-    connection: OcppConnection, frame: Frame, session: AsyncSession
+    connection: OcppConnection,
+    frame: Frame,
+    session: AsyncSession,
+    *,
+    record_seen: bool = False,
 ) -> str:
     """Caller owns the transaction; the charger row serializes simultaneous repeats."""
     charge_point = await session.scalar(
@@ -47,6 +57,8 @@ async def process_call(
         return error_frame(
             frame.message_id, "SecurityError", "Charger registration is unavailable"
         )
+    if record_seen:
+        await mark_seen(session, charge_point.id, locked_charger=charge_point)
     digest = hashlib.sha256(
         json.dumps(
             [frame.action, frame.payload],
@@ -169,6 +181,26 @@ async def process_call(
                 "PropertyConstraintViolation",
                 "Invalid monitoring payload",
             )
+    elif frame.action in (
+        "Authorize",
+        "StartTransaction",
+        "StopTransaction",
+        "MeterValues",
+    ):
+        try:
+            response = encode_frame(
+                Frame(
+                    3,
+                    frame.message_id,
+                    await charging_call(session, charge_point, frame),
+                )
+            )
+        except (ValidationError, ValueError):
+            response = error_frame(
+                frame.message_id,
+                "PropertyConstraintViolation",
+                "Invalid charging payload",
+            )
     else:
         logger.info(
             "ocpp_action_not_implemented charger=%s action=%s",
@@ -190,11 +222,15 @@ async def process_call(
     return response
 
 
-async def dispatch_call(connection: OcppConnection, frame: Frame) -> str:
+async def dispatch_call(
+    connection: OcppConnection, frame: Frame, *, record_seen: bool = False
+) -> str:
     previous_boot_state = connection.boot_accepted
     try:
         async with SessionFactory() as session, session.begin():
-            response = await process_call(connection, frame, session)
+            response = await process_call(
+                connection, frame, session, record_seen=record_seen
+            )
     except Exception:
         connection.boot_accepted = previous_boot_state
         raise

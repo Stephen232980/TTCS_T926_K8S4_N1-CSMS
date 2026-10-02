@@ -3,7 +3,7 @@ from alembic.script import ScriptDirectory
 
 REVISION = "ecbbbbc04358"
 DOWN_REVISION = "04645d9d9d66"
-CURRENT_HEAD = "a721093e4f62"
+CURRENT_HEAD = "d830a62f194b"
 
 
 def test_charge_points_migration_revision_chain() -> None:

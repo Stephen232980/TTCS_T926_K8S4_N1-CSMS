@@ -1,6 +1,7 @@
 import { DriverMapPage } from './features/driver/DriverMapPage'
 import { useCallback, useEffect, useState } from 'react'
 import { OcppConnectionsPage } from './features/ocpp/OcppConnectionsPage'
+import { ChargingSessionsPage } from './features/charging/ChargingSessionsPage'
 import { AppShell } from './app/AppShell'
 import { Icon } from './components/icons/Icon'
 import { AuthApiError, type AuthApi } from './features/auth/api/authApi'
@@ -33,7 +34,7 @@ function App({ authApi = defaultAuthApi, stationApi, chargePointApi }: AppProps)
   const [notice, setNotice] = useState('')
   const [noticeVersion, setNoticeVersion] = useState(0)
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null)
-  const [workspace, setWorkspace] = useState<'stations' | 'ocpp'>('stations')
+  const [workspace, setWorkspace] = useState<'stations' | 'ocpp' | 'charging'>('stations')
 
   const loadCurrentUser = useCallback(async () => {
     const user = await authApi.getCurrentUser()
@@ -130,11 +131,14 @@ function App({ authApi = defaultAuthApi, stationApi, chargePointApi }: AppProps)
       {permissions.canViewStations && <nav className="workspace-switch" aria-label="Khu vực vận hành">
         <button className={workspace === 'stations' ? 'text-button workspace-switch__active' : 'text-button'} aria-pressed={workspace === 'stations'} onClick={() => setWorkspace('stations')}>Trạm sạc</button>
         <button className={workspace === 'ocpp' ? 'text-button workspace-switch__active' : 'text-button'} aria-pressed={workspace === 'ocpp'} onClick={() => setWorkspace('ocpp')}>Kết nối trụ</button>
+        <button className={workspace === 'charging' ? 'text-button workspace-switch__active' : 'text-button'} aria-pressed={workspace === 'charging'} onClick={() => setWorkspace('charging')}>Phiên sạc</button>
       </nav>}
       {!permissions.canViewStations ? (
         primaryRole === 'driver' ? <DriverMapPage /> : <RoleHomePage role={primaryRole} />
       ) : workspace === 'ocpp' ? (
         <OcppConnectionsPage />
+      ) : workspace === 'charging' ? (
+        <ChargingSessionsPage />
       ) : selectedStationId ? (
         <StationDetailPage
           key={selectedStationId}
