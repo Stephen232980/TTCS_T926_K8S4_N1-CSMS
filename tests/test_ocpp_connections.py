@@ -13,6 +13,7 @@ from src.modules.ocpp.connection_registry import (
     OcppConnection,
     OcppConnectionRegistry,
 )
+from src.modules.ocpp.messages import CallError, OcppErrorCode, encode_frame
 from src.modules.ocpp.repository import RegisteredChargePoint
 
 
@@ -163,3 +164,37 @@ async def test_active_station_can_start_a_session() -> None:
     )
 
     assert connection.can_start_session
+
+
+@pytest.mark.asyncio
+async def test_websocket_sends_s07_error_and_keeps_reading_later_frames(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """S-07 keeps an accepted socket open after a malformed OCPP frame."""
+    registry = OcppConnectionRegistry()
+    dispatcher = MagicMock()
+    malformed_response = CallError(
+        message_id="",
+        code=OcppErrorCode.FORMATION_VIOLATION,
+        description="Frame must be valid JSON.",
+        details={},
+    )
+    dispatcher.handle_text = AsyncMock(side_effect=[malformed_response, None])
+    monkeypatch.setattr(
+        ocpp_router,
+        "find_registered_charge_point",
+        AsyncMock(return_value=registered_charge_point()),
+    )
+    monkeypatch.setattr(ocpp_router, "ocpp_connections", registry)
+    monkeypatch.setattr(ocpp_router, "ocpp_dispatcher", dispatcher)
+    websocket = mock_websocket(["ocpp1.6"])
+    websocket.receive.side_effect = [
+        {"type": "websocket.receive", "text": "not-json"},
+        {"type": "websocket.receive", "text": '[2,"request-1","Heartbeat",{}]'},
+        {"type": "websocket.disconnect"},
+    ]
+
+    await ocpp_router.connect_charge_point(cast(WebSocket, websocket), "CP-05")
+
+    assert dispatcher.handle_text.await_count == 2
+    websocket.send_text.assert_awaited_once_with(encode_frame(malformed_response))

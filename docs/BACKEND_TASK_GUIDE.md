@@ -425,6 +425,11 @@ Phụ thuộc: T-13.
 
 Xong khi: frame hợp lệ được định tuyến; action lạ trả `NotImplemented`.
 
+Ghi chú S-07: codec chung chỉ đọc và ghi ba frame OCPP 1.6J, kiểm tra cấu trúc
+trước khi gọi handler và trả `FormationViolation` cho frame sai. Lệnh server gửi
+xuống có UUID riêng, được giữ trong pending registry trước khi gửi để ghép đúng
+`CALLRESULT` hoặc `CALLERROR`; lưu bền chống retry/restart thuộc task OCPP message.
+
 ### T-15 — Test frame sai định dạng
 
 Phụ thuộc: T-14.
