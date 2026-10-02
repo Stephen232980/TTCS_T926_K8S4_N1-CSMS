@@ -12,6 +12,8 @@ interface AppShellProps {
   children: ReactNode
   currentUser: AuthenticatedUser
   onLogout: () => Promise<void>
+  onNavigateHome?: () => void
+  navigationActive?: boolean
 }
 
 const roleLabels: Record<string, string> = {
@@ -26,6 +28,8 @@ export function AppShell({
   children,
   currentUser,
   onLogout,
+  onNavigateHome,
+  navigationActive = true,
 }: AppShellProps) {
   const [isNavigationOpen, setIsNavigationOpen] = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
@@ -110,7 +114,7 @@ export function AppShell({
         className={`sidebar${isNavigationOpen ? ' sidebar--open' : ''}`}
         id="primary-navigation"
       >
-        <a className="brand" href="#top" aria-label="CSMS - Trang chủ">
+        <a className="brand" href="#top" aria-label="CSMS - Trang chủ" onClick={onNavigateHome}>
           <span className="brand__mark"><Icon name="bolt" /></span>
           <span>CSMS</span>
         </a>
@@ -118,11 +122,11 @@ export function AppShell({
           {(navigationItem ? [navigationItem] : []).map((item) => (
             <a
               key={item.label}
-              className="nav-link nav-link--active"
+              className={`nav-link${navigationActive ? ' nav-link--active' : ''}`}
               aria-label={item.label}
-              aria-current="page"
+              aria-current={navigationActive ? 'page' : undefined}
               href="#stations"
-              onClick={() => closeNavigation()}
+              onClick={() => { onNavigateHome?.(); closeNavigation() }}
             >
               <Icon name={item.icon} />
               <span>{item.label}</span>

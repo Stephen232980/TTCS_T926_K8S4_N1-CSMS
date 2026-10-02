@@ -1,4 +1,6 @@
+import { DriverMapPage } from './features/driver/DriverMapPage'
 import { useCallback, useEffect, useState } from 'react'
+import { OcppConnectionsPage } from './features/ocpp/OcppConnectionsPage'
 import { AppShell } from './app/AppShell'
 import { Icon } from './components/icons/Icon'
 import { AuthApiError, type AuthApi } from './features/auth/api/authApi'
@@ -31,6 +33,7 @@ function App({ authApi = defaultAuthApi, stationApi, chargePointApi }: AppProps)
   const [notice, setNotice] = useState('')
   const [noticeVersion, setNoticeVersion] = useState(0)
   const [selectedStationId, setSelectedStationId] = useState<string | null>(null)
+  const [workspace, setWorkspace] = useState<'stations' | 'ocpp'>('stations')
 
   const loadCurrentUser = useCallback(async () => {
     const user = await authApi.getCurrentUser()
@@ -90,6 +93,7 @@ function App({ authApi = defaultAuthApi, stationApi, chargePointApi }: AppProps)
     await authApi.logout()
     setCurrentUser(null)
     setSelectedStationId(null)
+    setWorkspace('stations')
     setSessionMessage('Bạn đã đăng xuất an toàn.')
     setAuthStatus('anonymous')
   }
@@ -120,9 +124,17 @@ function App({ authApi = defaultAuthApi, stationApi, chargePointApi }: AppProps)
     <AppShell
       currentUser={currentUser}
       onLogout={handleLogout}
+      onNavigateHome={() => { setWorkspace('stations'); setSelectedStationId(null) }}
+      navigationActive={workspace === 'stations'}
     >
+      {permissions.canViewStations && <nav className="workspace-switch" aria-label="Khu vực vận hành">
+        <button className={workspace === 'stations' ? 'text-button workspace-switch__active' : 'text-button'} aria-pressed={workspace === 'stations'} onClick={() => setWorkspace('stations')}>Trạm sạc</button>
+        <button className={workspace === 'ocpp' ? 'text-button workspace-switch__active' : 'text-button'} aria-pressed={workspace === 'ocpp'} onClick={() => setWorkspace('ocpp')}>Kết nối trụ</button>
+      </nav>}
       {!permissions.canViewStations ? (
-        <RoleHomePage role={primaryRole} />
+        primaryRole === 'driver' ? <DriverMapPage /> : <RoleHomePage role={primaryRole} />
+      ) : workspace === 'ocpp' ? (
+        <OcppConnectionsPage />
       ) : selectedStationId ? (
         <StationDetailPage
           key={selectedStationId}

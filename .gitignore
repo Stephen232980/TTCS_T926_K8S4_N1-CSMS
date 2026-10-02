@@ -34,3 +34,6 @@ htmlcov/
 # Operating-system files
 .DS_Store
 Thumbs.db
+
+# Local development fixtures and private project inputs
+.local/

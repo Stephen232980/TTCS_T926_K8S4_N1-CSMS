@@ -1,3 +1,4 @@
+import { StationMap } from '../../../components/maps/StationMap'
 import { useRef, useState, type FormEvent } from 'react'
 import type { Station, StationInput } from '../model/station'
 import {
@@ -131,52 +132,16 @@ export function StationForm({
           )}
         </div>
 
-        <div className="form-field">
-          <label htmlFor="station-latitude">Vĩ độ</label>
-          <input
-            id="station-latitude"
-            ref={(element) => {
-              if (element) fieldRefs.current.latitude = element
-            }}
-            value={values.latitude}
-            onChange={(event) => updateField('latitude', event.target.value)}
-            inputMode="decimal"
-            placeholder="Ví dụ: 10.7731"
-            disabled={isSubmitting}
-            aria-invalid={Boolean(fieldError('latitude'))}
-            aria-describedby={
-              fieldError('latitude') ? 'station-latitude-error' : undefined
-            }
-          />
-          {fieldError('latitude') && (
-            <span className="field-error" id="station-latitude-error">
-              {fieldError('latitude')}
-            </span>
-          )}
-        </div>
-
-        <div className="form-field">
-          <label htmlFor="station-longitude">Kinh độ</label>
-          <input
-            id="station-longitude"
-            ref={(element) => {
-              if (element) fieldRefs.current.longitude = element
-            }}
-            value={values.longitude}
-            onChange={(event) => updateField('longitude', event.target.value)}
-            inputMode="decimal"
-            placeholder="Ví dụ: 106.7032"
-            disabled={isSubmitting}
-            aria-invalid={Boolean(fieldError('longitude'))}
-            aria-describedby={
-              fieldError('longitude') ? 'station-longitude-error' : undefined
-            }
-          />
-          {fieldError('longitude') && (
-            <span className="field-error" id="station-longitude-error">
-              {fieldError('longitude')}
-            </span>
-          )}
+        <div className="form-field form-field--wide">
+          <strong>Vị trí trạm</strong>
+          <p>Bấm vào vị trí trạm trên bản đồ hoặc di chuyển bản đồ rồi chọn tâm.</p>
+          <StationMap position={values.latitude && values.longitude ? { latitude: Number(values.latitude), longitude: Number(values.longitude) } : undefined} disabled={isSubmitting}
+            onPick={({ latitude, longitude }) => {
+              setValues(current => ({ ...current, latitude: String(latitude.toFixed(6)), longitude: String(longitude.toFixed(6)) }))
+              setErrors(current => ({ ...current, latitude: undefined, longitude: undefined }))
+            }} />
+          <p role="status">{values.latitude && values.longitude ? 'Đã chọn vị trí trạm. Bạn có thể chọn lại trên bản đồ.' : 'Chưa chọn vị trí trạm.'}</p>
+          {(fieldError('latitude') || fieldError('longitude')) && <span className="field-error" role="alert">Hãy chọn vị trí trạm trên bản đồ.</span>}
         </div>
 
         {submitError && (

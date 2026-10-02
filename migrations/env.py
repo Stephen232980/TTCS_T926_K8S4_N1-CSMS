@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from src.config import settings
 from src.modules.identity import models  # noqa: F401
+from src.modules.ocpp import models as ocpp_models  # noqa: F401
 from src.modules.stations import models as stations_models  # noqa: F401
 from src.platform.database.base import Base
 
