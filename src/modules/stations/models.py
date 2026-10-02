@@ -109,6 +109,10 @@ class ChargePoint(Base):
     __table_args__ = (
         Index("ix_charge_points_code", "code", unique=True),
         Index("ix_charge_points_station_id", "station_id"),
+        Index("ix_charge_points_last_seen_at", "last_seen_at"),
+        CheckConstraint(
+            "heartbeat_interval_seconds > 0", name="ck_charge_points_heartbeat_positive"
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
@@ -130,6 +134,15 @@ class ChargePoint(Base):
     last_seen_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
+    )
+    heartbeat_interval_seconds: Mapped[int] = mapped_column(
+        Integer, default=60, server_default="60", nullable=False
+    )
+    raw_ocpp_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    vendor_error_code: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    error_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
     last_boot_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),

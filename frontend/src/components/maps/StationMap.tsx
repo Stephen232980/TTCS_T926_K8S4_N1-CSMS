@@ -21,6 +21,7 @@ export function StationMap({ stations = emptyStations, position, onPick, selecte
   const callbacks = useRef({ onPick, onSelect, disabled })
   const [tileError, setTileError] = useState(false)
   const [locationError, setLocationError] = useState('')
+  const [locating, setLocating] = useState(false)
   useEffect(() => { callbacks.current = { onPick, onSelect, disabled } }, [onPick, onSelect, disabled])
 
   useEffect(() => {
@@ -67,16 +68,29 @@ export function StationMap({ stations = emptyStations, position, onPick, selecte
   }, [stations, position, selectedId])
 
   function locate() {
+    if (locating) return
     if (!navigator.geolocation) { setLocationError('Trình duyệt không hỗ trợ định vị. Bạn có thể di chuyển bản đồ để chọn trạm.'); return }
     setLocationError('')
+    setLocating(true)
     navigator.geolocation.getCurrentPosition(({ coords }) => {
+      if (!map.current) return
+      setLocating(false)
       map.current?.setView([coords.latitude, coords.longitude], 15)
-    }, () => setLocationError('Không lấy được vị trí. Hãy cho phép định vị hoặc di chuyển bản đồ.'), { timeout: 10000 })
+    }, error => {
+      if (!map.current) return
+      setLocating(false)
+      const messages: Record<number, string> = {
+        1: 'Quyền định vị bị chặn. Hãy kiểm tra quyền vị trí của trình duyệt và thiết bị.',
+        2: 'Thiết bị chưa cung cấp được vị trí hiện tại. Bạn có thể thử lại hoặc di chuyển bản đồ.',
+        3: 'Hết thời gian chờ vị trí. Bạn có thể thử lại hoặc di chuyển bản đồ; không cần cấp lại quyền nếu đã cho phép.',
+      }
+      setLocationError(messages[error.code] ?? 'Không lấy được vị trí. Bạn có thể thử lại hoặc di chuyển bản đồ.')
+    }, { timeout: 30000, maximumAge: 60000 })
   }
 
   return <div className="station-map">
     <div className="station-map__tools">
-      <button type="button" className="secondary-button" onClick={locate} disabled={disabled}>Đến vị trí của tôi</button>
+      <button type="button" className="secondary-button" onClick={locate} disabled={disabled || locating}>{locating ? 'Đang lấy vị trí…' : 'Đến vị trí của tôi'}</button>
       {onPick && <button type="button" className="secondary-button" disabled={disabled} onClick={() => {
         const center = map.current?.getCenter()
         if (center) onPick({ latitude: center.lat, longitude: center.lng })

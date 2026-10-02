@@ -319,6 +319,7 @@ async def test_invalid_boot_and_reply_retention(db_session: AsyncSession) -> Non
 def test_real_websocket_keeps_open_after_malformed_frame(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(transport, "record_contact", AsyncMock())
     monkeypatch.setattr(
         ocpp_router,
         "find_registered_charge_point",

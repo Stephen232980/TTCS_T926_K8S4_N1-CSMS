@@ -70,3 +70,9 @@ Bản tích hợp: 210 kiểm thử backend, 113 frontend đạt; lint/build/Ruf
 Dữ liệu kiểm thử/demo dùng database riêng, không nâng migration hoặc đổi dữ liệu
 trong database csms gốc. Khi chạy backend với database gốc, cần alembic upgrade head.
 Chưa commit/push/merge; Git hiện các thay đổi ngay trong thư mục CSMS.
+
+## Tiếp nối nhóm 2
+
+Heartbeat, trạng thái đầu nối, ngoại tuyến và luồng đẩy giao diện được bổ sung
+ở [nhóm giám sát S-09–S-12](OCPP_MONITORING_DELIVERY.md). Giới hạn chức năng
+nhóm 1 ở trên là ghi nhận tại thời điểm bàn giao nhóm 1.

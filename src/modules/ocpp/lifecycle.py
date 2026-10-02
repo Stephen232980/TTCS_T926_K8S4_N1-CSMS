@@ -10,6 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from src.config import settings
 from src.modules.ocpp.dispatcher import prune_replies
+from src.modules.ocpp.monitoring import expire_chargers
 from src.platform.database.session import SessionFactory
 
 
@@ -23,14 +24,22 @@ async def cleanup_loop() -> None:
             logging.getLogger("csms.ocpp").error("ocpp_reply_cleanup_failed")
 
 
+async def offline_loop() -> None:
+    while True:
+        try:
+            async with SessionFactory() as session, session.begin():
+                await expire_chargers(session)
+        except SQLAlchemyError:
+            logging.getLogger("csms.ocpp").error("ocpp_offline_scan_failed")
+        await asyncio.sleep(1)
+
+
 @asynccontextmanager
 async def ocpp_lifespan(app: FastAPI) -> AsyncIterator[None]:
-    task = asyncio.create_task(cleanup_loop())
+    tasks = [asyncio.create_task(cleanup_loop()), asyncio.create_task(offline_loop())]
     try:
         yield
     finally:
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
