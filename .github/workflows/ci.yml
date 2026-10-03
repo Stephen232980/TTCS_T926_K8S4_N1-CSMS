@@ -92,6 +92,72 @@ jobs:
       - name: Build frontend
         run: npm run build
 
+  # S-26: run the same pinned 20-charger recovery fleet that developers run by Compose.
+  simulator-scenario:
+    name: Verify 20 OCPP virtual chargers
+    runs-on: ubuntu-latest
+    needs: [quality]
+    timeout-minutes: 5
+    env:
+      POSTGRES_DB: csms_s26
+      POSTGRES_USER: csms
+      POSTGRES_PASSWORD: ci_simulator_only
+      SIMULATOR_OPERATOR_PASSWORD: ci_simulator_only
+      SIMULATOR_COUNT: 20
+      SIMULATOR_CODE_PREFIX: SIM-CI-
+      SIMULATOR_TAG_PREFIX: SIMTAG-CI-
+      SIMULATOR_RANDOM_SEED: 2600
+      SIMULATOR_MAX_RECONNECTS: 3
+      SIMULATOR_HOLD_SECONDS: 45
+      SIMULATOR_HEARTBEAT_SECONDS: 2
+      SIMULATOR_VERIFY_TIMEOUT_SECONDS: 180
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v7
+
+      - name: Run S-26 Docker Compose scenario
+        run: |
+          set -euo pipefail
+          docker compose --profile simulator up --build -d
+
+          deadline=$((SECONDS + 240))
+          verifier_id=""
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            verifier_id="$(docker compose --profile simulator ps -aq simulator-verify)"
+            if [ -n "$verifier_id" ]; then
+              state="$(docker inspect --format '{{.State.Status}}' "$verifier_id")"
+              if [ "$state" = "exited" ]; then
+                exit_code="$(docker inspect --format '{{.State.ExitCode}}' "$verifier_id")"
+                if [ "$exit_code" -eq 0 ]; then
+                  exit 0
+                fi
+                exit "$exit_code"
+              fi
+            fi
+            sleep 1
+          done
+
+          echo "S-26 verifier did not stop before the scenario deadline."
+          exit 1
+
+      - name: Collect S-26 logs and report
+        if: always()
+        run: |
+          mkdir -p artifacts/s26
+          docker compose --profile simulator logs --no-color > artifacts/s26/docker-compose.log || true
+          docker compose --profile simulator ps -a > artifacts/s26/docker-compose-ps.txt || true
+          cp .local/simulator-reports/simulator-results.json artifacts/s26/ 2>/dev/null || true
+          docker compose --profile simulator down --remove-orphans
+
+      - name: Upload S-26 evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: s26-simulator-evidence
+          path: artifacts/s26
+          if-no-files-found: warn
+
   build:
     name: Build Docker image
     runs-on: ubuntu-latest
@@ -148,7 +214,7 @@ jobs:
 
   deploy:
     name: Deploy to Staging
-    needs: [quality, build]
+    needs: [quality, build, simulator-scenario]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
