@@ -310,7 +310,10 @@ async def start_transaction(
             and old.meter_start_wh == payload.meterStart
             and old.tag_tail == payload.idTag[-4:]
         ):
-            return {"transactionId": old.id, "idTagInfo": {"status": old.authorization_status}}
+            return {
+                "transactionId": old.id,
+                "idTagInfo": {"status": old.authorization_status},
+            }
 
         old.ended_at = datetime.now(UTC)
         old.stop_reason = "ReplacedByNewTransaction"
