@@ -105,6 +105,7 @@ services:
       timeout: 3s
       retries: 60
       start_period: 5s
+    command: ["python", "-m", "simulator.client"]
     restart: "no"
 
   # S-26: fail Compose/CI with per-charger detail after simulator writes its report.
