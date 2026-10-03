@@ -61,6 +61,12 @@ async def process_call(
         )
     if record_seen:
         await mark_seen(session, charge_point.id, locked_charger=charge_point)
+    # Admission belongs to this socket, even when the message has a durable reply.
+    # Do not cache this denial: the same message may be replayed after a valid Boot.
+    if frame.action != "BootNotification" and not connection.boot_accepted:
+        return error_frame(
+            frame.message_id, "SecurityError", "BootNotification must be accepted first"
+        )
     digest = hashlib.sha256(
         json.dumps(
             [frame.action, frame.payload],
@@ -96,11 +102,7 @@ async def process_call(
                 await note_reconnection(session, charge_point.id)
         return cached.response
 
-    if frame.action != "BootNotification" and not connection.boot_accepted:
-        response = error_frame(
-            frame.message_id, "SecurityError", "BootNotification must be accepted first"
-        )
-    elif frame.action == "BootNotification":
+    if frame.action == "BootNotification":
         try:
             boot = BootPayload.model_validate(frame.payload)
             # OCPP optional properties may be absent, but cannot be JSON null.

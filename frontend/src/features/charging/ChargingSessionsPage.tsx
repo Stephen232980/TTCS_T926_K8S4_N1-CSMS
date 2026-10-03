@@ -23,6 +23,7 @@ const reviews: Record<string, string> = {
   replaced_open_session: 'Đầu nối nhận phiên mới khi phiên cũ chưa đóng', stop_meter_below_start: 'Số đo cuối nhỏ hơn số đo đầu',
   meter_regression: 'Số đo điện năng giảm', conflicting_meter_timestamp: 'Hai số đo khác nhau cùng mốc thời gian', stop_before_start: 'Thời điểm kết thúc trước lúc bắt đầu', reservation_not_verified: 'Mã đặt chỗ chưa được đối chiếu',
   negative_start_meter: 'Số đo bắt đầu không hợp lệ',
+  stop_meter_below_latest: 'Số đo kết thúc nhỏ hơn số đo điện năng gần nhất — cần kiểm tra',
   remote_stop_not_confirmed: 'Trụ nhận lệnh dừng nhưng chưa gửi tin kết thúc sau 2 phút — cần kiểm tra',
   offline_timeout: 'Trụ ngoại tuyến quá ngưỡng, chưa nhận tin kết thúc', available_with_open_session: 'Đầu nối báo sẵn sàng nhưng phiên vẫn đang mở', manual_closure: 'Phiên được đóng tay bằng số đo cuối đã lưu',
 }

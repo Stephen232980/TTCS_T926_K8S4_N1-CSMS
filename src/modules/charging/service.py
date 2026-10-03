@@ -406,6 +406,23 @@ async def stop_transaction(
         payload.transactionData,
         backfill=transaction.recovery_at is not None,
     )
+    latest_meter = await session.scalar(
+        select(MeterSample.value)
+        .where(
+            MeterSample.session_id == transaction.id,
+            MeterSample.measurand == "Energy.Active.Import.Register",
+            MeterSample.phase == "",
+            MeterSample.location == "Outlet",
+            MeterSample.unit == "Wh",
+            MeterSample.timestamp >= transaction.started_at,
+            MeterSample.timestamp <= payload.timestamp,
+        )
+        .order_by(MeterSample.timestamp.desc(), MeterSample.id.desc())
+        .limit(1)
+    )
+    if latest_meter is not None and payload.meterStop < latest_meter:
+        review(transaction, "stop_meter_below_latest")
+        logger.warning("ocpp_stop_meter_below_latest transaction=%s", transaction.id)
     transaction.abnormal_since = None
     transaction.review_reasons = [
         reason

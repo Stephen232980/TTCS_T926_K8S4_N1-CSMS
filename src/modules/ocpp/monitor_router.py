@@ -100,6 +100,7 @@ async def monitoring_snapshot(
         select(
             ChargePoint,
             Station.name,
+            Station.status,
             Connector,
             latest_errors.c.error_code,
             latest_errors.c.vendor_error_code,
@@ -137,11 +138,22 @@ async def monitoring_snapshot(
     ).all()
     connections = await ocpp_connections.snapshot()
     grouped: dict[UUID, ConnectionResponse] = {}
-    for charger, station_name, connector, error, vendor_error, error_at in rows:
+    for (
+        charger,
+        station_name,
+        station_status,
+        connector,
+        error,
+        vendor_error,
+        error_at,
+    ) in rows:
         if charger.id not in grouped:
             connection = connections.get(charger.id)
             online = (
-                charger.last_seen_at is not None
+                station_status != "blocked"
+                and charger.last_boot_at is not None
+                and (connection is None or connection.boot_accepted)
+                and charger.last_seen_at is not None
                 and now - charger.last_seen_at
                 <= timedelta(seconds=2 * charger.heartbeat_interval_seconds)
             )
