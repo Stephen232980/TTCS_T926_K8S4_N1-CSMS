@@ -41,4 +41,4 @@ strict = true
 plugins = ["pydantic.mypy"]
 
 [tool.setuptools.packages.find]
-include = ["src*"]
+include = ["src*", "simulator*"]
