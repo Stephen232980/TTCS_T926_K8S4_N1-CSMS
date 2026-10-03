@@ -12,7 +12,7 @@ sai lệch dữ liệu phiên sạc. Phụ thuộc S-21 đã được merge vào
 | Trụ chạy luồng phục hồi | Mỗi client Boot, Authorize, StartTransaction, Status, MeterValues, ngắt–nối lại theo seed cố định, replay Start/Stop và dừng phiên | Báo cáo chứa transaction ID duy nhất, ít nhất một reconnect, meter stop 3500 Wh và 2,5 kWh cho từng trụ |
 | CI chặn Pull Request | Job `simulator-scenario` chạy sau `quality`, dựng Compose và dùng exit code của verifier | Job thất bại khi thiếu trụ online, thiếu/nhân đôi phiên, meter hoặc kWh lệch; deployment staging chờ job này |
 | CI có log/artifact | CI lưu `docker-compose.log`, trạng thái service và báo cáo JSON | Artifact `s26-simulator-evidence` xuất hiện cả khi kịch bản thất bại |
-| Đổi phiên bản simulator không làm sửa phần khác | `simulator/Dockerfile` cài `ocpp==2.1.0` và `websockets==15.0.1` từ quyết định K-01 | Phiên bản nằm trong image simulator, không ảnh hưởng image ứng dụng |
+| Đổi phiên bản simulator không làm sửa phần khác | Compose truyền `SIMULATOR_OCPP_VERSION=2.1.0` và `SIMULATOR_WEBSOCKETS_VERSION=15.0.1` từ K-01 vào một build/image tag dùng chung | Đổi tag/phiên bản tại Compose, không sửa client, seed hoặc verifier |
 | NFR: hoàn tất dưới năm phút | CI đặt `timeout-minutes: 5`; verifier từ chối báo cáo có thời lượng từ 300 giây | `elapsed_seconds` trong báo cáo nhỏ hơn 300 |
 
 ## Thành phần
@@ -63,6 +63,8 @@ không cần dùng `down -v` để chạy lại kịch bản.
 CI dùng 20 mã `SIM-CI-001` đến `SIM-CI-020`, môi trường PostgreSQL riêng và
 seed cố định `2600`. Job chạy sau unit/integration test. Khi lỗi, artifact có
 log Compose, trạng thái các service và báo cáo simulator để reviewer kiểm tra.
+Khi nâng simulator, chỉ đổi hai biến phiên bản S-26 trong Compose; Dockerfile,
+client, seed và verifier dùng lại nguyên trạng.
 
 Ví dụ thông tin lỗi có thể đọc được:
 

@@ -1,3 +1,11 @@
+# S-26: update this pinned tag/build argument together when the simulator changes.
+x-s26-simulator-build: &s26_simulator_build
+  context: .
+  dockerfile: simulator/Dockerfile
+  args:
+    OCPP_VERSION: ${SIMULATOR_OCPP_VERSION:-2.1.0}
+    WEBSOCKETS_VERSION: ${SIMULATOR_WEBSOCKETS_VERSION:-15.0.1}
+
 services:
   app:
     build:
@@ -49,9 +57,8 @@ services:
   # S-26: seed a namespaced fleet only after migrations and the API are ready.
   simulator-seed:
     profiles: ["simulator"]
-    build:
-      context: .
-      dockerfile: simulator/Dockerfile
+    build: *s26_simulator_build
+    image: csms-ocpp-simulator:${SIMULATOR_OCPP_VERSION:-2.1.0}
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       SIMULATOR_COUNT: ${SIMULATOR_COUNT:-20}
@@ -68,9 +75,8 @@ services:
   # S-26: run the deterministic reconnect scenario and keep sockets online for verification.
   simulator:
     profiles: ["simulator"]
-    build:
-      context: .
-      dockerfile: simulator/Dockerfile
+    build: *s26_simulator_build
+    image: csms-ocpp-simulator:${SIMULATOR_OCPP_VERSION:-2.1.0}
     environment:
       SIMULATOR_COUNT: ${SIMULATOR_COUNT:-20}
       SIMULATOR_CODE_PREFIX: ${SIMULATOR_CODE_PREFIX:-SIM-}
@@ -104,9 +110,8 @@ services:
   # S-26: fail Compose/CI with per-charger detail after simulator writes its report.
   simulator-verify:
     profiles: ["simulator"]
-    build:
-      context: .
-      dockerfile: simulator/Dockerfile
+    build: *s26_simulator_build
+    image: csms-ocpp-simulator:${SIMULATOR_OCPP_VERSION:-2.1.0}
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       CSMS_HTTP_URL: http://app:8000
@@ -124,6 +129,7 @@ services:
         condition: service_healthy
     command: ["python", "-m", "simulator.verify"]
     restart: "no"
-  
+
+
 volumes:
   postgres_data:

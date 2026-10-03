@@ -233,7 +233,9 @@ bỏ qua. Có thể đổi `SIMULATOR_COUNT`, `SIMULATOR_CODE_PREFIX`,
 
 Docker Desktop phải đang chạy trước khi gọi lệnh. Nếu đổi logic OCPP, dùng
 `docker compose --profile simulator up --build -d` lại để build lại image
-simulator đã ghim `ocpp==2.1.0` và `websockets==15.0.1`.
+simulator. Khi nâng simulator, chỉ đổi `SIMULATOR_OCPP_VERSION` và phiên bản
+WebSocket tương ứng trong cấu hình Compose; client, seed và verifier không cần
+sửa.
 
 ## 6. Chạy backend trên máy, database trong Docker
 
