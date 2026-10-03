@@ -14,7 +14,7 @@ from sqlalchemy import select
 
 from simulator.config import SimulatorSettings, load_settings
 from simulator.reporting import read_report
-from simulator.seed import SIMULATOR_OPERATOR_EMAIL, SIMULATOR_OPERATOR_PASSWORD
+from simulator.seed import SIMULATOR_OPERATOR_EMAIL
 from simulator.verification import validate_report
 from src.modules.charging.models import ChargingSession
 from src.modules.stations.models import ChargePoint
@@ -70,9 +70,7 @@ async def _verify_connections(
 ) -> list[str]:
     timeout = _positive_int("SIMULATOR_VERIFY_TIMEOUT_SECONDS", 180)
     base_url = os.environ.get("CSMS_HTTP_URL", "http://app:8000").rstrip("/")
-    password = os.environ.get(
-        "SIMULATOR_OPERATOR_PASSWORD", SIMULATOR_OPERATOR_PASSWORD
-    )
+    password = os.environ.get("SIMULATOR_OPERATOR_PASSWORD", "")
     if not password:
         return ["SIMULATOR_OPERATOR_PASSWORD must not be empty"]
     deadline = monotonic() + timeout

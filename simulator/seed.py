@@ -19,14 +19,11 @@ from src.modules.stations.models import ChargePoint, Connector, Station
 from src.platform.database.session import SessionFactory
 
 SIMULATOR_OPERATOR_EMAIL = "simulator.operator@local.invalid"
-SIMULATOR_OPERATOR_PASSWORD = "simulator-local-only"
 
 
 async def seed_simulator_data(settings: SimulatorSettings) -> None:
     """Create or update only the S-26 namespaced data required by the fleet."""
-    password = os.environ.get(
-        "SIMULATOR_OPERATOR_PASSWORD", SIMULATOR_OPERATOR_PASSWORD
-    )
+    password = os.environ.get("SIMULATOR_OPERATOR_PASSWORD", "")
     if not password:
         raise ValueError("SIMULATOR_OPERATOR_PASSWORD must not be empty")
     async with SessionFactory() as session, session.begin():
