@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import cast
@@ -289,6 +290,62 @@ async def test_boot_gate_blocked_station_and_unsupported_action(
         ).error_code
         == "NotImplemented"
     )
+
+
+@pytest.mark.asyncio
+async def test_unsupported_action_is_logged_at_default_level_after_boot(
+    db_session: AsyncSession,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    station, charger = await charger_fixture(db_session)
+    conn = connection(charger.id, station.id)
+    conn.charge_point_code = charger.code
+
+    async def dispatch_with_test_session(
+        current: OcppConnection, frame: Frame, *, record_seen: bool = False
+    ) -> str:
+        return await process_call(
+            current, frame, db_session, record_seen=record_seen
+        )
+
+    monkeypatch.setattr(transport, "record_contact", AsyncMock())
+    monkeypatch.setattr(transport, "dispatch_call", dispatch_with_test_session)
+
+    ocpp_logger = logging.getLogger("csms.ocpp")
+    assert ocpp_logger.getEffectiveLevel() >= logging.WARNING
+
+    await transport.handle_message(
+        conn,
+        '[2,"boot-id","BootNotification",'
+        '{"chargePointVendor":"V","chargePointModel":"M"}]',
+    )
+    boot_reply = decode_frame(
+        cast(AsyncMock, conn.websocket.send_text).await_args.args[0]
+    )
+    assert boot_reply.payload["status"] == "Accepted"
+
+    await transport.handle_message(
+        conn, '[2,"unsupported-id","FirmwareStatusNotification",{}]'
+    )
+    unsupported_reply = decode_frame(
+        cast(AsyncMock, conn.websocket.send_text).await_args.args[0]
+    )
+    assert unsupported_reply.kind == 4
+    assert unsupported_reply.error_code == "NotImplemented"
+    assert unsupported_reply.message_id == "unsupported-id"
+
+    matching_logs = [
+        record
+        for record in caplog.records
+        if record.name == "csms.ocpp"
+        and "ocpp_action_not_implemented" in record.getMessage()
+    ]
+    assert len(matching_logs) == 1
+    assert matching_logs[0].levelno >= logging.WARNING
+    assert f"charge_point_code={charger.code}" in matching_logs[0].getMessage()
+    assert "message_id=unsupported-id" in matching_logs[0].getMessage()
+    assert "action=FirmwareStatusNotification" in matching_logs[0].getMessage()
 
 
 @pytest.mark.asyncio

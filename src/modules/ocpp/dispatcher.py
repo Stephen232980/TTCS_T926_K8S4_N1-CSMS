@@ -211,9 +211,10 @@ async def process_call(
                 "Invalid charging payload",
             )
     else:
-        logger.info(
-            "ocpp_action_not_implemented charger=%s action=%s",
-            charge_point.id,
+        logger.warning(
+            "ocpp_action_not_implemented charge_point_code=%s message_id=%s action=%s",
+            connection.charge_point_code,
+            frame.message_id,
             frame.action,
         )
         response = error_frame(
