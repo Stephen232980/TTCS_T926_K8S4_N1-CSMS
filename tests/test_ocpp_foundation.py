@@ -132,6 +132,61 @@ async def test_server_call_matches_reply_and_cleans_pending(kind: int) -> None:
 
 
 @pytest.mark.asyncio
+async def test_duplicate_pending_message_id_is_rejected_before_socket_send(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conn = connection()
+    monkeypatch.setattr(transport, "record_contact", AsyncMock())
+    first_call = asyncio.create_task(
+        conn.call("Reset", {"type": "Soft"}, message_id="shared-id")
+    )
+    await asyncio.sleep(0)
+    first_pending = conn.pending["shared-id"]
+
+    with pytest.raises(ValueError, match="message ID 'shared-id' is already pending"):
+        await conn.call("Reset", {"type": "Hard"}, message_id="shared-id")
+
+    send_text = cast(AsyncMock, conn.websocket.send_text)
+    send_text.assert_awaited_once()
+    assert conn.pending["shared-id"] is first_pending
+    await transport.handle_message(
+        conn, encode_frame(Frame(3, "shared-id", {"status": "Accepted"}))
+    )
+    assert await first_call == Frame(3, "shared-id", {"status": "Accepted"})
+    assert conn.pending == {}
+
+
+@pytest.mark.asyncio
+async def test_distinct_pending_message_ids_match_out_of_order_replies(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conn = connection()
+    monkeypatch.setattr(transport, "record_contact", AsyncMock())
+    first_call = asyncio.create_task(
+        conn.call("Reset", {"type": "Soft"}, message_id="first-id")
+    )
+    second_call = asyncio.create_task(
+        conn.call("Reset", {"type": "Hard"}, message_id="second-id")
+    )
+    await asyncio.sleep(0)
+    sent = cast(AsyncMock, conn.websocket.send_text).await_args_list
+    assert {decode_frame(call.args[0]).message_id for call in sent} == {
+        "first-id",
+        "second-id",
+    }
+
+    second_reply = Frame(3, "second-id", {"result": "second"})
+    await transport.handle_message(conn, encode_frame(second_reply))
+    assert await second_call == second_reply
+    assert not first_call.done()
+
+    first_reply = Frame(3, "first-id", {"result": "first"})
+    await transport.handle_message(conn, encode_frame(first_reply))
+    assert await first_call == first_reply
+    assert conn.pending == {}
+
+
+@pytest.mark.asyncio
 async def test_server_call_timeout_cleans_pending() -> None:
     conn = connection()
     with pytest.raises(TimeoutError):
