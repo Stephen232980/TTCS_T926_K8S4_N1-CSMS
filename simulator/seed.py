@@ -5,8 +5,10 @@ from __future__ import annotations
 import asyncio
 import os
 from decimal import Decimal
+from typing import cast
 
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from simulator.config import SimulatorSettings, load_settings
 from src.modules.charging.models import ChargingCard
@@ -49,8 +51,11 @@ async def seed_simulator_data(settings: SimulatorSettings) -> None:
             await _card(session, driver, operator, settings.tag_for(index))
 
 
-async def _role(session, code: str) -> Role:
-    role = await session.scalar(select(Role).where(Role.code == code))
+async def _role(session: AsyncSession, code: str) -> Role:
+    role = cast(
+        Role | None,
+        await session.scalar(select(Role).where(Role.code == code)),
+    )
     if role is None:
         role = Role(code=code)
         session.add(role)
@@ -58,8 +63,11 @@ async def _role(session, code: str) -> Role:
     return role
 
 
-async def _user(session, email: str, password: str) -> User:
-    user = await session.scalar(select(User).where(User.email == email))
+async def _user(session: AsyncSession, email: str, password: str) -> User:
+    user = cast(
+        User | None,
+        await session.scalar(select(User).where(User.email == email)),
+    )
     if user is None:
         user = User(email=email, password_hash=hash_password(password), status="active")
         session.add(user)
@@ -70,7 +78,7 @@ async def _user(session, email: str, password: str) -> User:
     return user
 
 
-async def _assign_role(session, user: User, role: Role) -> None:
+async def _assign_role(session: AsyncSession, user: User, role: Role) -> None:
     assignment = await session.scalar(
         select(UserRole).where(
             UserRole.user_id == user.id,
@@ -81,12 +89,17 @@ async def _assign_role(session, user: User, role: Role) -> None:
         session.add(UserRole(user_id=user.id, role_id=role.id))
 
 
-async def _station(session, operator: User, settings: SimulatorSettings) -> Station:
+async def _station(
+    session: AsyncSession, operator: User, settings: SimulatorSettings
+) -> Station:
     first_code = settings.code_for(1)
-    station = await session.scalar(
-        select(Station)
-        .join(ChargePoint, ChargePoint.station_id == Station.id)
-        .where(ChargePoint.code == first_code)
+    station = cast(
+        Station | None,
+        await session.scalar(
+            select(Station)
+            .join(ChargePoint, ChargePoint.station_id == Station.id)
+            .where(ChargePoint.code == first_code)
+        ),
     )
     if station is None:
         station = Station(
@@ -106,8 +119,11 @@ async def _station(session, operator: User, settings: SimulatorSettings) -> Stat
     return station
 
 
-async def _charger(session, station: Station, code: str) -> ChargePoint:
-    charger = await session.scalar(select(ChargePoint).where(ChargePoint.code == code))
+async def _charger(session: AsyncSession, station: Station, code: str) -> ChargePoint:
+    charger = cast(
+        ChargePoint | None,
+        await session.scalar(select(ChargePoint).where(ChargePoint.code == code)),
+    )
     if charger is None:
         charger = ChargePoint(
             station_id=station.id,
@@ -122,7 +138,7 @@ async def _charger(session, station: Station, code: str) -> ChargePoint:
     return charger
 
 
-async def _connector(session, charger: ChargePoint) -> None:
+async def _connector(session: AsyncSession, charger: ChargePoint) -> None:
     connector = await session.scalar(
         select(Connector).where(
             Connector.charge_point_id == charger.id,
@@ -133,7 +149,7 @@ async def _connector(session, charger: ChargePoint) -> None:
         session.add(Connector(charge_point_id=charger.id, connector_number=1))
 
 
-async def _card(session, driver: User, operator: User, tag: str) -> None:
+async def _card(session: AsyncSession, driver: User, operator: User, tag: str) -> None:
     card = await session.scalar(
         select(ChargingCard).where(ChargingCard.tag_hash == tag_hash(tag))
     )

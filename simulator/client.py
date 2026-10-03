@@ -13,6 +13,7 @@ from uuid import uuid4
 
 from websockets.asyncio.client import ClientConnection, connect
 from websockets.exceptions import WebSocketException
+from websockets.typing import Subprotocol
 
 from simulator.config import SimulatorSettings, load_settings
 from simulator.reporting import write_report
@@ -39,7 +40,7 @@ async def _run_online(settings: SimulatorSettings) -> None:
     results: list[dict[str, Any]] = []
     for index, connection in enumerate(connections, start=1):
         code = settings.code_for(index)
-        if isinstance(connection, Exception):
+        if isinstance(connection, BaseException):
             results.append({"code": code, "error": str(connection)})
         else:
             socket, _ = connection
@@ -65,7 +66,7 @@ async def _run_recovery(settings: SimulatorSettings) -> None:
     report_rows: list[dict[str, Any]] = []
     for index, result in enumerate(results, start=1):
         code = settings.code_for(index)
-        if isinstance(result, Exception):
+        if isinstance(result, BaseException):
             report_rows.append({"code": code, "error": str(result)})
         else:
             row, socket = result
@@ -159,7 +160,11 @@ async def _connect_and_boot(
     last_error: Exception | None = None
     for _ in range(12):
         try:
-            socket = await connect(url, subprotocols=["ocpp1.6"], open_timeout=5)
+            socket = await connect(
+                url,
+                subprotocols=[Subprotocol("ocpp1.6")],
+                open_timeout=5,
+            )
         except (OSError, TimeoutError, WebSocketException) as error:
             last_error = error
             await asyncio.sleep(1)
