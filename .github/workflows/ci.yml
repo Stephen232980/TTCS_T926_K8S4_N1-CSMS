@@ -119,6 +119,8 @@ jobs:
       - name: Run S-26 Docker Compose scenario
         run: |
           set -euo pipefail
+          mkdir -p .local/simulator-reports
+          chmod 777 .local/simulator-reports
           docker compose --profile simulator up --build -d
 
           deadline=$((SECONDS + 240))
