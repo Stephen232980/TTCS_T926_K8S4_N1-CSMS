@@ -1,13 +1,16 @@
 import asyncio
 import json
+import logging
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import cast
+from types import SimpleNamespace
+from typing import Literal, cast
 from unittest.mock import AsyncMock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
-from fastapi import WebSocket
+from fastapi import FastAPI, WebSocket
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +19,7 @@ from src.entrypoints.http import app
 from src.modules.identity.authorization import CurrentActor
 from src.modules.identity.dependencies import get_current_actor
 from src.modules.identity.models import User
+from src.modules.ocpp import dispatcher as ocpp_dispatcher
 from src.modules.ocpp import router as ocpp_router
 from src.modules.ocpp import transport
 from src.modules.ocpp.connection_registry import OcppConnection, OcppConnectionRegistry
@@ -72,7 +76,9 @@ async def test_concurrent_duplicates_are_committed_once_and_replay_in_new_sessio
             await session.execute(delete(User).where(User.id == owner_id))
 
 
-def connection(charge_point_id=None, station_id=None) -> OcppConnection:
+def connection(
+    charge_point_id: UUID | None = None, station_id: UUID | None = None
+) -> OcppConnection:
     return OcppConnection(
         charge_point_id or uuid4(),
         station_id or uuid4(),
@@ -104,6 +110,7 @@ def test_frame_round_trip(frame: Frame) -> None:
         '[2,"id","Action",[]]',
         '[3,"id",{},1]',
         '[4,"id",1,"error",{}]',
+        '[4,"id","","",{}]',
         '[2,"id","Action",{"bad":NaN}]',
     ],
 )
@@ -112,21 +119,90 @@ def test_malformed_frames_are_rejected(raw: str) -> None:
         decode_frame(raw)
 
 
+def test_callerror_allows_empty_description() -> None:
+    frame = decode_frame('[4,"id","NotImplemented","",{}]')
+
+    assert frame.kind == 4
+    assert frame.error_code == "NotImplemented"
+    assert frame.description == ""
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", [3, 4])
-async def test_server_call_matches_reply_and_cleans_pending(kind: int) -> None:
+async def test_server_call_matches_reply_and_cleans_pending(
+    kind: Literal[3, 4],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     conn = connection()
+    monkeypatch.setattr(transport, "record_contact", AsyncMock())
     task = asyncio.create_task(conn.call("Reset", {"type": "Soft"}))
     await asyncio.sleep(0)
-    sent = decode_frame(cast(AsyncMock, conn.websocket.send_text).await_args.args[0])
+    sent_args = cast(AsyncMock, conn.websocket.send_text).await_args
+    assert sent_args is not None
+    sent = decode_frame(sent_args.args[0])
     reply = Frame(
-        cast(int, kind),
+        kind,
         sent.message_id,
         {"status": "Accepted"},
         error_code="NotImplemented" if kind == 4 else "",
     )
     await transport.handle_message(conn, encode_frame(reply))
     assert await task == reply
+    assert conn.pending == {}
+
+
+@pytest.mark.asyncio
+async def test_duplicate_pending_message_id_is_rejected_before_socket_send(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conn = connection()
+    monkeypatch.setattr(transport, "record_contact", AsyncMock())
+    first_call = asyncio.create_task(
+        conn.call("Reset", {"type": "Soft"}, message_id="shared-id")
+    )
+    await asyncio.sleep(0)
+    first_pending = conn.pending["shared-id"]
+
+    with pytest.raises(ValueError, match="message ID 'shared-id' is already pending"):
+        await conn.call("Reset", {"type": "Hard"}, message_id="shared-id")
+
+    send_text = cast(AsyncMock, conn.websocket.send_text)
+    send_text.assert_awaited_once()
+    assert conn.pending["shared-id"] is first_pending
+    await transport.handle_message(
+        conn, encode_frame(Frame(3, "shared-id", {"status": "Accepted"}))
+    )
+    assert await first_call == Frame(3, "shared-id", {"status": "Accepted"})
+    assert conn.pending == {}
+
+
+@pytest.mark.asyncio
+async def test_distinct_pending_message_ids_match_out_of_order_replies(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conn = connection()
+    monkeypatch.setattr(transport, "record_contact", AsyncMock())
+    first_call = asyncio.create_task(
+        conn.call("Reset", {"type": "Soft"}, message_id="first-id")
+    )
+    second_call = asyncio.create_task(
+        conn.call("Reset", {"type": "Hard"}, message_id="second-id")
+    )
+    await asyncio.sleep(0)
+    sent = cast(AsyncMock, conn.websocket.send_text).await_args_list
+    assert {decode_frame(call.args[0]).message_id for call in sent} == {
+        "first-id",
+        "second-id",
+    }
+
+    second_reply = Frame(3, "second-id", {"result": "second"})
+    await transport.handle_message(conn, encode_frame(second_reply))
+    assert await second_call == second_reply
+    assert not first_call.done()
+
+    first_reply = Frame(3, "first-id", {"result": "first"})
+    await transport.handle_message(conn, encode_frame(first_reply))
+    assert await first_call == first_reply
     assert conn.pending == {}
 
 
@@ -292,6 +368,80 @@ async def test_boot_gate_blocked_station_and_unsupported_action(
 
 
 @pytest.mark.asyncio
+async def test_unsupported_action_is_logged_at_default_level_after_boot(
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    station_id, charge_point_id = uuid4(), uuid4()
+    charge_point_code = "cp-unsupported-log"
+    station = SimpleNamespace(id=station_id, archived_at=None, status="active")
+    charger = SimpleNamespace(
+        id=charge_point_id,
+        station_id=station_id,
+        archived_at=None,
+        vendor=None,
+        model=None,
+        firmware_version=None,
+        last_boot_at=None,
+        heartbeat_interval_seconds=None,
+        status="offline",
+        status_updated_at=None,
+    )
+    session = AsyncMock(spec=AsyncSession)
+    cast(AsyncMock, session.scalar).side_effect = [charger, station, charger]
+    cast(AsyncMock, session.get).return_value = None
+    conn = connection(charge_point_id, station_id)
+    conn.charge_point_code = charge_point_code
+
+    async def dispatch_with_test_session(
+        current: OcppConnection, frame: Frame, *, record_seen: bool = False
+    ) -> str:
+        return await process_call(
+            current, frame, cast(AsyncSession, session), record_seen=record_seen
+        )
+
+    monkeypatch.setattr(transport, "record_contact", AsyncMock())
+    monkeypatch.setattr(transport, "dispatch_call", dispatch_with_test_session)
+    monkeypatch.setattr(ocpp_dispatcher, "mark_seen", AsyncMock())
+    monkeypatch.setattr(ocpp_dispatcher, "note_reconnection", AsyncMock())
+
+    ocpp_logger = logging.getLogger("csms.ocpp")
+    assert ocpp_logger.getEffectiveLevel() >= logging.WARNING
+
+    await transport.handle_message(
+        conn,
+        '[2,"boot-id","BootNotification",'
+        '{"chargePointVendor":"V","chargePointModel":"M"}]',
+    )
+    boot_args = cast(AsyncMock, conn.websocket.send_text).await_args
+    assert boot_args is not None
+    boot_reply = decode_frame(boot_args.args[0])
+    assert boot_reply.payload["status"] == "Accepted"
+
+    await transport.handle_message(
+        conn, '[2,"unsupported-id","FirmwareStatusNotification",{}]'
+    )
+    unsupported_args = cast(AsyncMock, conn.websocket.send_text).await_args
+    assert unsupported_args is not None
+    unsupported_reply = decode_frame(unsupported_args.args[0])
+    assert unsupported_reply.kind == 4
+    assert unsupported_reply.error_code == "NotImplemented"
+    assert unsupported_reply.message_id == "unsupported-id"
+
+    matching_logs = [
+        record
+        for record in caplog.records
+        if record.name == "csms.ocpp"
+        and "ocpp_action_not_implemented" in record.getMessage()
+    ]
+    assert len(matching_logs) == 1
+    assert matching_logs[0].levelno >= logging.WARNING
+    assert f"charge_point_code={charge_point_code}" in matching_logs[0].getMessage()
+    assert "message_id=unsupported-id" in matching_logs[0].getMessage()
+    assert "action=FirmwareStatusNotification" in matching_logs[0].getMessage()
+
+
+@pytest.mark.asyncio
 async def test_invalid_boot_and_reply_retention(db_session: AsyncSession) -> None:
     station, charger = await charger_fixture(db_session)
     conn = connection(charger.id, station.id)
@@ -321,6 +471,8 @@ async def test_invalid_boot_and_reply_retention(db_session: AsyncSession) -> Non
 def test_real_websocket_keeps_open_after_malformed_frame(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    websocket_app = FastAPI()
+    websocket_app.include_router(ocpp_router.router)
     monkeypatch.setattr(transport, "record_contact", AsyncMock())
     monkeypatch.setattr(
         ocpp_router,
@@ -334,13 +486,17 @@ def test_real_websocket_keeps_open_after_malformed_frame(
         AsyncMock(return_value='[3,"boot",{"status":"Accepted"}]'),
     )
     with (
-        TestClient(app) as client,
+        TestClient(websocket_app) as client,
         client.websocket_connect(
             "/ocpp/cp-test", subprotocols=["ocpp1.6"]
         ) as websocket,
     ):
-        websocket.send_text('[2,"malformed","BootNotification"]')
-        assert websocket.receive_json()[:3] == [4, "malformed", "FormationViolation"]
+        websocket.send_text('[4,"invalid","","",{}]')
+        assert websocket.receive_json()[:3] == [
+            4,
+            "invalid",
+            "TypeConstraintViolation",
+        ]
         websocket.send_text(
             '[2,"boot","BootNotification",{"chargePointVendor":"V","chargePointModel":"M"}]'
         )
@@ -355,7 +511,7 @@ async def test_monitor_owner_scope_and_driver_denied(db_session: AsyncSession) -
     other_station, _ = await charger_fixture(db_session)
     actor = CurrentActor(station.owner_id, frozenset({"station_owner"}))
 
-    async def database_override():
+    async def database_override() -> AsyncIterator[AsyncSession]:
         yield db_session
 
     app.dependency_overrides[get_db_session] = database_override

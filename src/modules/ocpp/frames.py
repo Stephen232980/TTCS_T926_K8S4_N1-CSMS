@@ -78,7 +78,11 @@ def decode_frame(raw: str) -> Frame:
     elif kind == 3:
         payload = value[2]
     else:
-        if not isinstance(value[2], str) or not isinstance(value[3], str):
+        if (
+            not isinstance(value[2], str)
+            or not value[2]
+            or not isinstance(value[3], str)
+        ):
             raise FrameError(uid, "TypeConstraintViolation", "Invalid error fields")
         payload = value[4]
     if not isinstance(payload, dict):

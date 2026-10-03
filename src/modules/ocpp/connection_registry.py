@@ -35,7 +35,11 @@ class OcppConnection:
     ) -> Frame:
         from uuid import uuid4
 
-        message_id = message_id or str(uuid4())
+        message_id = str(uuid4()) if message_id is None else message_id
+        if message_id in self.pending:
+            raise ValueError(
+                f"An OCPP call with message ID {message_id!r} is already pending"
+            )
         future: asyncio.Future[Frame] = asyncio.get_running_loop().create_future()
         self.pending[message_id] = future
         try:
