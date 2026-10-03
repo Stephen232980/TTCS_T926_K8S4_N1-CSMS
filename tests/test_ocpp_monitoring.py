@@ -23,6 +23,7 @@ from tests.test_ocpp_foundation import charger_fixture, connection
 async def setup_charger(session):
     station, charger = await charger_fixture(session)
     charger.last_seen_at = datetime.now(UTC)
+    charger.last_boot_at = charger.last_seen_at
     charger.heartbeat_interval_seconds = 60
     connector = Connector(
         charge_point_id=charger.id, connector_number=1, status="Available"
