@@ -76,3 +76,21 @@ Chưa commit/push/merge; Git hiện các thay đổi ngay trong thư mục CSMS.
 Heartbeat, trạng thái đầu nối, ngoại tuyến và luồng đẩy giao diện được bổ sung
 ở [nhóm giám sát S-09–S-12](OCPP_MONITORING_DELIVERY.md). Giới hạn chức năng
 nhóm 1 ở trên là ghi nhận tại thời điểm bàn giao nhóm 1.
+
+## S-08 — Boot replay khi trạng thái trạm đã thay đổi
+
+Quyết định chấp nhận Boot thuộc socket hiện tại và phải kiểm tra trạng thái
+trạm hiện tại. Nếu cache từng trả `Accepted` nhưng trạm đã bị khóa hoặc lưu
+trữ, replay trả `CALLRESULT` có `status=Rejected`, giờ máy chủ hiện tại và
+interval cấu hình; socket không được chấp nhận Boot và trụ chuyển offline.
+Các bản tin nghiệp vụ sau đó vẫn nhận `SecurityError` trước Boot hợp lệ.
+
+Đây là ngoại lệ an toàn của phản hồi Boot trong S-14: không ghi đè cache cũ,
+không chạy lại handler và không đổi metadata Boot. Khi trạm khả dụng trở lại,
+replay được phép nhận phản hồi Accepted ban đầu. Cache vốn là Rejected vẫn
+trả Rejected; trụ cần gửi Boot mới với message ID mới để xin chấp nhận lại.
+Replay nghiệp vụ Start/Meter/Stop vẫn giữ nguyên quy tắc S-14.
+
+Kiểm thử trong `test_ocpp_audit_regressions.py` bao phủ trạm bị khóa/lưu trữ
+trên cả socket cũ và mới, phản hồi/cổng quyền/trạng thái online, cache không
+bị đổi, mở lại trạm và Boot mới sau một phản hồi Rejected đã lưu.
