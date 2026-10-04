@@ -10,6 +10,7 @@ import type { StationApi } from './stationApi'
 import { notifySessionUnauthorized } from '../../auth/sessionEvents'
 
 interface StationResponse {
+  photo_url?: string | null
   id: string
   owner_id: string
   name: string
@@ -55,6 +56,7 @@ function mapStation(response: StationResponse): Station {
     status: response.status,
     createdAt: response.created_at,
     updatedAt: response.updated_at,
+    photoUrl: response.photo_url,
   }
 }
 
@@ -72,7 +74,8 @@ async function parseResponse<T>(response: Response): Promise<T> {
   throw new StationApiError(response.status, detail)
 }
 
-const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''
+const configuredBaseUrl =
+  import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''
 
 export class HttpStationApi implements StationApi {
   private readonly baseUrl: string
