@@ -31,6 +31,32 @@ from tests.test_ocpp_foundation import charger_fixture, connection
 TAG = "TEST-DRIVER-ABCD"
 
 
+@pytest.mark.asyncio
+async def test_start_with_another_tag_suffix_does_not_reuse_authorization(db_session):
+    _, _, _, _, _, conn, tag = await setup(db_session)
+    stamp = datetime.now(UTC)
+    first = await start(db_session, conn, tag, stamp)
+    second = await start(db_session, conn, "UNKNOWN-" + tag[-4:], stamp)
+    assert first.payload["idTagInfo"]["status"] == "Accepted"
+    assert second.payload["idTagInfo"]["status"] == "Invalid"
+    assert second.payload["transactionId"] != first.payload["transactionId"]
+
+
+@pytest.mark.asyncio
+async def test_start_replay_on_new_connection_keeps_exact_transaction(db_session):
+    station, charger, _, _, _, conn, tag = await setup(db_session)
+    stamp = datetime.now(UTC)
+    message_id = str(uuid4())
+    first = await start(db_session, conn, tag, stamp, uid=message_id)
+    fresh = connection(charger.id, station.id)
+    fresh.boot_accepted = True
+    second = await start(db_session, fresh, tag, stamp, uid=message_id)
+    assert second.payload == first.payload
+    assert (
+        await db_session.scalar(select(func.count()).select_from(ChargingSession)) == 1
+    )
+
+
 async def setup(session):
     station, charger = await charger_fixture(session)
     connector = Connector(

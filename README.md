@@ -206,6 +206,14 @@ khi chủ động muốn mất toàn bộ dữ liệu local.
 
 ### 5.1. S-26 — Chạy 20 trụ OCPP ảo
 
+Compose thông thường không cần mật khẩu simulator. Khi bật profile simulator,
+seed và verifier yêu cầu `SIMULATOR_OPERATOR_PASSWORD`. Mỗi lần chạy có mã
+riêng để báo cáo cũ không được dùng để nghiệm thu; trước khi chạy lại, dùng
+`docker compose --profile simulator down` rồi khởi động lại.
+
+Để CI chặn merge khi kịch bản lỗi, ruleset của `main` phải bắt buộc check
+`Verify 20 OCPP virtual chargers`; xem [hướng dẫn S-26](docs/S26_SIMULATOR_DELIVERY.md).
+
 S-26 thêm profile `simulator`: profile này seed trụ có tiền tố riêng, chạy
 kịch bản sạc có ngắt–nối lại và tự đối chiếu phiên, công tơ và kWh. Trong `.env`,
 đặt `SIMULATOR_OPERATOR_PASSWORD` là mật khẩu chỉ dùng local; không dùng mật

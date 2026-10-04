@@ -305,16 +305,8 @@ async def start_transaction(
         .with_for_update()
     )
     if old is not None:
-        if (
-            old.started_at == payload.timestamp
-            and old.meter_start_wh == payload.meterStart
-            and old.tag_tail == payload.idTag[-4:]
-        ):
-            return {
-                "transactionId": old.id,
-                "idTagInfo": {"status": old.authorization_status},
-            }
-
+        # Exact message replays are handled by the dispatcher's durable cache.
+        # A masked tag suffix cannot establish that a new call is a replay.
         old.ended_at = datetime.now(UTC)
         old.stop_reason = "ReplacedByNewTransaction"
         review(old, "replaced_open_session")

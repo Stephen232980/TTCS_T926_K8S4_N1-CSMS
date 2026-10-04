@@ -10,7 +10,7 @@ sai lệch dữ liệu phiên sạc. Phụ thuộc S-21 đã được merge vào
 | --- | --- | --- |
 | Compose khởi động đúng số trụ | Profile `simulator` dùng `SIMULATOR_COUNT`, mặc định 20; seed tạo `SIM-001` đến `SIM-020`, đầu nối và thẻ thử riêng | `simulator-verify` xác nhận đủ code đã cấu hình đang `connected`, `boot_accepted`, `online` |
 | Trụ chạy luồng phục hồi | Mỗi client Boot, Authorize, StartTransaction, Status, MeterValues, ngắt–nối lại theo seed cố định, replay Start/Stop và dừng phiên | Báo cáo chứa transaction ID duy nhất, ít nhất một reconnect, meter stop 3500 Wh và 2,5 kWh cho từng trụ |
-| CI chặn Pull Request | Job `simulator-scenario` chạy sau `quality`, dựng Compose và dùng exit code của verifier | Job thất bại khi thiếu trụ online, thiếu/nhân đôi phiên, meter hoặc kWh lệch; deployment staging chờ job này |
+| CI chặn Pull Request | Job `simulator-scenario` chạy sau `quality`, dựng Compose và dùng exit code của verifier; ruleset của `main` phải bắt buộc check `Verify 20 OCPP virtual chargers` | Job thất bại khi thiếu trụ online, thiếu/nhân đôi phiên, meter hoặc kWh lệch; required check chặn merge, deployment staging chờ job này |
 | CI có log/artifact | CI lưu `docker-compose.log`, trạng thái service và báo cáo JSON | Artifact `s26-simulator-evidence` xuất hiện cả khi kịch bản thất bại |
 | Đổi phiên bản simulator không làm sửa phần khác | Compose truyền `SIMULATOR_OCPP_VERSION=2.1.0` và `SIMULATOR_WEBSOCKETS_VERSION=15.0.1` từ K-01 vào một build/image tag dùng chung | Đổi tag/phiên bản tại Compose, không sửa client, seed hoặc verifier |
 | NFR: hoàn tất dưới năm phút | CI đặt `timeout-minutes: 5`; verifier từ chối báo cáo có thời lượng từ 300 giây | `elapsed_seconds` trong báo cáo nhỏ hơn 300 |
@@ -26,7 +26,11 @@ báo cáo không có id tag vào `.local/simulator-reports`. Service chờ seed 
 tất; seed chờ API `health/ready`, do đó simulator không thử kết nối trước khi
 migration và app sẵn sàng.
 
-`simulator-verify` chỉ bắt đầu sau khi simulator đã có báo cáo. Nó kiểm tra API
+Mỗi lần chạy simulator tạo `run_id` mới, lưu marker của process và marker trong
+thư mục báo cáo. Báo cáo JSON được thay thế nguyên tử; healthcheck chỉ đạt khi
+báo cáo khớp cả hai marker. Verifier từ chối báo cáo của lần chạy trước.
+
+`simulator-verify` chỉ bắt đầu sau khi simulator đã có báo cáo của lần chạy hiện tại. Nó kiểm tra API
 kết nối bằng tài khoản operator local-only và đối chiếu trực tiếp PostgreSQL
 để nêu rõ mã trụ, `transactionId`, meter stop hoặc kWh khác mong đợi.
 
@@ -58,11 +62,26 @@ kết nối bằng tài khoản operator local-only và đối chiếu trực ti
 Không đặt tiền tố trùng với trụ thật. Lệnh `docker compose down` giữ volume;
 không cần dùng `down -v` để chạy lại kịch bản.
 
+Trước khi chạy lại, dùng `docker compose --profile simulator down`, rồi chạy
+lại lệnh `up` ở trên để seed, client và verifier cùng khởi động lại. Báo cáo
+cũ có thể giữ nguyên trong thư mục; chúng không được dùng cho lần chạy mới.
+Khi không bật profile simulator, không cần `SIMULATOR_OPERATOR_PASSWORD`;
+khi bật profile, seed và verifier sẽ báo lỗi nếu mật khẩu trống.
+
+StartTransaction phát lại với cùng message ID dùng cache bền vững của
+dispatcher (bao gồm hash của toàn bộ action/payload), không nhận diện bằng
+đuôi thẻ. Một bản tin mới phải đi qua xác thực riêng.
+
 ## CI và failure output
 
 CI dùng 20 mã `SIM-CI-001` đến `SIM-CI-020`, môi trường PostgreSQL riêng và
 seed cố định `2600`. Job chạy sau unit/integration test. Khi lỗi, artifact có
 log Compose, trạng thái các service và báo cáo simulator để reviewer kiểm tra.
+
+Quản trị repository cần thêm `Verify 20 OCPP virtual chargers` (GitHub Actions)
+vào required status checks của ruleset đang bảo vệ `main`. Workflow thất bại
+chưa đủ để chặn merge nếu check này chưa bắt buộc. Kiểm tra lại ruleset sau
+khi cập nhật; cấu hình đó nằm trên GitHub, không được áp dụng bằng commit.
 Khi nâng simulator, chỉ đổi hai biến phiên bản S-26 trong Compose; Dockerfile,
 client, seed và verifier dùng lại nguyên trạng.
 

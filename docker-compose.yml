@@ -65,7 +65,7 @@ services:
       SIMULATOR_CODE_PREFIX: ${SIMULATOR_CODE_PREFIX:-SIM-}
       SIMULATOR_TAG_PREFIX: ${SIMULATOR_TAG_PREFIX:-SIMTAG-}
       OCPP_URL: ws://app:8000
-      SIMULATOR_OPERATOR_PASSWORD: ${SIMULATOR_OPERATOR_PASSWORD:?Set SIMULATOR_OPERATOR_PASSWORD in .env}
+      SIMULATOR_OPERATOR_PASSWORD: ${SIMULATOR_OPERATOR_PASSWORD:-}
     depends_on:
       app:
         condition: service_healthy
@@ -99,7 +99,7 @@ services:
           "CMD",
           "python",
           "-c",
-          "from pathlib import Path; raise SystemExit(not Path('/reports/simulator-results.json').is_file())",
+          "from simulator.reporting import report_ready; raise SystemExit(not report_ready('/reports/simulator-results.json'))",
         ]
       interval: 1s
       timeout: 3s
@@ -122,7 +122,7 @@ services:
       SIMULATOR_SCENARIO: recovery
       SIMULATOR_REPORT_PATH: /reports/simulator-results.json
       SIMULATOR_VERIFY_TIMEOUT_SECONDS: ${SIMULATOR_VERIFY_TIMEOUT_SECONDS:-180}
-      SIMULATOR_OPERATOR_PASSWORD: ${SIMULATOR_OPERATOR_PASSWORD:?Set SIMULATOR_OPERATOR_PASSWORD in .env}
+      SIMULATOR_OPERATOR_PASSWORD: ${SIMULATOR_OPERATOR_PASSWORD:-}
     volumes:
       - ./.local/simulator-reports:/reports
     depends_on:

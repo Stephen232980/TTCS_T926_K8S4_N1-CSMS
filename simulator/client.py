@@ -16,7 +16,7 @@ from websockets.exceptions import WebSocketException
 from websockets.typing import Subprotocol
 
 from simulator.config import SimulatorSettings, load_settings
-from simulator.reporting import write_report
+from simulator.reporting import begin_run, write_report
 
 METER_START_WH = 1000
 METER_STOP_WH = 3500
@@ -25,13 +25,14 @@ EXPECTED_ENERGY_KWH = "2.5"
 
 async def run(settings: SimulatorSettings) -> None:
     """Run the configured S-26 scenario and persist its safe verification report."""
+    run_id = begin_run(settings.report_path)
     if settings.scenario == "online":
-        await _run_online(settings)
+        await _run_online(settings, run_id)
     else:
-        await _run_recovery(settings)
+        await _run_recovery(settings, run_id)
 
 
-async def _run_online(settings: SimulatorSettings) -> None:
+async def _run_online(settings: SimulatorSettings, run_id: str) -> None:
     connections = await asyncio.gather(
         *(_connect_and_boot(settings, index) for index in range(1, settings.count + 1)),
         return_exceptions=True,
@@ -46,7 +47,7 @@ async def _run_online(settings: SimulatorSettings) -> None:
             socket, _ = connection
             sockets.append(socket)
             results.append({"code": code, "online": True})
-    _write_report(settings, results)
+    _write_report(settings, results, run_id)
     if len(sockets) != settings.count:
         await _close_all(sockets)
         raise RuntimeError("One or more virtual chargers could not connect")
@@ -56,7 +57,7 @@ async def _run_online(settings: SimulatorSettings) -> None:
         await _close_all(sockets)
 
 
-async def _run_recovery(settings: SimulatorSettings) -> None:
+async def _run_recovery(settings: SimulatorSettings, run_id: str) -> None:
     started_at = monotonic()
     results = await asyncio.gather(
         *(_recovery_charger(settings, index) for index in range(1, settings.count + 1)),
@@ -72,7 +73,7 @@ async def _run_recovery(settings: SimulatorSettings) -> None:
             row, socket = result
             report_rows.append(row)
             sockets.append(socket)
-    _write_report(settings, report_rows, started_at)
+    _write_report(settings, report_rows, run_id, started_at)
     if len(sockets) != settings.count:
         await _close_all(sockets)
         raise RuntimeError("One or more virtual recovery scenarios failed")
@@ -264,12 +265,14 @@ def _field(value: dict[str, Any], parent: str, child: str) -> Any:
 def _write_report(
     settings: SimulatorSettings,
     rows: list[dict[str, Any]],
+    run_id: str,
     started_at: float | None = None,
 ) -> None:
     elapsed = None if started_at is None else round(monotonic() - started_at, 3)
     write_report(
         settings.report_path,
         {
+            "run_id": run_id,
             "scenario": settings.scenario,
             "count": settings.count,
             "elapsed_seconds": elapsed,

@@ -13,7 +13,7 @@ import httpx
 from sqlalchemy import select
 
 from simulator.config import SimulatorSettings, load_settings
-from simulator.reporting import read_report
+from simulator.reporting import read_current_report
 from simulator.seed import SIMULATOR_OPERATOR_EMAIL
 from simulator.verification import validate_report
 from src.modules.charging.models import ChargingSession
@@ -58,7 +58,7 @@ async def _wait_for_report(settings: SimulatorSettings) -> dict[str, Any]:
     latest_error: Exception | None = None
     while monotonic() < deadline:
         try:
-            return read_report(settings.report_path)
+            return read_current_report(settings.report_path)
         except (FileNotFoundError, OSError, ValueError, TypeError) as error:
             latest_error = error
             await asyncio.sleep(1)
