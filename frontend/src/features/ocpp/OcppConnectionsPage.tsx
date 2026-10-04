@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { notifySessionUnauthorized } from '../auth/sessionEvents'
 import { ControlAction } from './ControlAction'
 import { ControlAudit } from './ControlAudit'
+import { RemoteLogs } from './RemoteLogs'
 
 interface Connector {
   id: string; number: number; status: string; raw_ocpp_status: string | null; status_updated_at: string
@@ -23,6 +24,7 @@ const statusName = (value: string | null) => statusNames[value ?? 'unknown'] ?? 
 
 export function OcppConnectionsPage({ canControl = false, canAudit = false }: { canControl?: boolean; canAudit?: boolean }) {
   const [auditVisible, setAuditVisible] = useState(false)
+  const [remoteLogsVisible, setRemoteLogsVisible] = useState(false)
   const [result, setResult] = useState<Result | null>(null)
   const [page, setPage] = useState(1)
   const [revision, setRevision] = useState(0)
@@ -94,7 +96,14 @@ export function OcppConnectionsPage({ canControl = false, canAudit = false }: { 
         <details className="ocpp-details"><summary>Thông tin kết nối và khởi động</summary><p>{connection.connected ? 'Socket đang kết nối' : 'Socket chưa kết nối'} · {connection.boot_accepted ? 'Đã chấp nhận khởi động' : 'Chưa được chấp nhận khởi động'} · Firmware {connection.firmware_version ?? 'Chưa có'}</p><p>Kết nối từ: {time(connection.connected_at)}</p></details>
       </article>)}
     </div>
-    {canAudit && <><button className="secondary-button" aria-expanded={auditVisible} onClick={() => setAuditVisible(value => !value)}>Nhật ký điều khiển</button>{auditVisible && <ControlAudit />}</>}
+    {canAudit && (
+      <>
+        <button className="secondary-button" aria-expanded={auditVisible} onClick={() => setAuditVisible(value => !value)}>Nhật ký điều khiển cũ</button>
+        {auditVisible && <ControlAudit />}
+        <button className="secondary-button" aria-expanded={remoteLogsVisible} onClick={() => setRemoteLogsVisible(value => !value)} style={{ marginLeft: '1rem' }}>Nhật ký lệnh từ xa</button>
+        {remoteLogsVisible && <RemoteLogs />}
+      </>
+    )}
     {result && result.total_pages > 1 && <nav className="station-form__actions" aria-label="Phân trang kết nối"><button className="secondary-button" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Trang trước</button><span>Trang {page} / {result.total_pages}</span><button className="secondary-button" disabled={page >= result.total_pages} onClick={() => setPage(p => p + 1)}>Trang sau</button></nav>}
   </section>
 }
