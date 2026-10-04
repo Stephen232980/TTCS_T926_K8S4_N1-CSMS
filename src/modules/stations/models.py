@@ -10,6 +10,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     Numeric,
     String,
     UniqueConstraint,
@@ -46,6 +47,16 @@ class Station(Base):
     )
     name: Mapped[str] = mapped_column(String(150), nullable=False)
     address: Mapped[str] = mapped_column(String(500), nullable=False)
+    photo_data: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True)
+    photo_mime: Mapped[str | None] = mapped_column(String(30))
+    photo_digest: Mapped[str | None] = mapped_column(String(64))
+
+    @property
+    def photo_url(self) -> str | None:
+        if self.photo_digest is None:
+            return None
+        return f"/api/v1/stations/{self.id}/photo?v={self.photo_digest}"
+
     latitude: Mapped[Decimal] = mapped_column(Numeric(9, 6), nullable=False)
     longitude: Mapped[Decimal] = mapped_column(Numeric(10, 6), nullable=False)
     status: Mapped[str] = mapped_column(

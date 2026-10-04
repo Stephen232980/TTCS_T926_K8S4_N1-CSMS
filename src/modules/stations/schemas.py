@@ -75,6 +75,7 @@ class StationResponse(BaseModel):
     owner_id: UUID
     name: str
     address: str
+    photo_url: str | None = None
     latitude: float
     longitude: float
     status: str
@@ -116,6 +117,19 @@ class ChargePointListQuery(BaseModel):
     page_size: int = Field(default=20, ge=1, le=100)
 
 
+class ConnectorConfiguration(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    connector_number: int = Field(ge=1, le=4)
+    connector_type: str | None = Field(default=None, min_length=1, max_length=50)
+    current_type: Literal["AC", "DC"] | None = None
+    max_power_kw: Decimal | None = Field(
+        default=None, gt=0, max_digits=8, decimal_places=3
+    )
+    voltage: Decimal | None = Field(default=None, gt=0, max_digits=8, decimal_places=2)
+    amperage: Decimal | None = Field(default=None, gt=0, max_digits=8, decimal_places=2)
+
+
 class ChargePointCreateRequest(BaseModel):
     model_config = ConfigDict(
         extra="forbid",
@@ -124,6 +138,16 @@ class ChargePointCreateRequest(BaseModel):
 
     code: str = Field(min_length=1, max_length=64)
     connector_count: int = Field(ge=1, le=4)
+    name: str | None = Field(default=None, min_length=1, max_length=150)
+    connectors: list[ConnectorConfiguration] | None = None
+
+    @model_validator(mode="after")
+    def validate_connectors(self) -> Self:
+        if self.connectors is not None:
+            numbers = [item.connector_number for item in self.connectors]
+            if sorted(numbers) != list(range(1, self.connector_count + 1)):
+                raise ValueError("Cấu hình phải có đủ từng đầu nối, không trùng số")
+        return self
 
     @field_validator("code")
     @classmethod
@@ -137,12 +161,29 @@ class ChargePointUpdateRequest(BaseModel):
         str_strip_whitespace=True,
     )
 
-    code: str = Field(min_length=1, max_length=64)
+    code: str | None = Field(default=None, min_length=1, max_length=64)
+    name: str | None = Field(default=None, min_length=1, max_length=150)
+    connectors: list[ConnectorConfiguration] | None = Field(
+        default=None, min_length=1, max_length=4
+    )
+
+    @model_validator(mode="after")
+    def validate_patch(self) -> Self:
+        if not self.model_fields_set:
+            raise ValueError("Payload cập nhật không được rỗng")
+        if "code" in self.model_fields_set and self.code is None:
+            raise ValueError("Mã trụ không được null")
+        if "connectors" in self.model_fields_set and self.connectors is None:
+            raise ValueError("Cấu hình đầu nối không được null")
+        numbers = [item.connector_number for item in self.connectors or []]
+        if len(numbers) != len(set(numbers)):
+            raise ValueError("Số đầu nối không được trùng")
+        return self
 
     @field_validator("code")
     @classmethod
-    def normalize_code(cls, value: str) -> str:
-        return value.strip()
+    def normalize_code(cls, value: str | None) -> str | None:
+        return value.strip() if value is not None else None
 
 
 class ConnectorResponse(BaseModel):
@@ -151,6 +192,11 @@ class ConnectorResponse(BaseModel):
     id: UUID
     connector_number: int
     status: str
+    connector_type: str | None = None
+    current_type: str | None = None
+    max_power_kw: Decimal | None = None
+    voltage: Decimal | None = None
+    amperage: Decimal | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -162,6 +208,9 @@ class ChargePointResponse(BaseModel):
     station_id: UUID
     code: str
     name: str | None
+    vendor: str | None = None
+    model: str | None = None
+    firmware_version: str | None = None
     status: str
     code_locked_at: datetime | None = None
     connectors: list[ConnectorResponse]

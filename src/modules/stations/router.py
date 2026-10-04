@@ -152,6 +152,9 @@ async def list_charge_points(
                 station_id=charge_point.station_id,
                 code=charge_point.code,
                 name=charge_point.name,
+                vendor=charge_point.vendor,
+                model=charge_point.model,
+                firmware_version=charge_point.firmware_version,
                 status=charge_point.status,
                 code_locked_at=charge_point.code_locked_at,
                 connectors=[
@@ -193,6 +196,8 @@ async def create_charge_point(
             scope,
             code=request.code,
             connector_count=request.connector_count,
+            name=request.name,
+            connectors=request.connectors,
         )
     except StationOwnershipDeniedError as error:
         raise HTTPException(
@@ -216,6 +221,9 @@ async def create_charge_point(
         station_id=charge_point.station_id,
         code=charge_point.code,
         name=charge_point.name,
+        vendor=charge_point.vendor,
+        model=charge_point.model,
+        firmware_version=charge_point.firmware_version,
         status=charge_point.status,
         code_locked_at=charge_point.code_locked_at,
         connectors=[
