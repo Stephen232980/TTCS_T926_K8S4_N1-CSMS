@@ -18,7 +18,7 @@ from src.modules.identity.security import hash_password
 from src.modules.stations.models import ChargePoint, Connector, Station
 from src.platform.database.session import SessionFactory
 
-SIMULATOR_OPERATOR_EMAIL = "simulator.operator@local.invalid"
+SIMULATOR_OPERATOR_EMAIL = "simulator.operator@example.com"
 
 
 async def seed_simulator_data(settings: SimulatorSettings) -> None:
@@ -41,7 +41,7 @@ async def seed_simulator_data(settings: SimulatorSettings) -> None:
             await _connector(session, charger)
             driver = await _user(
                 session,
-                f"simulator-driver-{index:03d}@local.invalid",
+                f"simulator-driver-{index:03d}@example.com",
                 "simulator-driver-only",
             )
             await _assign_role(session, driver, driver_role)
