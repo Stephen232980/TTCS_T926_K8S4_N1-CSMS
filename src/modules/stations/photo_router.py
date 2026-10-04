@@ -22,7 +22,7 @@ router = APIRouter(
     tags=["station-photos"],
     dependencies=[Depends(authorize_request)],
 )
-MAX_BYTES = 5 * 1024 * 1024
+MAX_BYTES = 20 * 1024 * 1024
 MAX_PIXELS = 16_000_000
 FORMATS = {"image/jpeg": "JPEG", "image/png": "PNG", "image/webp": "WEBP"}
 
@@ -32,8 +32,11 @@ def normalize_photo(data: bytes, mime: str) -> tuple[bytes, str]:
         with warnings.catch_warnings():
             warnings.simplefilter("error", Image.DecompressionBombWarning)
             with Image.open(BytesIO(data)) as image:
-                if image.format != FORMATS[mime] or getattr(image, "n_frames", 1) != 1:
+                if image.format != FORMATS[mime]:
                     raise ValueError("invalid_station_photo")
+                # A station cover is static. Decode only the first frame of an
+                # animated WebP/PNG rather than rejecting a supported image.
+                image.seek(0)
                 if image.width * image.height > MAX_PIXELS:
                     raise ValueError("station_photo_dimensions_too_large")
                 image.load()
