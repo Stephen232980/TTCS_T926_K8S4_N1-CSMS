@@ -18,6 +18,8 @@ RUN python -m pip install --no-cache-dir --upgrade pip \
 COPY simulator ./simulator
 
 RUN useradd --create-home simulator \
-    && chown -R simulator:simulator /app
+    && chown -R simulator:simulator /app \
+    && mkdir -p /reports \
+    && chown simulator:simulator /reports
 
 USER simulator
