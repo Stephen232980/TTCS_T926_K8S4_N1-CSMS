@@ -204,6 +204,39 @@ docker compose down
 Lệnh trên giữ dữ liệu. `docker compose down -v` xoá volume database, chỉ dùng
 khi chủ động muốn mất toàn bộ dữ liệu local.
 
+### 5.1. S-26 — Chạy 20 trụ OCPP ảo
+
+S-26 thêm profile `simulator`: profile này seed trụ có tiền tố riêng, chạy
+kịch bản sạc có ngắt–nối lại và tự đối chiếu phiên, công tơ và kWh. Trong `.env`,
+đặt `SIMULATOR_OPERATOR_PASSWORD` là mật khẩu chỉ dùng local; không dùng mật
+khẩu production và không commit `.env`.
+
+Bật toàn bộ app, database và 20 trụ ảo bằng một lệnh:
+
+```powershell
+docker compose --profile simulator up --build -d
+```
+
+Kiểm tra kết quả:
+
+```powershell
+docker compose --profile simulator ps
+docker compose --profile simulator logs --no-color simulator-verify
+```
+
+Đạt khi `simulator-verify` kết thúc với mã `0` và log ghi `S-26 verified
+20/20 online chargers and sessions.` Báo cáo không chứa id tag nằm tại
+`.local/simulator-reports/simulator-results.json`, là dữ liệu local đã bị Git
+bỏ qua. Có thể đổi `SIMULATOR_COUNT`, `SIMULATOR_CODE_PREFIX`,
+`SIMULATOR_TAG_PREFIX` và `SIMULATOR_RANDOM_SEED` trong `.env`; mặc định là
+20 trụ `SIM-001` đến `SIM-020`.
+
+Docker Desktop phải đang chạy trước khi gọi lệnh. Nếu đổi logic OCPP, dùng
+`docker compose --profile simulator up --build -d` lại để build lại image
+simulator. Khi nâng simulator, chỉ đổi `SIMULATOR_OCPP_VERSION` và phiên bản
+WebSocket tương ứng trong cấu hình Compose; client, seed và verifier không cần
+sửa.
+
 ## 6. Chạy backend trên máy, database trong Docker
 
 Cách này tiện khi phát triển vì Uvicorn tự reload.
