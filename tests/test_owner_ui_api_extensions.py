@@ -168,24 +168,33 @@ async def test_photo_replace_read_delete_scope_and_invalid_upload(
 
 def test_animated_webp_becomes_static_cover() -> None:
     payload = BytesIO()
-    Image.new('RGB', (16, 16), 'red').save(payload, format='WEBP', save_all=True, append_images=[Image.new('RGB', (16, 16), 'blue')], duration=100, loop=0)
+    Image.new("RGB", (16, 16), "red").save(
+        payload,
+        format="WEBP",
+        save_all=True,
+        append_images=[Image.new("RGB", (16, 16), "blue")],
+        duration=100,
+        loop=0,
+    )
     with Image.open(BytesIO(payload.getvalue())) as source:
         assert source.n_frames == 2
-    normalized, mime = normalize_photo(payload.getvalue(), 'image/webp')
-    assert mime == 'image/jpeg'
+    normalized, mime = normalize_photo(payload.getvalue(), "image/webp")
+    assert mime == "image/jpeg"
     with Image.open(BytesIO(normalized)) as cover:
-        assert getattr(cover, 'n_frames', 1) == 1
+        assert getattr(cover, "n_frames", 1) == 1
         red, _, blue = cover.getpixel((0, 0))
         assert red > blue
 
 
 def test_supported_photo_between_old_and_new_upload_limits() -> None:
     payload = BytesIO()
-    Image.frombytes('RGB', (1600, 1200), os.urandom(1600 * 1200 * 3)).save(payload, format='PNG')
+    Image.frombytes("RGB", (1600, 1200), os.urandom(1600 * 1200 * 3)).save(
+        payload, format="PNG"
+    )
     assert 5 * 1024 * 1024 < len(payload.getvalue()) < MAX_BYTES
-    normalized, mime = normalize_photo(payload.getvalue(), 'image/png')
+    normalized, mime = normalize_photo(payload.getvalue(), "image/png")
     assert len(normalized) < MAX_BYTES
-    assert mime == 'image/jpeg'
+    assert mime == "image/jpeg"
 
 
 def test_photo_metadata_is_removed() -> None:
