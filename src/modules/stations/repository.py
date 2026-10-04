@@ -16,6 +16,7 @@ from src.modules.stations.exceptions import (
     ChargePointCodeAlreadyExistsError,
     ChargePointCodeLockedError,
     ChargePointOwnershipDeniedError,
+    ConnectorConfigurationNotFoundError,
     StationIdempotencyConflictError,
     StationOwnershipDeniedError,
 )
@@ -25,6 +26,7 @@ from src.modules.stations.models import (
     Station,
     StationCreateIdempotency,
 )
+from src.modules.stations.schemas import ConnectorConfiguration
 
 _security_logger = logging.getLogger("csms.security")
 
@@ -173,6 +175,8 @@ class StationRepository:
         *,
         code: str,
         connector_count: int,
+        name: str | None = None,
+        connectors: list[ConnectorConfiguration] | None = None,
     ) -> ChargePoint | None:
         station = await self.get_station_by_id(station_id, scope)
         if station is None:
@@ -184,11 +188,19 @@ class StationRepository:
         charge_point = ChargePoint(
             station_id=station.id,
             code=code.strip(),
+            name=name,
             connectors=[
                 Connector(connector_number=connector_number)
                 for connector_number in range(1, connector_count + 1)
             ],
         )
+        if connectors is not None:
+            by_number = {c.connector_number: c for c in charge_point.connectors}
+            for configuration in connectors:
+                for key, value in configuration.model_dump(
+                    exclude={"connector_number"}
+                ).items():
+                    setattr(by_number[configuration.connector_number], key, value)
         self._db_session.add(charge_point)
 
         try:
@@ -255,7 +267,10 @@ class StationRepository:
         charge_point_id: UUID,
         scope: ActorScope,
         *,
-        code: str,
+        code: str | None,
+        name: str | None = None,
+        name_provided: bool = False,
+        connectors: list[ConnectorConfiguration] | None = None,
     ) -> ChargePoint | None:
         statement = (
             select(ChargePoint)
@@ -280,17 +295,30 @@ class StationRepository:
             )
             raise ChargePointOwnershipDeniedError
 
-        if charge_point.code_locked_at is not None:
+        if code is not None and charge_point.code_locked_at is not None:
             raise ChargePointCodeLockedError
 
-        normalized_code = code.strip()
-        if not await self.is_charge_point_code_available(
-            normalized_code,
-            excluding_charge_point_id=charge_point.id,
-        ):
-            raise ChargePointCodeAlreadyExistsError
+        await self._db_session.refresh(charge_point, attribute_names=["connectors"])
+        by_number = {item.connector_number: item for item in charge_point.connectors}
+        if any(item.connector_number not in by_number for item in connectors or []):
+            raise ConnectorConfigurationNotFoundError
 
-        charge_point.code = normalized_code
+        if code is not None:
+            normalized_code = code.strip()
+            if not await self.is_charge_point_code_available(
+                normalized_code,
+                excluding_charge_point_id=charge_point.id,
+            ):
+                raise ChargePointCodeAlreadyExistsError
+            charge_point.code = normalized_code
+
+        if name_provided:
+            charge_point.name = name
+        for configuration in connectors or []:
+            for key, value in configuration.model_dump(
+                exclude={"connector_number"}, exclude_unset=True
+            ).items():
+                setattr(by_number[configuration.connector_number], key, value)
         try:
             await self._db_session.flush()
         except IntegrityError as error:

@@ -16,3 +16,7 @@ class ChargePointCodeLockedError(Exception):
 
 class ChargePointOwnershipDeniedError(Exception):
     pass
+
+
+class ConnectorConfigurationNotFoundError(Exception):
+    pass

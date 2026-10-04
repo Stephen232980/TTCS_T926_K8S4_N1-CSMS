@@ -10,6 +10,7 @@ from src.modules.stations.exceptions import (
     ChargePointCodeAlreadyExistsError,
     ChargePointCodeLockedError,
     ChargePointOwnershipDeniedError,
+    ConnectorConfigurationNotFoundError,
 )
 from src.modules.stations.repository import StationRepository
 from src.modules.stations.schemas import (
@@ -63,7 +64,12 @@ async def update_charge_point_code(
             charge_point_id,
             scope,
             code=request.code,
+            name=request.name,
+            name_provided="name" in request.model_fields_set,
+            connectors=request.connectors,
         )
+    except ConnectorConfigurationNotFoundError as error:
+        raise HTTPException(status_code=422, detail="connector_not_found") from error
     except ChargePointOwnershipDeniedError as error:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -91,6 +97,9 @@ async def update_charge_point_code(
         station_id=charge_point.station_id,
         code=charge_point.code,
         name=charge_point.name,
+        vendor=charge_point.vendor,
+        model=charge_point.model,
+        firmware_version=charge_point.firmware_version,
         status=charge_point.status,
         code_locked_at=charge_point.code_locked_at,
         connectors=[
