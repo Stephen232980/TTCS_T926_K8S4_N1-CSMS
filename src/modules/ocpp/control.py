@@ -13,6 +13,7 @@ from src.modules.charging.models import ChargingSession, ChargingSessionEvent
 from src.modules.identity.models import User
 from src.modules.ocpp.connection_registry import OcppConnection, ocpp_connections
 from src.modules.ocpp.control_models import ControlRequest, ControlResult
+from src.modules.ocpp.models import RemoteCommandLog
 from src.modules.stations.models import ChargePoint, Station
 from src.platform.database.session import SessionFactory
 
@@ -122,10 +123,31 @@ async def execute_command(
             or not live
         ):
             await record_result(session, command_id, "Offline", now)
+            session.add(
+                RemoteCommandLog(
+                    user_id=actor_id,
+                    charge_point_id=charger_id,
+                    session_id=transaction_id,
+                    command=action,
+                    result="Offline",
+                    created_at=now,
+                )
+            )
             return {"id": command_id, "status": "Offline"}
     outcome = await send_command(connection, command_id, action, payload)
     async with SessionFactory() as session, session.begin():
-        await record_result(session, command_id, outcome, datetime.now(UTC))
+        now_after = datetime.now(UTC)
+        await record_result(session, command_id, outcome, now_after)
+        session.add(
+            RemoteCommandLog(
+                user_id=actor_id,
+                charge_point_id=charger_id,
+                session_id=transaction_id,
+                command=action,
+                result=outcome,
+                created_at=now_after,
+            )
+        )
         return {"id": command_id, "status": await command_status(session, command_id)}
 
 
