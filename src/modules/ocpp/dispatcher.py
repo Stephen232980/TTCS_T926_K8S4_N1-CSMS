@@ -98,6 +98,25 @@ async def process_call(
                 and station.archived_at is None
                 and station.status != "blocked"
             )
+            if (
+                reply[0] == 3
+                and reply[2].get("status") == "Accepted"
+                and not connection.boot_accepted
+            ):
+                # Current admission overrides an old Boot approval. Keep the
+                # durable reply intact for a valid replay if the station reopens.
+                charge_point.status = "offline"
+                return encode_frame(
+                    Frame(
+                        3,
+                        frame.message_id,
+                        {
+                            "status": "Rejected",
+                            "currentTime": datetime.now(UTC).isoformat(),
+                            "interval": settings.ocpp_heartbeat_interval_seconds,
+                        },
+                    )
+                )
             if connection.boot_accepted and not boot_was_accepted:
                 await note_reconnection(session, charge_point.id)
         return cached.response

@@ -423,6 +423,13 @@ từ 1 đến 100. Trả items/total/page/total_pages và dữ liệu kết nố
 xem [hợp đồng chi tiết](OCPP_FOUNDATION_DELIVERY.md).
 Các action OCPP ngoài BootNotification hiện trả NotImplemented sau Boot.
 
+Boot replay: nếu phản hồi đã lưu là `Accepted` nhưng trạm hiện đã bị khóa
+hoặc lưu trữ, trả `CALLRESULT` với `status=Rejected`, `currentTime` hiện tại
+và `interval` cấu hình. Socket không được chấp nhận Boot; không ghi đè cache
+cũ. Khi trạm khả dụng trở lại, replay có thể nhận phản hồi cũ. Phản hồi Boot
+đã lưu là `Rejected` giữ nguyên; muốn xin chấp nhận lại cần message ID mới.
+Xem quy tắc S-08/S-14 trong hợp đồng chi tiết ở trên.
+
 
 ## Bản đồ vị trí trạm — điều chỉnh 02/10/2026
 

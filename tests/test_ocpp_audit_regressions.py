@@ -87,6 +87,81 @@ async def test_preboot_denial_does_not_poison_later_valid_request(db_session):
     assert decode_frame(await process_call(conn, frame, db_session)).kind == 3
 
 
+@pytest.mark.parametrize("unavailable", ["blocked", "archived"])
+@pytest.mark.parametrize("new_socket", [False, True])
+async def test_cached_boot_rechecks_station_without_overwriting_reply(
+    db_session, unavailable, new_socket
+):
+    station, charger = await charger_fixture(db_session)
+    original_connection = connection(charger.id, station.id)
+    frame = Frame(
+        2,
+        str(uuid4()),
+        {"chargePointVendor": "V", "chargePointModel": "M"},
+        action="BootNotification",
+    )
+    original = await process_call(
+        original_connection, frame, db_session, record_seen=True
+    )
+    boot_time = charger.last_boot_at
+    if unavailable == "blocked":
+        station.status = "blocked"
+    else:
+        station.archived_at = datetime.now(UTC)
+    await db_session.flush()
+    conn = connection(charger.id, station.id) if new_socket else original_connection
+    before = datetime.now(UTC)
+    denied = decode_frame(await process_call(conn, frame, db_session, record_seen=True))
+    assert denied.kind == 3 and denied.message_id == frame.message_id
+    assert denied.payload["status"] == "Rejected"
+    assert datetime.fromisoformat(denied.payload["currentTime"]) >= before
+    assert denied.payload["interval"] > 0
+    assert not conn.boot_accepted and charger.status == "offline"
+    assert charger.last_boot_at == boot_time
+    assert (
+        await db_session.get(OcppMessageReply, (charger.id, frame.message_id))
+    ).response == original
+    assert (
+        decode_frame(
+            await process_call(
+                conn, Frame(2, str(uuid4()), {}, action="Heartbeat"), db_session
+            )
+        ).error_code
+        == "SecurityError"
+    )
+    snapshot = await monitoring_snapshot(
+        db_session,
+        CurrentActor(station.owner_id, frozenset({"station_owner"})),
+        MonitorQuery(),
+    )
+    assert all(not item.online for item in snapshot.items)
+
+    station.status = "active"
+    station.archived_at = None
+    await db_session.flush()
+    assert await process_call(conn, frame, db_session, record_seen=True) == original
+    assert conn.boot_accepted and charger.last_boot_at == boot_time
+
+
+async def test_cached_rejected_boot_requires_new_message_after_unblocking(db_session):
+    station, charger = await charger_fixture(db_session, "blocked")
+    conn = connection(charger.id, station.id)
+    frame = Frame(
+        2,
+        str(uuid4()),
+        {"chargePointVendor": "V", "chargePointModel": "M"},
+        action="BootNotification",
+    )
+    rejected = await process_call(conn, frame, db_session, record_seen=True)
+    assert decode_frame(rejected).payload["status"] == "Rejected"
+    station.status = "active"
+    await db_session.flush()
+    fresh = connection(charger.id, station.id)
+    assert await process_call(fresh, frame, db_session, record_seen=True) == rejected
+    assert not fresh.boot_accepted
+    assert decode_frame(await boot(db_session, fresh)).payload["status"] == "Accepted"
+
+
 @pytest.mark.parametrize("previously_accepted", [False, True])
 async def test_rejected_boot_is_not_online_even_with_recent_contact(
     db_session, previously_accepted
