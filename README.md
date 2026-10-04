@@ -211,8 +211,9 @@ seed và verifier yêu cầu `SIMULATOR_OPERATOR_PASSWORD`. Mỗi lần chạy c
 riêng để báo cáo cũ không được dùng để nghiệm thu; trước khi chạy lại, dùng
 `docker compose --profile simulator down` rồi khởi động lại.
 
-Để CI chặn merge khi kịch bản lỗi, ruleset của `main` phải bắt buộc check
-`Verify 20 OCPP virtual chargers`; xem [hướng dẫn S-26](docs/S26_SIMULATOR_DELIVERY.md).
+CI chặn merge khi kịch bản lỗi qua check `Build Docker image` đã bắt buộc
+trên `main`: job này báo thất bại nếu simulator không thành công, kể cả khi
+dependency bị skip. Xem [hướng dẫn S-26](docs/S26_SIMULATOR_DELIVERY.md).
 
 S-26 thêm profile `simulator`: profile này seed trụ có tiền tố riêng, chạy
 kịch bản sạc có ngắt–nối lại và tự đối chiếu phiên, công tơ và kWh. Trong `.env`,

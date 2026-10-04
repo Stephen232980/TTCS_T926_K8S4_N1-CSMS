@@ -10,7 +10,7 @@ sai lệch dữ liệu phiên sạc. Phụ thuộc S-21 đã được merge vào
 | --- | --- | --- |
 | Compose khởi động đúng số trụ | Profile `simulator` dùng `SIMULATOR_COUNT`, mặc định 20; seed tạo `SIM-001` đến `SIM-020`, đầu nối và thẻ thử riêng | `simulator-verify` xác nhận đủ code đã cấu hình đang `connected`, `boot_accepted`, `online` |
 | Trụ chạy luồng phục hồi | Mỗi client Boot, Authorize, StartTransaction, Status, MeterValues, ngắt–nối lại theo seed cố định, replay Start/Stop và dừng phiên | Báo cáo chứa transaction ID duy nhất, ít nhất một reconnect, meter stop 3500 Wh và 2,5 kWh cho từng trụ |
-| CI chặn Pull Request | Job `simulator-scenario` chạy sau `quality`, dựng Compose và dùng exit code của verifier; ruleset của `main` phải bắt buộc check `Verify 20 OCPP virtual chargers` | Job thất bại khi thiếu trụ online, thiếu/nhân đôi phiên, meter hoặc kWh lệch; required check chặn merge, deployment staging chờ job này |
+| CI chặn Pull Request | Job `simulator-scenario` chạy sau `quality`; job `Build Docker image` bắt buộc trên `main` dùng `always()` và thất bại nếu quality hoặc simulator không thành công | Simulator thất bại làm required check `Build Docker image` thất bại thay vì bị skip, chặn merge; deployment staging chờ simulator |
 | CI có log/artifact | CI lưu `docker-compose.log`, trạng thái service và báo cáo JSON | Artifact `s26-simulator-evidence` xuất hiện cả khi kịch bản thất bại |
 | Đổi phiên bản simulator không làm sửa phần khác | Compose truyền `SIMULATOR_OCPP_VERSION=2.1.0` và `SIMULATOR_WEBSOCKETS_VERSION=15.0.1` từ K-01 vào một build/image tag dùng chung | Đổi tag/phiên bản tại Compose, không sửa client, seed hoặc verifier |
 | NFR: hoàn tất dưới năm phút | CI đặt `timeout-minutes: 5`; verifier từ chối báo cáo có thời lượng từ 300 giây | `elapsed_seconds` trong báo cáo nhỏ hơn 300 |
@@ -78,10 +78,13 @@ CI dùng 20 mã `SIM-CI-001` đến `SIM-CI-020`, môi trường PostgreSQL riê
 seed cố định `2600`. Job chạy sau unit/integration test. Khi lỗi, artifact có
 log Compose, trạng thái các service và báo cáo simulator để reviewer kiểm tra.
 
-Quản trị repository cần thêm `Verify 20 OCPP virtual chargers` (GitHub Actions)
-vào required status checks của ruleset đang bảo vệ `main`. Workflow thất bại
-chưa đủ để chặn merge nếu check này chưa bắt buộc. Kiểm tra lại ruleset sau
-khi cập nhật; cấu hình đó nằm trên GitHub, không được áp dụng bằng commit.
+Ruleset đang bảo vệ `main` bắt buộc `Build Docker image`. Job build chờ cả
+quality và simulator, luôn chạy bước kiểm tra kết quả dependencies và thất
+bại khi một dependency thất bại, bị skip hoặc bị hủy. Không chỉ thêm `needs`:
+một required job bị skip có thể được GitHub xem là đạt. Cách này chặn merge
+khi simulator lỗi mà không cần quyền sửa ruleset. Quản trị repository có thể
+thêm riêng `Verify 20 OCPP virtual chargers` (GitHub Actions) vào required
+status checks để hiển thị điều kiện S-26 trực tiếp.
 Khi nâng simulator, chỉ đổi hai biến phiên bản S-26 trong Compose; Dockerfile,
 client, seed và verifier dùng lại nguyên trạng.
 
