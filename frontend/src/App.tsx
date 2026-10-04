@@ -16,6 +16,7 @@ import type { StationApi } from './features/stations/api/stationApi'
 import { StationDetailPage } from './features/stations/pages/StationDetailPage'
 import { StationListPage } from './features/stations/pages/StationListPage'
 import './App.css'
+import { OwnerWorkspace } from './features/owner/OwnerWorkspace'
 
 interface AppProps {
   authApi?: AuthApi
@@ -25,7 +26,11 @@ interface AppProps {
 
 const defaultAuthApi = new HttpAuthApi()
 
-function App({ authApi = defaultAuthApi, stationApi, chargePointApi }: AppProps) {
+function App({
+  authApi = defaultAuthApi,
+  stationApi,
+  chargePointApi,
+}: AppProps) {
   const [authStatus, setAuthStatus] = useState<
     'checking' | 'anonymous' | 'authenticated'
   >('checking')
@@ -33,8 +38,12 @@ function App({ authApi = defaultAuthApi, stationApi, chargePointApi }: AppProps)
   const [sessionMessage, setSessionMessage] = useState('')
   const [notice, setNotice] = useState('')
   const [noticeVersion, setNoticeVersion] = useState(0)
-  const [selectedStationId, setSelectedStationId] = useState<string | null>(null)
-  const [workspace, setWorkspace] = useState<'stations' | 'ocpp' | 'charging' | 'driver'>('stations')
+  const [selectedStationId, setSelectedStationId] = useState<string | null>(
+    null,
+  )
+  const [workspace, setWorkspace] = useState<
+    'stations' | 'ocpp' | 'charging' | 'driver'
+  >('stations')
 
   const loadCurrentUser = useCallback(async () => {
     const user = await authApi.getCurrentUser()
@@ -102,7 +111,9 @@ function App({ authApi = defaultAuthApi, stationApi, chargePointApi }: AppProps)
   if (authStatus === 'checking') {
     return (
       <main className="auth-checking" aria-live="polite">
-        <span className="brand__mark"><Icon name="bolt" /></span>
+        <span className="brand__mark">
+          <Icon name="bolt" />
+        </span>
         <strong>Đang kiểm tra phiên đăng nhập…</strong>
       </main>
     )
@@ -121,29 +132,97 @@ function App({ authApi = defaultAuthApi, stationApi, chargePointApi }: AppProps)
   const primaryRole = getHomeRole(currentUser)
   const permissions = getPermissions(currentUser)
 
+  if (primaryRole === 'station_owner') {
+    return (
+      <OwnerWorkspace
+        currentUser={currentUser}
+        onLogout={handleLogout}
+        stationApi={stationApi}
+        chargePointApi={chargePointApi}
+      />
+    )
+  }
+
   return (
     <AppShell
       currentUser={currentUser}
       onLogout={handleLogout}
-      onNavigateHome={() => { setWorkspace('stations'); setSelectedStationId(null) }}
+      onNavigateHome={() => {
+        setWorkspace('stations')
+        setSelectedStationId(null)
+      }}
       navigationActive={workspace === 'stations'}
     >
-      {permissions.canViewStations && <nav className="workspace-switch" aria-label="Khu vực vận hành">
-        <button className={workspace === 'stations' ? 'text-button workspace-switch__active' : 'text-button'} aria-pressed={workspace === 'stations'} onClick={() => setWorkspace('stations')}>Trạm sạc</button>
-        <button className={workspace === 'ocpp' ? 'text-button workspace-switch__active' : 'text-button'} aria-pressed={workspace === 'ocpp'} onClick={() => setWorkspace('ocpp')}>Kết nối trụ</button>
-        <button className={workspace === 'charging' ? 'text-button workspace-switch__active' : 'text-button'} aria-pressed={workspace === 'charging'} onClick={() => setWorkspace('charging')}>Phiên sạc</button>
-        {permissions.canUseDriver && <button className={workspace === 'driver' ? 'text-button workspace-switch__active' : 'text-button'} aria-pressed={workspace === 'driver'} onClick={() => setWorkspace('driver')}>Tài xế</button>}
-      </nav>}
+      {permissions.canViewStations && (
+        <nav className="workspace-switch" aria-label="Khu vực vận hành">
+          <button
+            className={
+              workspace === 'stations'
+                ? 'text-button workspace-switch__active'
+                : 'text-button'
+            }
+            aria-pressed={workspace === 'stations'}
+            onClick={() => setWorkspace('stations')}
+          >
+            Trạm sạc
+          </button>
+          <button
+            className={
+              workspace === 'ocpp'
+                ? 'text-button workspace-switch__active'
+                : 'text-button'
+            }
+            aria-pressed={workspace === 'ocpp'}
+            onClick={() => setWorkspace('ocpp')}
+          >
+            Kết nối trụ
+          </button>
+          <button
+            className={
+              workspace === 'charging'
+                ? 'text-button workspace-switch__active'
+                : 'text-button'
+            }
+            aria-pressed={workspace === 'charging'}
+            onClick={() => setWorkspace('charging')}
+          >
+            Phiên sạc
+          </button>
+          {permissions.canUseDriver && (
+            <button
+              className={
+                workspace === 'driver'
+                  ? 'text-button workspace-switch__active'
+                  : 'text-button'
+              }
+              aria-pressed={workspace === 'driver'}
+              onClick={() => setWorkspace('driver')}
+            >
+              Tài xế
+            </button>
+          )}
+        </nav>
+      )}
       {!permissions.canViewStations && permissions.canViewCharging ? (
         <ChargingSessionsPage canManage={false} canClose={false} />
       ) : !permissions.canViewStations ? (
-        primaryRole === 'driver' ? <DriverMapPage /> : <RoleHomePage role={primaryRole} />
+        primaryRole === 'driver' ? (
+          <DriverMapPage />
+        ) : (
+          <RoleHomePage role={primaryRole} />
+        )
       ) : workspace === 'driver' && permissions.canUseDriver ? (
         <DriverMapPage />
       ) : workspace === 'ocpp' ? (
-        <OcppConnectionsPage canControl={permissions.canControlChargers} canAudit={permissions.canViewControlAudit} />
+        <OcppConnectionsPage
+          canControl={permissions.canControlChargers}
+          canAudit={permissions.canViewControlAudit}
+        />
       ) : workspace === 'charging' ? (
-        <ChargingSessionsPage canManage={permissions.canViewStations} canClose={permissions.canCloseChargingSessions} />
+        <ChargingSessionsPage
+          canManage={permissions.canViewStations}
+          canClose={permissions.canCloseChargingSessions}
+        />
       ) : selectedStationId ? (
         <StationDetailPage
           key={selectedStationId}

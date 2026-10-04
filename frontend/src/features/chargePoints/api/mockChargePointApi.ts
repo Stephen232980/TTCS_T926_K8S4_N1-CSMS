@@ -65,7 +65,9 @@ export class MockChargePointApi implements ChargePointApi {
     const normalizedCode = code.trim()
     return {
       code: normalizedCode,
-      available: !this.chargePoints.some((item) => item.code === normalizedCode),
+      available: !this.chargePoints.some(
+        (item) => item.code === normalizedCode,
+      ),
     }
   }
 
@@ -88,16 +90,13 @@ export class MockChargePointApi implements ChargePointApi {
       name: null,
       status: 'offline',
       codeLockedAt: null,
-      connectors: Array.from(
-        { length: input.connectorCount },
-        (_, index) => ({
-          id: crypto.randomUUID(),
-          connectorNumber: index + 1,
-          status: 'unknown',
-          createdAt: now,
-          updatedAt: now,
-        }),
-      ),
+      connectors: Array.from({ length: input.connectorCount }, (_, index) => ({
+        id: crypto.randomUUID(),
+        connectorNumber: index + 1,
+        status: 'unknown',
+        createdAt: now,
+        updatedAt: now,
+      })),
       createdAt: now,
       updatedAt: now,
     }
@@ -116,14 +115,14 @@ export class MockChargePointApi implements ChargePointApi {
     await wait(this.latency)
     const current = this.chargePoints.find((item) => item.id === chargePointId)
     if (!current) throw new ChargePointApiError(404, 'resource_not_found')
-    if (current.codeLockedAt != null) {
+    if (input.code !== undefined && current.codeLockedAt != null) {
       throw new ChargePointApiError(
         409,
         'charge_point_code_locked_after_charging',
       )
     }
 
-    const code = input.code.trim()
+    const code = input.code?.trim() ?? current.code
     if (
       this.chargePoints.some(
         (item) =>
@@ -134,7 +133,27 @@ export class MockChargePointApi implements ChargePointApi {
       throw new ChargePointApiError(409, 'charge_point_code_already_exists')
     }
 
-    const updated = { ...current, code, updatedAt: new Date().toISOString() }
+    const updated = {
+      ...current,
+      code,
+      ...(input.name !== undefined ? { name: input.name } : {}),
+      connectors: current.connectors.map((connector) => {
+        const config = input.connectors?.find(
+          (item) => item.connector_number === connector.connectorNumber,
+        )
+        return config
+          ? {
+              ...connector,
+              connectorType: config.connector_type,
+              currentType: config.current_type,
+              maxPowerKw: config.max_power_kw,
+              voltage: config.voltage,
+              amperage: config.amperage,
+            }
+          : connector
+      }),
+      updatedAt: new Date().toISOString(),
+    }
     this.chargePoints = this.chargePoints.map((item) =>
       item.id === chargePointId ? updated : item,
     )

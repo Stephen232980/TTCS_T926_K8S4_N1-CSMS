@@ -41,19 +41,37 @@ describe('App', () => {
     [['admin'], false],
     [['station_owner'], true],
     [['driver', 'station_owner'], true],
-  ])('applies write permissions through station details for %s', async (roles, canWrite) => {
-    const user = userEvent.setup()
-    render(<App authApi={new AppAuthApi({ ...owner, roles })}
-      stationApi={new MockStationApi(undefined, 0)} chargePointApi={new MockChargePointApi([], 0)} />)
-    await screen.findByRole('heading', { name: 'Trạm sạc' })
-    expect(screen.getByRole('link', { name: 'Trạm sạc' })).toBeInTheDocument()
-    await user.click(await screen.findByRole('button', { name: 'Xem chi tiết Trạm Quận 1' }))
-    await screen.findByRole('heading', { name: 'Trạm Quận 1' })
-    expect(screen.queryByRole('heading', { name: 'Thêm trụ sạc' }) !== null).toBe(canWrite)
-  })
+  ])(
+    'applies write permissions through station details for %s',
+    async (roles, canWrite) => {
+      const user = userEvent.setup()
+      render(
+        <App
+          authApi={new AppAuthApi({ ...owner, roles })}
+          stationApi={new MockStationApi(undefined, 0)}
+          chargePointApi={new MockChargePointApi([], 0)}
+        />,
+      )
+      await screen.findByRole('heading', {
+        name: canWrite ? 'Trạm của tôi' : 'Trạm sạc',
+      })
+      expect(
+        screen.getByRole('link', {
+          name: canWrite ? 'Trạm của tôi' : 'Trạm sạc',
+        }),
+      ).toBeInTheDocument()
+      await user.click(
+        await screen.findByRole('button', { name: 'Xem chi tiết Trạm Quận 1' }),
+      )
+      await screen.findByRole('heading', { name: 'Trạm Quận 1' })
+      expect(screen.queryByRole('button', { name: 'Thêm trụ' }) !== null).toBe(
+        canWrite,
+      )
+    },
+  )
 
   it.each([
-    ['station_owner', 'Trạm sạc'],
+    ['station_owner', 'Trạm của tôi'],
     ['operator', 'Trạm sạc'],
     ['admin', 'Trạm sạc'],
     ['driver', 'Tìm trạm sạc'],
@@ -77,28 +95,32 @@ describe('App', () => {
       await waitFor(() => expect(listStations).toHaveBeenCalled())
     }
     if (role === 'operator' || role === 'admin') {
-      expect(screen.queryByRole('button', { name: /Chỉnh sửa/ })).not.toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: 'Tạo trạm' })).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole('button', { name: /Chỉnh sửa/ }),
+      ).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole('button', { name: 'Tạo trạm' }),
+      ).not.toBeInTheDocument()
     }
   })
 
   it('loads and filters an injected station API', async () => {
     const user = userEvent.setup()
     render(
-      <App
-        authApi={new AppAuthApi(owner)}
-        stationApi={new MockStationApi()}
-      />,
+      <App authApi={new AppAuthApi(owner)} stationApi={new MockStationApi()} />,
     )
 
     expect(
-      await screen.findByRole('heading', { name: 'Trạm sạc' }),
+      await screen.findByRole('heading', { name: 'Trạm của tôi' }),
     ).toBeInTheDocument()
-    expect(await screen.findAllByText('Trạm Quận 1')).toHaveLength(2)
+    expect(await screen.findAllByText('Trạm Quận 1')).toHaveLength(1)
 
-    await user.type(screen.getByRole('searchbox', { name: 'Tìm trạm' }), 'Thủ Đức')
+    await user.type(
+      screen.getByRole('searchbox', { name: 'Tìm trạm' }),
+      'Thủ Đức',
+    )
 
-    expect(await screen.findAllByText('Trạm Thủ Đức')).toHaveLength(2)
+    expect(await screen.findAllByText('Trạm Thủ Đức')).toHaveLength(1)
     await waitFor(() => {
       expect(screen.queryAllByText('Trạm Quận 1')).toHaveLength(0)
     })
@@ -120,9 +142,11 @@ describe('App', () => {
     expect(
       await screen.findByRole('heading', { name: 'Trạm Quận 1' }),
     ).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'Quay lại danh sách trạm' }))
+    await user.click(
+      screen.getByRole('button', { name: 'Quay lại danh sách trạm' }),
+    )
     expect(
-      await screen.findByRole('heading', { name: 'Trạm sạc' }),
+      await screen.findByRole('heading', { name: 'Trạm của tôi' }),
     ).toBeInTheDocument()
   })
 
@@ -139,20 +163,17 @@ describe('App', () => {
     await user.click(screen.getByRole('button', { name: 'Đăng nhập' }))
 
     expect(
-      await screen.findByRole('heading', { name: 'Trạm sạc' }),
+      await screen.findByRole('heading', { name: 'Trạm của tôi' }),
     ).toBeInTheDocument()
     expect(screen.getByText('owner@example.com')).toBeInTheDocument()
   })
 
   it('returns to login when an API reports an expired session', async () => {
     render(
-      <App
-        authApi={new AppAuthApi(owner)}
-        stationApi={new MockStationApi()}
-      />,
+      <App authApi={new AppAuthApi(owner)} stationApi={new MockStationApi()} />,
     )
     expect(
-      await screen.findByRole('heading', { name: 'Trạm sạc' }),
+      await screen.findByRole('heading', { name: 'Trạm của tôi' }),
     ).toBeInTheDocument()
 
     window.dispatchEvent(new Event(SESSION_UNAUTHORIZED_EVENT))

@@ -1,6 +1,6 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { MeterChart } from './MeterChart'
 import type { MeterReading } from './MeterChart'
 const reading = (value: string, timestamp: string, extra: Partial<MeterReading> = {}): MeterReading => ({ value, timestamp, measurand: 'Energy.Active.Import.Register', unit: 'Wh', phase: '', location: 'Outlet', ...extra })
@@ -9,6 +9,23 @@ const second = '2026-10-02T01:00:10Z'
 const third = '2026-10-02T01:00:30Z'
 
 describe('MeterChart', () => {
+  it('keeps the plot full width when an error banner reduces its available height', () => {
+    let resize: (entries: { contentRect: { width: number; height: number } }[]) => void = () => undefined
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: typeof resize) { resize = callback }
+      observe() {}
+      disconnect() {}
+    })
+    try {
+      render(<MeterChart expanded sessionId={9} readings={[reading('1000', first), reading('2000', second)]} />)
+      act(() => resize([{ contentRect: { width: 620, height: 300 } }]))
+      const svg = screen.getByRole('img')
+      expect(svg).toHaveAttribute('viewBox', '0 0 620 300')
+      act(() => resize([{ contentRect: { width: 620, height: 135 } }]))
+      expect(svg).toHaveAttribute('viewBox', '0 0 620 135')
+      expect(svg.querySelector('circle:last-of-type')).toHaveAttribute('cx', '594')
+    } finally { vi.unstubAllGlobals() }
+  })
   it('sorts charger timestamps, converts Wh and marks an energy regression without hiding it', async () => {
     const { container } = render(<MeterChart sessionId={1} readings={[reading('1800', third), reading('1000', first), reading('2000', second)]} />)
     expect(screen.getByRole('img', { name: /3 số đo.*có số đo giảm/ })).toBeInTheDocument()

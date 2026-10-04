@@ -1,6 +1,7 @@
 export type StationStatus = 'inactive' | 'active' | 'suspended' | 'blocked'
 
 export interface Station {
+  photoUrl?: string | null
   id: string
   name: string
   address: string

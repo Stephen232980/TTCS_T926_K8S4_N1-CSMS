@@ -10,6 +10,11 @@ import { ChargePointApiError, type ChargePointApi } from './chargePointApi'
 import { notifySessionUnauthorized } from '../../auth/sessionEvents'
 
 interface ConnectorResponse {
+  connector_type?: string | null
+  current_type?: 'AC' | 'DC' | null
+  max_power_kw?: string | null
+  voltage?: string | null
+  amperage?: string | null
   id: string
   connector_number: number
   status: string
@@ -18,6 +23,9 @@ interface ConnectorResponse {
 }
 
 interface ChargePointResponse {
+  vendor?: string | null
+  model?: string | null
+  firmware_version?: string | null
   id: string
   station_id: string
   code: string
@@ -67,6 +75,11 @@ function mapConnector(response: ConnectorResponse): Connector {
     status: response.status,
     createdAt: response.created_at,
     updatedAt: response.updated_at,
+    connectorType: response.connector_type,
+    currentType: response.current_type,
+    maxPowerKw: response.max_power_kw,
+    voltage: response.voltage,
+    amperage: response.amperage,
   }
 }
 
@@ -78,13 +91,17 @@ function mapChargePoint(response: ChargePointResponse): ChargePoint {
     name: response.name,
     status: response.status,
     codeLockedAt: response.code_locked_at,
+    vendor: response.vendor,
+    model: response.model,
+    firmwareVersion: response.firmware_version,
     connectors: response.connectors.map(mapConnector),
     createdAt: response.created_at,
     updatedAt: response.updated_at,
   }
 }
 
-const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''
+const configuredBaseUrl =
+  import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''
 
 export class HttpChargePointApi implements ChargePointApi {
   private readonly baseUrl: string
@@ -150,6 +167,10 @@ export class HttpChargePointApi implements ChargePointApi {
         body: JSON.stringify({
           code: input.code,
           connector_count: input.connectorCount,
+          ...(input.name !== undefined ? { name: input.name } : {}),
+          ...(input.connectors !== undefined
+            ? { connectors: input.connectors }
+            : {}),
         }),
       },
     )
@@ -167,7 +188,10 @@ export class HttpChargePointApi implements ChargePointApi {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code: input.code.trim() }),
+        body: JSON.stringify({
+          ...input,
+          ...(input.code !== undefined ? { code: input.code.trim() } : {}),
+        }),
       },
     )
 
