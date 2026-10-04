@@ -11,6 +11,7 @@ from src.modules.identity.router import router as identity_router
 from src.modules.ocpp.control_router import router as control_router
 from src.modules.ocpp.lifecycle import ocpp_lifespan
 from src.modules.ocpp.monitor_router import router as monitor_router
+from src.modules.ocpp.remote_logs_router import router as remote_logs_router
 from src.modules.ocpp.router import router as ocpp_router
 from src.modules.stations.charge_points_router import router as charge_points_router
 from src.modules.stations.discovery_router import router as discovery_router
@@ -28,6 +29,7 @@ app.include_router(discovery_router)
 app.include_router(charging_router)
 app.include_router(driver_charging_router)
 app.include_router(control_router)
+app.include_router(remote_logs_router)
 
 DatabaseSession = Annotated[AsyncSession, Depends(get_db_session)]
 
