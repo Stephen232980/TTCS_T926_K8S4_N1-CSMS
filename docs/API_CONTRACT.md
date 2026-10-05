@@ -1,5 +1,10 @@
 # API contract CSMS
 
+API quản trị tài khoản bổ sung ngày 05/10/2026: xem
+[contract, quy tắc và kiểm chứng](ADMIN_ACCOUNT_API_DELIVERY.md).
+Nhóm endpoint `/api/v1/admin/accounts` và `/api/v1/admin/roles` chỉ dành cho
+admin; phần sức khỏe hệ thống S-63 chưa được bổ sung trong nhóm này.
+
 Trạng thái: baseline cho frontend và backend, chốt ngày 26/09/2026.
 
 Tài liệu này định nghĩa contract HTTP mà frontend có thể dùng để phát triển. OpenAPI của

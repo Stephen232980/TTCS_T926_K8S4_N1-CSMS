@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.charging.driver_router import router as driver_charging_router
 from src.modules.charging.router import router as charging_router
+from src.modules.identity.admin_router import router as admin_accounts_router
 from src.modules.identity.router import router as identity_router
 from src.modules.ocpp.control_router import router as control_router
 from src.modules.ocpp.lifecycle import ocpp_lifespan
@@ -20,6 +21,7 @@ from src.platform.database.session import get_db_session
 
 app = FastAPI(title="CSMS", lifespan=ocpp_lifespan)
 app.include_router(identity_router)
+app.include_router(admin_accounts_router)
 app.include_router(stations_router)
 app.include_router(station_photo_router)
 app.include_router(charge_points_router)
