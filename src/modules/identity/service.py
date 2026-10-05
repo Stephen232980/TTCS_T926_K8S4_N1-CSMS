@@ -59,6 +59,10 @@ class AuthService:
 
         password_is_valid = self._verify_login_password(user, password)
 
+        if user is not None and user.status != "active":
+            await self._db_session.rollback()
+            raise InvalidCredentialsError
+
         if self._is_login_locked(user, ip_attempt, current_time):
             await self._db_session.rollback()
             raise LoginLockedError
