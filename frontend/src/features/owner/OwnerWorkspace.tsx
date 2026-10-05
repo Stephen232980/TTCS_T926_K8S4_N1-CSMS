@@ -259,11 +259,13 @@ export function Telemetry({
 export function OwnerWorkspace({
   currentUser,
   onLogout,
+  onAdmin,
   stationApi = stationsApi,
   chargePointApi = chargersApi,
 }: {
   currentUser: AuthenticatedUser
   onLogout: () => Promise<void>
+  onAdmin?: () => void
   stationApi?: StationApi
   chargePointApi?: ChargePointApi
 }) {
@@ -475,6 +477,7 @@ export function OwnerWorkspace({
         <footer>
           <strong>Chủ trạm</strong>
           <span title={currentUser.email}>{currentUser.email}</span>
+          {onAdmin && <button onClick={onAdmin}>Đổi khu vực</button>}
           {logoutError && <p role="alert">{logoutError}</p>}
           <button disabled={loggingOut} onClick={() => void logout()}>
             <Icon name="logout" />

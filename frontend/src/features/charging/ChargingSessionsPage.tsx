@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { MeterChart } from './MeterChart'
 import { ManualCloseForm } from './ManualCloseForm'
@@ -31,9 +31,9 @@ const quantities: Record<string, string> = { 'Energy.Active.Import.Register': '�
 const reasons: Record<string, string> = { no_matching_open_session: 'Không khớp phiên đang mở', unknown_transaction: 'Không tìm thấy phiên', already_closed_transaction: 'Phiên đã kết thúc' }
 const stopReasons: Record<string, string> = { Local: 'Dừng tại trụ', EVDisconnected: 'Xe ngắt kết nối', Remote: 'Dừng từ xa', EmergencyStop: 'Dừng khẩn cấp', PowerLoss: 'Mất điện', Reboot: 'Khởi động lại', HardReset: 'Khởi động cứng', SoftReset: 'Khởi động mềm', UnlockCommand: 'Mở khóa đầu nối', DeAuthorized: 'Thu hồi xác thực', Other: 'Lý do khác', ReplacedByNewTransaction: 'Bị thay bởi phiên mới' }
 
-async function request<T>(path: string, signal?: AbortSignal, options?: RequestInit): Promise<T> {
+async function scopedRequest<T>(area: string, path: string, signal?: AbortSignal, options?: RequestInit): Promise<T> {
   const base = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''
-  const response = await fetch(`${base}/api/v1/charging${path}`, { credentials: 'include', signal, ...options })
+  const response = await fetch(`${base}/api/v1${area ? `/${area}` : ''}/charging${path}`, { credentials: 'include', signal, ...options })
   if (response.status === 401) notifySessionUnauthorized()
   if (!response.ok) {
     const body = await response.json().catch(() => ({})) as { detail?: unknown }
@@ -45,7 +45,10 @@ async function request<T>(path: string, signal?: AbortSignal, options?: RequestI
 interface SessionEvent { id: string; action: string; actor: string | null; details: { reason?: string; energy_kwh?: string }; occurred_at: string }
 const eventNames: Record<string, string> = { reconnected: 'Trụ nối lại — giữ nguyên phiên', offline_timeout: 'Đánh dấu bất thường do ngoại tuyến', available_with_open_session: 'Đầu nối sẵn sàng nhưng chưa có tin kết thúc', charging_resumed: 'Đầu nối báo đang sạc trở lại', late_stop: 'Đã nhận tin kết thúc sau gián đoạn', manual_closure: 'Đóng tay bằng số đo cuối' }
 
-function SessionHistory({ id }: { id: number }) {
+function useScopedRequest(area: string) { return useCallback(<T,>(path: string, signal?: AbortSignal, options?: RequestInit) => scopedRequest<T>(area, path, signal, options), [area]) }
+
+function SessionHistory({ id, area }: { id: number; area: string }) {
+  const request = useScopedRequest(area)
   const [events, setEvents] = useState<SessionEvent[] | null>(null)
   const [error, setError] = useState('')
   const [retry, setRetry] = useState(0)
@@ -53,7 +56,7 @@ function SessionHistory({ id }: { id: number }) {
     const controller = new AbortController()
     void request<SessionEvent[]>(`/sessions/${id}/events`, controller.signal).then(value => { if (!controller.signal.aborted) { setEvents(value); setError('') } }).catch(err => { if (!controller.signal.aborted) setError(err instanceof Error ? err.message : 'Không tải được lịch sử.') })
     return () => controller.abort()
-  }, [id, retry])
+  }, [id, retry, request])
   return <section className="charging-history" aria-label={`Lịch sử phục hồi phiên ${id}`}>
     <h3>Lịch sử phục hồi</h3>
     {error && <div role="alert">{error}<button className="secondary-button" onClick={() => setRetry(r => r + 1)}>Tải lại lịch sử</button></div>}
@@ -63,7 +66,8 @@ function SessionHistory({ id }: { id: number }) {
   </section>
 }
 
-export function ChargingSessionsPage({ canManage = true, canClose = false }: { canManage?: boolean; canClose?: boolean }) {
+export function ChargingSessionsPage({ canManage = true, canClose = false, area = '' }: { area?: '' | 'ops' | 'accounting'; canManage?: boolean; canClose?: boolean }) {
+  const request = useScopedRequest(area)
   const [closing, setClosing] = useState<number | null>(null)
   const [historyId, setHistoryId] = useState<number | null>(null)
   const [mode, setMode] = useState<'sessions' | 'cards' | 'pending'>('sessions')
@@ -111,7 +115,7 @@ export function ChargingSessionsPage({ canManage = true, canClose = false }: { c
     const first = window.setTimeout(() => { setLoading(true); void load() }, 0)
     const timer = window.setInterval(() => { if (!document.hidden) void load() }, 1000)
     return () => { controller.abort(); window.clearTimeout(first); window.clearInterval(timer) }
-  }, [mode, state, page, revision])
+  }, [mode, state, page, revision, request])
 
   useEffect(() => {
     if (selected === null) return
@@ -129,7 +133,7 @@ export function ChargingSessionsPage({ canManage = true, canClose = false }: { c
     void load()
     const timer = window.setInterval(() => { if (!document.hidden) void load() }, 1000)
     return () => { controller.abort(); window.clearInterval(timer) }
-  }, [selected, samplePage, revision])
+  }, [selected, samplePage, revision, request])
 
   async function createCard(event: FormEvent) {
     event.preventDefault(); setSaving(true); setMutationError(''); setNotice('')
@@ -150,7 +154,7 @@ export function ChargingSessionsPage({ canManage = true, canClose = false }: { c
   const chooseMode = (value: typeof mode) => { setMode(value); setSelected(null); setClosing(null); setNotice(''); setMutationError(''); setError('') }
 
   async function closeSession(id: number, reason: string) {
-    const result = await request<{ energy_kwh: string }>(`/sessions/${id}/close`, undefined, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }) })
+    const result = await scopedRequest<{ energy_kwh: string }>('', `/sessions/${id}/close`, undefined, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }) })
     setClosing(null); setNotice(`Đã đóng phiên #${id}, chốt ${number(result.energy_kwh)} kWh. Trụ không nhận lệnh dừng sạc.`); setRevision(r => r + 1)
   }
 
@@ -175,7 +179,7 @@ export function ChargingSessionsPage({ canManage = true, canClose = false }: { c
         {canClose && item.abnormal_since && !item.ended_at && <div className="charging-session-actions"><button className="secondary-button" onClick={() => { setClosing(closing === item.id ? null : item.id); setNotice('') }} aria-expanded={closing === item.id}>Đóng tay phiên {item.id}</button></div>}
         {canClose && closing === item.id && !item.ended_at && item.abnormal_since && <ManualCloseForm sessionId={item.id} latestMeter={item.latest_meter_wh} startMeter={item.meter_start_wh} meterAt={item.latest_meter_at} onCancel={() => setClosing(null)} onSubmit={reason => closeSession(item.id, reason)} />}
         <button className="text-button" aria-expanded={historyId === item.id} onClick={() => setHistoryId(historyId === item.id ? null : item.id)}>{historyId === item.id ? 'Ẩn lịch sử phục hồi' : `Xem lịch sử phục hồi phiên ${item.id}`}</button>
-        {historyId === item.id && <SessionHistory key={`${item.id}-${revision}`} id={item.id} />}
+        {historyId === item.id && <SessionHistory key={`${item.id}-${revision}`} id={item.id} area={area} />}
         <button className="text-button" aria-expanded={selected === item.id} onClick={() => { setSelected(selected === item.id ? null : item.id); setSamples(null); setSampleError(''); setSamplePage(1) }}>{selected === item.id ? 'Ẩn biểu đồ' : `Xem biểu đồ phiên ${item.id}`}</button>
         {selected === item.id && <div className="charging-detail">
           {sampleError && <p role="alert">{sampleError}</p>}{!samples && !sampleError && <p>Đang tải biểu đồ…</p>}

@@ -201,6 +201,7 @@ def test_current_user_returns_authenticated_user(
     client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(router_module, "get_default_role", AsyncMock(return_value=None))
     user_id = uuid4()
     actor = CurrentActor(
         user_id=user_id,
@@ -229,6 +230,7 @@ def test_current_user_returns_authenticated_user(
         "id": str(user_id),
         "email": "owner@example.com",
         "roles": ["operator", "station_owner"],
+        "default_role": None,
     }
     assert response.headers["cache-control"] == "no-store"
     repository.get_user_by_id.assert_awaited_once_with(user_id)

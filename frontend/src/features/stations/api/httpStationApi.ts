@@ -79,19 +79,22 @@ const configuredBaseUrl =
 
 export class HttpStationApi implements StationApi {
   private readonly baseUrl: string
+  private readonly area: '' | 'ops'
   private readonly idempotencyKeyFactory: () => string
 
   constructor(
     baseUrl = configuredBaseUrl,
     idempotencyKeyFactory: () => string = () => crypto.randomUUID(),
+    area: '' | 'ops' = '',
   ) {
     this.baseUrl = baseUrl.replace(/\/$/, '')
+    this.area = area
     this.idempotencyKeyFactory = idempotencyKeyFactory
   }
 
   async getStation(stationId: string, signal?: AbortSignal): Promise<Station> {
     const response = await fetch(
-      `${this.baseUrl}/api/v1/stations/${encodeURIComponent(stationId)}`,
+      `${this.baseUrl}/api/v1${this.area ? `/${this.area}` : ''}/stations/${encodeURIComponent(stationId)}`,
       {
         credentials: 'include',
         signal,
@@ -114,7 +117,7 @@ export class HttpStationApi implements StationApi {
     if (query.status) searchParams.set('status', query.status)
 
     const response = await fetch(
-      `${this.baseUrl}/api/v1/stations?${searchParams.toString()}`,
+      `${this.baseUrl}/api/v1${this.area ? `/${this.area}` : ''}/stations?${searchParams.toString()}`,
       {
         credentials: 'include',
         signal,
@@ -132,7 +135,7 @@ export class HttpStationApi implements StationApi {
   }
 
   async createStation(input: StationInput): Promise<Station> {
-    const response = await fetch(`${this.baseUrl}/api/v1/stations`, {
+    const response = await fetch(`${this.baseUrl}/api/v1${this.area ? `/${this.area}` : ''}/stations`, {
       method: 'POST',
       credentials: 'include',
       headers: {
@@ -150,7 +153,7 @@ export class HttpStationApi implements StationApi {
     input: StationUpdate,
   ): Promise<Station> {
     const response = await fetch(
-      `${this.baseUrl}/api/v1/stations/${encodeURIComponent(stationId)}`,
+      `${this.baseUrl}/api/v1${this.area ? `/${this.area}` : ''}/stations/${encodeURIComponent(stationId)}`,
       {
         method: 'PATCH',
         credentials: 'include',

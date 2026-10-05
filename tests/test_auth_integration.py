@@ -154,6 +154,7 @@ async def test_current_user_through_http(
                 "id": str(user.id),
                 "email": TEST_EMAIL,
                 "roles": ["operator", "station_owner"],
+                "default_role": None,
             }
             assert response.headers["cache-control"] == "no-store"
     finally:

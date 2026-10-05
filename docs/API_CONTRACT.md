@@ -138,7 +138,7 @@ Thành công: `204 No Content`. Endpoint có tính idempotent: gọi khi không 
 
 ### 4.3. Người dùng hiện tại
 
-Contract đề xuất cho một cải tiến độc lập sau T-06; endpoint chưa được triển khai:
+Endpoint đã triển khai, lấy tài khoản và quyền hiện tại từ DB:
 
 ```text
 GET /api/v1/auth/me
@@ -150,19 +150,24 @@ Thành công `200 OK`:
 {
   "id": "8cc86d88-43a8-4d14-a32b-b7c49749694f",
   "email": "owner@example.com",
-  "roles": ["station_owner"]
+  "roles": ["station_owner"],
+  "default_role": "station_owner"
 }
 ```
 
 Quy tắc:
 
 - `roles` luôn là mảng, sắp xếp tăng dần để response ổn định.
+- `default_role` là vai trò đã được cấp hoặc `null`; chỉ chọn khu vực mở đầu,
+  không thay đổi quyền/phạm vi dữ liệu.
 - Không trả session token, password hash hoặc thông tin khóa đăng nhập.
 - Session thiếu, sai hoặc hết hạn trả `401 authentication_required`.
 - Endpoint này chỉ yêu cầu đã đăng nhập; không áp một role cụ thể.
 
-T-06 đã cung cấp cơ chế nội bộ `CurrentActor` gồm `user_id` và `roles`. Repository cần lấy
-thêm email hoặc endpoint truy vấn user theo `user_id` để tạo response trên.
+`PUT /api/v1/auth/default-role` nhận `{ "role": "admin" }`, trả cùng kiểu dữ
+liệu như `/auth/me`; chỉ lưu cho tài khoản đang đăng nhập. Vai trò chưa được
+cấp hoặc trường lạ trả 422. Cần migration `e030007a2026`.
+Xem [lựa chọn khu vực và vai trò mặc định](DEFAULT_ROLE_DELIVERY.md).
 
 ## 5. Station
 
@@ -416,7 +421,7 @@ Quy tắc:
 | --- | --- |
 | Login/logout | Đã triển khai trên `main`; error shape chưa theo chuẩn chung |
 | Session lookup + RBAC | Đã triển khai trên `main` qua T-06 |
-| `GET /auth/me` | Đã chốt contract đề xuất; chưa triển khai |
+| `GET /auth/me` | Đã triển khai; trả vai trò hiện tại và mặc định |
 | Station list/create/update | Đã chốt baseline, chờ T-07/T-08/T-09 |
 | Charge point/code availability | Đã chốt baseline, chờ T-10/T-11 |
 | Error contract chung | Đã chốt baseline, chưa triển khai exception handler |
@@ -465,7 +470,7 @@ S-21 và S-25 bổ sung giữ phiên khi nối lại, nhận tin/số đo muộn
 
 ## Nhóm 5: điều khiển từ xa
 
-S-16, S-23, S-27 thêm Reset, dừng phiên từ xa và nhật ký bất biến. Operator/admin gửi lệnh; admin lọc nhật ký. Accepted không tự đóng phiên; chờ StopTransaction thật, sau 2 phút thiếu tin kết thúc thì cần kiểm tra. Nâng migration f52c813d7a09. Xem [AC, API và test thủ công](OCPP_CONTROL_DELIVERY.md). Bằng chứng local không thay Jira/CI.
+S-16, S-23, S-27 thêm Reset, dừng phiên từ xa và nhật ký bất biến. Operator gửi lệnh; admin lọc nhật ký. Accepted không tự đóng phiên; chờ StopTransaction thật, sau 2 phút thiếu tin kết thúc thì cần kiểm tra. Nâng migration f52c813d7a09. Xem [AC, API và test thủ công](OCPP_CONTROL_DELIVERY.md). Bằng chứng local không thay Jira/CI.
 
 ## Nhóm 6: tài xế theo dõi và bắt đầu sạc
 
