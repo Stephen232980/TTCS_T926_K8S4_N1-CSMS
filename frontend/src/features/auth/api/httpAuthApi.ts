@@ -5,6 +5,7 @@ interface CurrentUserResponse {
   id: string
   email: string
   roles: string[]
+  default_role?: string | null
 }
 
 interface ErrorResponse {
@@ -30,6 +31,15 @@ export class HttpAuthApi implements AuthApi {
 
   constructor(baseUrl = configuredBaseUrl) {
     this.baseUrl = baseUrl.replace(/\/$/, '')
+  }
+
+  async setDefaultRole(role: string): Promise<AuthenticatedUser> {
+    const response = await fetch(`${this.baseUrl}/api/v1/auth/default-role`, {
+      method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role }),
+    })
+    const payload = await parseResponse<CurrentUserResponse>(response)
+    return { id: payload.id, email: payload.email, roles: payload.roles, defaultRole: payload.default_role }
   }
 
   async login(input: LoginInput): Promise<void> {
@@ -74,6 +84,7 @@ export class HttpAuthApi implements AuthApi {
       id: payload.id,
       email: payload.email,
       roles: payload.roles,
+      ...(payload.default_role !== undefined ? { defaultRole: payload.default_role } : {}),
     }
   }
 }

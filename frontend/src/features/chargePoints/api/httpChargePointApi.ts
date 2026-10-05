@@ -105,9 +105,11 @@ const configuredBaseUrl =
 
 export class HttpChargePointApi implements ChargePointApi {
   private readonly baseUrl: string
+  private readonly area: '' | 'ops'
 
-  constructor(baseUrl = configuredBaseUrl) {
+  constructor(baseUrl = configuredBaseUrl, area: '' | 'ops' = '') {
     this.baseUrl = baseUrl.replace(/\/$/, '')
+    this.area = area
   }
 
   async listChargePoints(
@@ -121,7 +123,7 @@ export class HttpChargePointApi implements ChargePointApi {
       page_size: String(pageSize),
     })
     const response = await fetch(
-      `${this.baseUrl}/api/v1/stations/${encodeURIComponent(stationId)}/charge-points?${searchParams.toString()}`,
+      `${this.baseUrl}/api/v1${this.area ? `/${this.area}` : ''}/stations/${encodeURIComponent(stationId)}/charge-points?${searchParams.toString()}`,
       { credentials: 'include', signal },
     )
     const payload = await parseResponse<ChargePointListResponse>(response)
@@ -159,7 +161,7 @@ export class HttpChargePointApi implements ChargePointApi {
     input: ChargePointInput,
   ): Promise<ChargePoint> {
     const response = await fetch(
-      `${this.baseUrl}/api/v1/stations/${encodeURIComponent(stationId)}/charge-points`,
+      `${this.baseUrl}/api/v1${this.area ? `/${this.area}` : ''}/stations/${encodeURIComponent(stationId)}/charge-points`,
       {
         method: 'POST',
         credentials: 'include',

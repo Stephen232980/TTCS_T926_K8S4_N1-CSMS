@@ -1,5 +1,5 @@
 import { DriverMapPage } from './features/driver/DriverMapPage'
-import { useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { OcppConnectionsPage } from './features/ocpp/OcppConnectionsPage'
 import { ChargingSessionsPage } from './features/charging/ChargingSessionsPage'
 import { AppShell } from './app/AppShell'
@@ -16,7 +16,13 @@ import type { StationApi } from './features/stations/api/stationApi'
 import { StationDetailPage } from './features/stations/pages/StationDetailPage'
 import { StationListPage } from './features/stations/pages/StationListPage'
 import './App.css'
+import { WorkspaceChooser } from './features/auth/pages/WorkspaceChooser'
+import { HttpStationApi } from './features/stations/api/httpStationApi'
+import { HttpChargePointApi } from './features/chargePoints/api/httpChargePointApi'
 import { OwnerWorkspace } from './features/owner/OwnerWorkspace'
+const AdminWorkspace = lazy(() =>
+  import('./features/admin/AdminWorkspace').then(module => ({ default: module.AdminWorkspace })),
+)
 
 interface AppProps {
   authApi?: AuthApi
@@ -25,6 +31,8 @@ interface AppProps {
 }
 
 const defaultAuthApi = new HttpAuthApi()
+const opsStationApi = new HttpStationApi(undefined, undefined, 'ops')
+const opsChargePointApi = new HttpChargePointApi(undefined, 'ops')
 
 function App({
   authApi = defaultAuthApi,
@@ -35,6 +43,7 @@ function App({
     'checking' | 'anonymous' | 'authenticated'
   >('checking')
   const [currentUser, setCurrentUser] = useState<AuthenticatedUser | null>(null)
+  const [areaRole, setAreaRole] = useState<string | null>(null)
   const [sessionMessage, setSessionMessage] = useState('')
   const [notice, setNotice] = useState('')
   const [noticeVersion, setNoticeVersion] = useState(0)
@@ -47,6 +56,7 @@ function App({
 
   const loadCurrentUser = useCallback(async () => {
     const user = await authApi.getCurrentUser()
+    setAreaRole(null)
     setCurrentUser(user)
     setSessionMessage('')
     setAuthStatus('authenticated')
@@ -58,11 +68,13 @@ function App({
     authApi
       .getCurrentUser(controller.signal)
       .then((user) => {
+        setAreaRole(null)
         setCurrentUser(user)
         setAuthStatus('authenticated')
       })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === 'AbortError') return
+        setAreaRole(null)
         setCurrentUser(null)
         setAuthStatus('anonymous')
         if (!(error instanceof AuthApiError && error.status === 401)) {
@@ -77,6 +89,7 @@ function App({
 
   useEffect(() => {
     const handleUnauthorized = () => {
+      setAreaRole(null)
       setCurrentUser(null)
       setSelectedStationId(null)
       setSessionMessage('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.')
@@ -101,6 +114,7 @@ function App({
 
   const handleLogout = async () => {
     await authApi.logout()
+    setAreaRole(null)
     setCurrentUser(null)
     setSelectedStationId(null)
     setWorkspace('stations')
@@ -129,23 +143,54 @@ function App({
     )
   }
 
-  const primaryRole = getHomeRole(currentUser)
-  const permissions = getPermissions(currentUser)
+  const primaryRole = areaRole && currentUser.roles.includes(areaRole)
+    ? areaRole : getHomeRole(currentUser)
+  const chooseArea = () => {
+    setAreaRole('')
+    setSelectedStationId(null)
+    setWorkspace('stations')
+    window.history.replaceState(null, '', window.location.pathname + window.location.search)
+  }
+  if (areaRole === '' || !primaryRole) {
+    return (
+      <WorkspaceChooser user={currentUser} api={authApi} onLogout={handleLogout}
+        onChoose={(role, updated) => {
+          if (updated) setCurrentUser(updated)
+          setAreaRole(role)
+          setSelectedStationId(null)
+          setWorkspace('stations')
+          window.history.replaceState(null, '', role === 'admin' ? '#admin-accounts' : '#stations')
+        }}
+      />
+    )
+  }
+  const workspaceUser = { ...currentUser, roles: [primaryRole], defaultRole: primaryRole }
+  const permissions = getPermissions(workspaceUser)
+  const switchArea = currentUser.roles.length > 1 ? chooseArea : undefined
+
+  if (primaryRole === 'admin') {
+    return (
+      <Suspense fallback={<main className="auth-checking" role="status">Đang tải khu vực quản trị…</main>}>
+        <AdminWorkspace currentUser={workspaceUser} onLogout={handleLogout} onExit={switchArea} />
+      </Suspense>
+    )
+  }
 
   if (primaryRole === 'station_owner') {
     return (
       <OwnerWorkspace
-        currentUser={currentUser}
+        currentUser={workspaceUser}
         onLogout={handleLogout}
         stationApi={stationApi}
         chargePointApi={chargePointApi}
+        onAdmin={switchArea}
       />
     )
   }
 
   return (
     <AppShell
-      currentUser={currentUser}
+      currentUser={workspaceUser}
       onLogout={handleLogout}
       onNavigateHome={() => {
         setWorkspace('stations')
@@ -153,6 +198,7 @@ function App({
       }}
       navigationActive={workspace === 'stations'}
     >
+      {switchArea && <button className="text-button" onClick={switchArea}>Đổi khu vực</button>}
       {permissions.canViewStations && (
         <nav className="workspace-switch" aria-label="Khu vực vận hành">
           <button
@@ -204,7 +250,7 @@ function App({
         </nav>
       )}
       {!permissions.canViewStations && permissions.canViewCharging ? (
-        <ChargingSessionsPage canManage={false} canClose={false} />
+        <ChargingSessionsPage area="accounting" canManage={false} canClose={false} />
       ) : !permissions.canViewStations ? (
         primaryRole === 'driver' ? (
           <DriverMapPage />
@@ -215,11 +261,13 @@ function App({
         <DriverMapPage />
       ) : workspace === 'ocpp' ? (
         <OcppConnectionsPage
+          area="ops"
           canControl={permissions.canControlChargers}
           canAudit={permissions.canViewControlAudit}
         />
       ) : workspace === 'charging' ? (
         <ChargingSessionsPage
+          area="ops"
           canManage={permissions.canViewStations}
           canClose={permissions.canCloseChargingSessions}
         />
@@ -228,8 +276,8 @@ function App({
           key={selectedStationId}
           stationId={selectedStationId}
           onBack={() => setSelectedStationId(null)}
-          api={stationApi}
-          chargePointApi={chargePointApi}
+          api={stationApi ?? opsStationApi}
+          chargePointApi={chargePointApi ?? opsChargePointApi}
           canManageChargePoints={permissions.canManageChargePoints}
         />
       ) : (
@@ -238,7 +286,7 @@ function App({
           onNotice={showPrototypeNotice}
           onDismissNotice={() => setNotice('')}
           onOpenStation={setSelectedStationId}
-          api={stationApi}
+          api={stationApi ?? opsStationApi}
           canManageStations={permissions.canManageStations}
         />
       )}

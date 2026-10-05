@@ -29,6 +29,12 @@ class AppAuthApi implements AuthApi {
     this.currentUser = null
   }
 
+  async setDefaultRole(role: string): Promise<AuthenticatedUser> {
+    if (!this.currentUser?.roles.includes(role)) throw new AuthApiError(422)
+    this.currentUser = { ...this.currentUser, defaultRole: role }
+    return this.currentUser
+  }
+
   async getCurrentUser(): Promise<AuthenticatedUser> {
     if (this.currentUser === null) throw new AuthApiError(401)
     return this.currentUser
@@ -36,9 +42,23 @@ class AppAuthApi implements AuthApi {
 }
 
 describe('App', () => {
+  it('requires an explicit workspace and preserves the approved owner and admin homes', async () => {
+    const user = userEvent.setup()
+    window.location.hash = ''
+    render(<App authApi={new AppAuthApi({ ...owner, roles: ['station_owner', 'admin'] })} stationApi={new MockStationApi(undefined, 0)} />)
+    await screen.findByRole('heading', { name: 'Bạn muốn làm việc ở khu vực nào?' })
+    await user.click(screen.getByRole('button', { name: /Chủ trạm/ }))
+    await screen.findByRole('heading', { name: 'Trạm của tôi' })
+    await user.click(screen.getByRole('button', { name: 'Đổi khu vực' }))
+    await user.click(screen.getByRole('button', { name: /Quản trị/ }))
+    await screen.findByRole('heading', { name: 'Tài khoản & vai trò' })
+    await user.click(screen.getByRole('button', { name: 'Đổi khu vực' }))
+    await user.click(screen.getByRole('button', { name: /Chủ trạm/ }))
+    await screen.findByRole('heading', { name: 'Trạm của tôi' })
+    window.location.hash = ''
+  })
   it.each([
     [['operator'], false],
-    [['admin'], false],
     [['station_owner'], true],
     [['driver', 'station_owner'], true],
   ])(
@@ -47,7 +67,7 @@ describe('App', () => {
       const user = userEvent.setup()
       render(
         <App
-          authApi={new AppAuthApi({ ...owner, roles })}
+          authApi={new AppAuthApi({ ...owner, roles, defaultRole: canWrite ? 'station_owner' : 'operator' })}
           stationApi={new MockStationApi(undefined, 0)}
           chargePointApi={new MockChargePointApi([], 0)}
         />,
@@ -73,7 +93,7 @@ describe('App', () => {
   it.each([
     ['station_owner', 'Trạm của tôi'],
     ['operator', 'Trạm sạc'],
-    ['admin', 'Trạm sạc'],
+    ['admin', 'Tài khoản & vai trò'],
     ['driver', 'Tìm trạm sạc'],
     ['accountant', 'Phiên sạc'],
   ])('routes the %s role to its permitted screen', async (role, heading) => {
@@ -89,7 +109,7 @@ describe('App', () => {
     expect(
       await screen.findByRole('heading', { name: heading }),
     ).toBeInTheDocument()
-    if (role === 'driver' || role === 'accountant') {
+    if (role === 'driver' || role === 'accountant' || role === 'admin') {
       expect(listStations).not.toHaveBeenCalled()
     } else {
       await waitFor(() => expect(listStations).toHaveBeenCalled())

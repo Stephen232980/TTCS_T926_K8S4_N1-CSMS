@@ -21,7 +21,7 @@ const statusNames: Record<string, string> = {
 }
 const statusName = (value: string | null) => statusNames[value ?? 'unknown'] ?? value
 
-export function OcppConnectionsPage({ canControl = false, canAudit = false }: { canControl?: boolean; canAudit?: boolean }) {
+export function OcppConnectionsPage({ canControl = false, canAudit = false, area = '' }: { area?: '' | 'ops'; canControl?: boolean; canAudit?: boolean }) {
   const [auditVisible, setAuditVisible] = useState(false)
   const [result, setResult] = useState<Result | null>(null)
   const [page, setPage] = useState(1)
@@ -45,7 +45,7 @@ export function OcppConnectionsPage({ canControl = false, canAudit = false }: { 
       const signal = controller.signal
       const issuedVersion = version
       try {
-        const response = await fetch(`${base}/api/v1/ocpp/connections?page=${page}&page_size=100`, { credentials: 'include', signal })
+        const response = await fetch(`${base}/api/v1${area ? `/${area}` : ''}/ocpp/connections?page=${page}&page_size=100`, { credentials: 'include', signal })
         if (response.status === 401) { source?.close(); notifySessionUnauthorized() }
         if (response.status === 403) source?.close()
         if (!response.ok) throw new Error(response.status === 403 ? 'Bạn không có quyền xem kết nối trụ.' : 'Không tải được trạng thái trụ. Hãy thử lại.')
@@ -58,7 +58,7 @@ export function OcppConnectionsPage({ canControl = false, canAudit = false }: { 
     const first = window.setTimeout(() => {
       setLoading(true); setResult(null); void load()
       if (typeof EventSource !== 'undefined') {
-        source = new EventSource(`${base}/api/v1/ocpp/connections/events?page=${page}&page_size=100`, { withCredentials: true })
+        source = new EventSource(`${base}/api/v1${area ? `/${area}` : ''}/ocpp/connections/events?page=${page}&page_size=100`, { withCredentials: true })
         source.onopen = () => { if (!stopped) { setStreamState('Đang cập nhật trực tiếp'); void load() } }
         source.onmessage = event => {
           if (stopped) return
@@ -72,7 +72,7 @@ export function OcppConnectionsPage({ canControl = false, canAudit = false }: { 
     // Fallback for browsers without EventSource; native EventSource handles retries otherwise.
     const fallback = window.setInterval(() => { if (!source && !document.hidden) void load() }, 1000)
     return () => { stopped = true; window.clearTimeout(first); window.clearInterval(fallback); source?.close(); controller?.abort() }
-  }, [page, revision])
+  }, [page, revision, area])
   const visible = result?.items.filter(c => (!search || `${c.code} ${c.station_name}`.toLocaleLowerCase('vi-VN').includes(search.toLocaleLowerCase('vi-VN'))) && (filter === 'all' || (filter === 'offline' ? !c.online : c.online && (c.raw_ocpp_status === 'Faulted' || c.connectors?.some(k => k.status === 'Faulted'))))) ?? []
   return <section className="workspace ocpp-workspace" aria-labelledby="page-title">
     <header className="page-heading"><div><h1 id="page-title">Giám sát trụ</h1><p>Trạng thái liên lạc và từng đầu nối trong phạm vi quản lý.</p></div><button className="secondary-button" onClick={() => setRevision(r => r + 1)}>Làm mới</button></header>
