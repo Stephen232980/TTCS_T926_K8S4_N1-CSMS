@@ -13,6 +13,7 @@ export interface OwnerSession {
   meter_start_wh: string
   tag_tail: string
   review_reasons: string[]
+  abnormal_since?: string | null
   stop_reason: string | null
 }
 export interface OwnerCard {
@@ -85,6 +86,9 @@ export class OwnerApiError extends Error {
   }
 }
 const errorMessages: Record<string, string> = {
+  'Chỉ được đóng tay phiên bất thường còn mở.': 'Phiên đã thay đổi hoặc không còn bất thường. Cập nhật lại phiên trước khi đóng hồ sơ.',
+  'Chưa có số đo điện năng cuối hợp lệ để đóng tay. Hãy kiểm tra trụ và số đo.': 'Chưa có số đo cuối hợp lệ để đóng hồ sơ. Hãy kiểm tra trụ và số đo.',
+  'Thời gian số đo không hợp lệ. Hãy kiểm tra đồng hồ của trụ.': 'Thời gian số đo không hợp lệ. Hãy kiểm tra đồng hồ của trụ.',
   invalid_station_photo: 'Không đọc được nội dung ảnh. Hãy chọn lại ảnh JPEG, PNG hoặc WebP hợp lệ.',
   station_photo_dimensions_too_large: 'Ảnh vượt quá 16 triệu điểm ảnh. Hãy giảm kích thước chiều rộng và chiều cao.',
   station_photo_too_large: 'Ảnh vượt quá 20 MB. Hãy chọn ảnh nhỏ hơn.',

@@ -58,7 +58,6 @@ describe('App', () => {
     window.location.hash = ''
   })
   it.each([
-    [['operator'], false],
     [['station_owner'], true],
     [['driver', 'station_owner'], true],
   ])(
@@ -92,7 +91,7 @@ describe('App', () => {
 
   it.each([
     ['station_owner', 'Trạm của tôi'],
-    ['operator', 'Trạm sạc'],
+    ['operator', 'Giám sát trụ'],
     ['admin', 'Tài khoản & vai trò'],
     ['driver', 'Tìm trạm sạc'],
     ['accountant', 'Phiên sạc'],
@@ -109,7 +108,7 @@ describe('App', () => {
     expect(
       await screen.findByRole('heading', { name: heading }),
     ).toBeInTheDocument()
-    if (role === 'driver' || role === 'accountant' || role === 'admin') {
+    if (role === 'driver' || role === 'accountant' || role === 'admin' || role === 'operator') {
       expect(listStations).not.toHaveBeenCalled()
     } else {
       await waitFor(() => expect(listStations).toHaveBeenCalled())
