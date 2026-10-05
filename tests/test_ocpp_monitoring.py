@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.modules.identity.authorization import CurrentActor
+from src.modules.identity.authorization import CurrentActor, build_actor_scope
 from src.modules.identity.models import User
 from src.modules.ocpp import transport
 from src.modules.ocpp.dispatcher import process_call
@@ -138,7 +138,9 @@ async def test_status_errors_duplicates_whole_charger_and_unknown(
         == 1
     )
     actor = CurrentActor(uuid4(), frozenset({"operator"}))
-    data = await monitoring_snapshot(db_session, actor, MonitorQuery())
+    data = await monitoring_snapshot(
+        db_session, build_actor_scope(actor, "all"), MonitorQuery()
+    )
     observed = next(c for c in data.items if c.id == charger.id)
     assert observed.connectors[0].last_error_code == "GroundFailure"
     assert observed.connectors[0].last_vendor_error_code == "E42"
@@ -187,7 +189,9 @@ async def test_offline_derived_without_job_then_recovery_waits_for_status(
     charger.last_seen_at = now - timedelta(seconds=121)
     await db_session.flush()
     owner = CurrentActor(station.owner_id, frozenset({"station_owner"}))
-    snapshot = await monitoring_snapshot(db_session, owner, MonitorQuery(), now)
+    snapshot = await monitoring_snapshot(
+        db_session, build_actor_scope(owner, "owned"), MonitorQuery(), now
+    )
     assert not snapshot.items[0].online
     assert snapshot.items[0].connectors[0].status == "unknown"
     # Recovery before the background job runs must also invalidate the old connector observation.
@@ -196,7 +200,11 @@ async def test_offline_derived_without_job_then_recovery_waits_for_status(
     await db_session.refresh(connector)
     assert connector.status == "unknown"
     assert (
-        (await monitoring_snapshot(db_session, owner, MonitorQuery(), now))
+        (
+            await monitoring_snapshot(
+                db_session, build_actor_scope(owner, "owned"), MonitorQuery(), now
+            )
+        )
         .items[0]
         .online
     )
@@ -240,7 +248,9 @@ async def test_twenty_chargers_one_snapshot_query_under_two_seconds(
     start = perf_counter()
     snapshot = await monitoring_snapshot(
         db_session,
-        CurrentActor(station.owner_id, frozenset({"station_owner"})),
+        build_actor_scope(
+            CurrentActor(station.owner_id, frozenset({"station_owner"})), "owned"
+        ),
         MonitorQuery(),
     )
     assert perf_counter() - start < 2
@@ -329,7 +339,10 @@ async def test_event_stream_refreshes_full_state_and_revokes_access(
     request = MagicMock()
     request.cookies = {"session": "test-only"}
     request.is_disconnected = AsyncMock(return_value=False)
-    stream = monitor_router.monitoring_events(request, actor, MonitorQuery())
+    request.scope = {"endpoint": monitor_router.stream_connections}
+    stream = monitor_router.monitoring_events(
+        request, build_actor_scope(actor, "owned"), MonitorQuery()
+    )
     first = await anext(stream)
     assert "Available" in first and "retry: 1000" in first
     await process_call(
@@ -348,7 +361,10 @@ async def test_event_stream_refreshes_full_state_and_revokes_access(
     assert str(charger.id) in second and str(connector.id) in second
     await stream.aclose()
     # A new connection always gets a full snapshot, with the current state.
-    stream = monitor_router.monitoring_events(request, actor, MonitorQuery())
+    request.scope = {"endpoint": monitor_router.stream_connections}
+    stream = monitor_router.monitoring_events(
+        request, build_actor_scope(actor, "owned"), MonitorQuery()
+    )
     assert "Charging" in await anext(stream)
     authenticate.return_value = CurrentActor(actor.user_id, frozenset({"driver"}))
     assert "access-denied" in await anext(stream)

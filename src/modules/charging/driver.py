@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.charging.driver_models import DriverStartRequest, DriverVirtualTag
 from src.modules.charging.models import ChargingCard, ChargingSession
 from src.modules.charging.service import tag_hash
+from src.modules.identity.authorization import AuthorizationEvidence
 from src.modules.identity.models import Role, User, UserRole
 from src.modules.ocpp import control
 from src.modules.ocpp.connection_registry import ocpp_connections
@@ -93,7 +94,11 @@ def start_result(request: DriverStartRequest) -> dict[str, object]:
 
 
 async def remote_start(
-    driver_id: UUID, request_id: UUID, connector_id: UUID
+    driver_id: UUID,
+    request_id: UUID,
+    connector_id: UUID,
+    *,
+    authorization: AuthorizationEvidence | None = None,
 ) -> dict[str, object]:
     now = datetime.now(UTC)
     async with SessionFactory() as session, session.begin():
@@ -200,6 +205,8 @@ async def remote_start(
                 charge_point_code=charger.code,
                 transaction_id=None,
                 action="RemoteStartTransaction",
+                permission=authorization.permission if authorization else None,
+                actor_roles=list(authorization.roles) if authorization else None,
                 payload={"connectorId": connector.connector_number},
                 created_at=now,
             )

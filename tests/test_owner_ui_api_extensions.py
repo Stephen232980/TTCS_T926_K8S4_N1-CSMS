@@ -150,7 +150,13 @@ async def test_photo_replace_read_delete_scope_and_invalid_upload(
     async with charge_point_api_client(
         db_session, CurrentActor(user_id=owner.id, roles=frozenset({"operator"}))
     ) as client:
-        assert (await client.get(url)).status_code == 200
+        assert (
+            await client.get(url.replace("/api/v1/", "/api/v1/ops/"))
+        ).status_code == 200
+        station_response = await client.get(f"/api/v1/ops/stations/{station.id}")
+        photo_url = station_response.json()["photo_url"]
+        assert photo_url.startswith(f"/api/v1/ops/stations/{station.id}/photo")
+        assert (await client.get(photo_url)).status_code == 200
         assert (await client.delete(url)).status_code == 403
     async with charge_point_api_client(db_session, owner_actor(owner.id)) as client:
         replacement = BytesIO()

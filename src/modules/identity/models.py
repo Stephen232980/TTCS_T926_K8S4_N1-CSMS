@@ -191,6 +191,8 @@ class AccountAudit(Base):
         ForeignKey("users.id", ondelete="RESTRICT"), index=True
     )
     action: Mapped[str] = mapped_column(String(40))
+    permission: Mapped[str | None] = mapped_column(String(100))
+    actor_roles: Mapped[list[str] | None] = mapped_column(JSONB)
     before_state: Mapped[dict[str, object] | None] = mapped_column(JSONB)
     after_state: Mapped[dict[str, object]] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)

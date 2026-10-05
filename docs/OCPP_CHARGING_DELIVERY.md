@@ -1,5 +1,7 @@
 # Nhóm 3 — Phiên sạc OCPP
 
+> Phân quyền hiện hành cập nhật 05/10/2026: [nền phân quyền endpoint](ENDPOINT_AUTHORIZATION_DELIVERY.md) thay thế quy tắc admin/operator tự nhận global scope và quyền điều khiển trong các mô tả lịch sử bên dưới. Chủ trạm dùng owned; vận hành/kế toán đọc qua namespace riêng; admin đơn thuần không gửi Reset/Stop/đóng tay.
+
 Phạm vi: S-15, S-17, S-18, S-19, S-20 theo Backlog CSMS.xlsx. Code nằm trên nhánh feature/S-17-phien-sac-ocpp, phát triển từ main fd69d0f. Bằng chứng dưới đây là cục bộ; không thay thế trạng thái Jira hoặc CI của PR.
 
 ## Coverage Matrix

@@ -1,5 +1,7 @@
 # API contract CSMS
 
+Phân quyền endpoint cập nhật 05/10/2026: xem [contract phạm vi và chuyển API](ENDPOINT_AUTHORIZATION_DELIVERY.md). Các endpoint `/stations`, `/charge-points`, `/charging` (đọc/quản lý thẻ), `/ocpp/connections` cũ là alias chủ trạm, luôn `owned`; vận hành dùng `/api/v1/ops/...`, quản trị đọc dùng `/api/v1/admin/...`, kế toán đọc phiên dùng `/api/v1/accounting/...`. Reset/RemoteStop/đóng tay chỉ cần vai trò operator, admin đơn thuần không được gửi lệnh. Đây là quy tắc hiện hành thay thế các mô tả quyền chung trong phần lịch sử bên dưới.
+
 API quản trị tài khoản bổ sung ngày 05/10/2026: xem
 [contract, quy tắc và kiểm chứng](ADMIN_ACCOUNT_API_DELIVERY.md).
 Nhóm endpoint `/api/v1/admin/accounts` và `/api/v1/admin/roles` chỉ dành cho
@@ -189,10 +191,10 @@ task có migration/contract rõ ràng; frontend phải có fallback hiển thị
 GET /api/v1/stations?page=1&page_size=20&status=active&search=quan%201
 ```
 
-Role: `station_owner`, `operator`, `admin`.
+Role đường dẫn cũ: `station_owner`; đường dẫn `/ops` cho `operator`, `/admin` cho `admin`.
 
 - `station_owner` chỉ nhận station thuộc chính mình.
-- `operator` và `admin` nhận dữ liệu theo scope được backend quy định.
+- Scope route chủ trạm luôn `owned`, kể cả tài khoản có thêm vai trò admin/operator.
 - `search` tìm theo tên và địa chỉ, tối đa 100 ký tự.
 - Response dùng cấu trúc phân trang chung, `items` là mảng station.
 
@@ -202,10 +204,10 @@ Role: `station_owner`, `operator`, `admin`.
 GET /api/v1/stations/{station_id}
 ```
 
-Role: `station_owner`, `operator`, `admin`.
+Role đường dẫn cũ: `station_owner`; đường dẫn `/ops` cho `operator`, `/admin` cho `admin`.
 
 - `station_owner` chỉ đọc được station thuộc chính mình.
-- `operator` và `admin` đọc theo global scope.
+- Scope toàn hệ thống chỉ ở route `/ops` hoặc `/admin` tương ứng.
 - Station không tồn tại trả `404 resource_not_found`.
 - Station tồn tại nhưng nằm ngoài ownership scope trả `403 permission_denied` và ghi
   security log không chứa dữ liệu nhạy cảm.
@@ -295,7 +297,7 @@ GET /api/v1/stations/{station_id}/charge-points?page=1&page_size=20
 Quy tắc:
 
 - `station_owner` chỉ xem được charge point thuộc station do mình sở hữu.
-- `operator` và `admin` có phạm vi xem toàn cục.
+- Vận hành/quản trị xem toàn cục qua route riêng `/ops` và `/admin` tương ứng.
 - `page` bắt đầu từ 1; `page_size` từ 1 đến 100.
 - Charge point được sắp theo thời gian tạo mới nhất; connector trong từng charge point
   được sắp theo `connector_number` tăng dần.
@@ -423,7 +425,7 @@ Quy tắc:
 ## Kết nối OCPP và màn hình vận hành
 
 WebSocket: /ocpp/{charge_point_code}, subprotocol ocpp1.6.
-GET /api/v1/ocpp/connections?page=1&page_size=50 dành cho owner/operator/admin;
+GET /api/v1/ocpp/connections?page=1&page_size=50 dành cho owner; operator/admin dùng route `/ops/ocpp/connections` hoặc `/admin/ocpp/connections`;
 owner chỉ thấy trụ thuộc trạm của mình, driver nhận 403. page >= 1, page_size
 từ 1 đến 100. Trả items/total/page/total_pages và dữ liệu kết nối/Boot;
 xem [hợp đồng chi tiết](OCPP_FOUNDATION_DELIVERY.md).

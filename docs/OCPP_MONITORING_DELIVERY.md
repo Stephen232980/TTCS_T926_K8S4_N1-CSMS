@@ -1,5 +1,7 @@
 # Nhóm 2 — giám sát trụ và đầu nối
 
+> Phân quyền hiện hành cập nhật 05/10/2026: [nền phân quyền endpoint](ENDPOINT_AUTHORIZATION_DELIVERY.md) thay thế quy tắc admin/operator tự nhận global scope và quyền điều khiển trong các mô tả lịch sử bên dưới. Chủ trạm dùng owned; vận hành/kế toán đọc qua namespace riêng; admin đơn thuần không gửi Reset/Stop/đóng tay.
+
 Phạm vi S-09, S-10, S-11, S-12 được đối chiếu từ `.local/project-inputs/Backlog CSMS.xlsx`. Mã triển khai trực tiếp trong CSMS, nhánh `feature/ocpp-monitoring-ui`. Jira được cập nhật riêng sau nghiệm thu; không suy Done từ file backlog.
 
 ## Coverage Matrix

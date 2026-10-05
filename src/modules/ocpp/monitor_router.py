@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, func, select
@@ -15,11 +15,16 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.identity.authorization import (
-    CurrentActor,
-    allow_roles,
-    build_actor_scope,
+    ActorScope,
+    enforce_role_policy,
+    user_policy,
 )
-from src.modules.identity.dependencies import CurrentActorDependency, authorize_request
+from src.modules.identity.dependencies import (
+    CurrentActorDependency,
+    RequestScope,
+    authorize_request,
+)
+from src.modules.identity.policy_routing import PolicyRoute
 from src.modules.identity.repository import IdentityRepository
 from src.modules.identity.security import hash_session_token
 from src.modules.ocpp.connection_registry import ocpp_connections
@@ -27,6 +32,7 @@ from src.modules.stations.models import ChargePoint, Connector, ConnectorError, 
 from src.platform.database.session import SessionFactory, get_db_session
 
 router = APIRouter(
+    route_class=PolicyRoute,
     prefix="/api/v1/ocpp/connections",
     tags=["OCPP monitoring"],
     dependencies=[Depends(authorize_request)],
@@ -79,7 +85,7 @@ class MonitorResponse(BaseModel):
 
 async def monitoring_snapshot(
     session: AsyncSession,
-    actor: CurrentActor,
+    scope: ActorScope,
     query: MonitorQuery,
     now: datetime | None = None,
 ) -> MonitorResponse:
@@ -123,7 +129,6 @@ async def monitoring_snapshot(
         )
         .where(ChargePoint.archived_at.is_(None), Station.archived_at.is_(None))
     )
-    scope = build_actor_scope(actor)
     if scope.owner_id is not None:
         statement = statement.where(Station.owner_id == scope.owner_id)
     rows = (
@@ -203,17 +208,18 @@ async def monitoring_snapshot(
 
 
 @router.get("", response_model=MonitorResponse)
-@allow_roles("station_owner", "operator", "admin")
+@user_policy("owner.monitor.read", "owned", "station_owner")
 async def list_connections(
     query: Annotated[MonitorQuery, Query()],
     actor: CurrentActorDependency,
+    scope: RequestScope,
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> MonitorResponse:
-    return await monitoring_snapshot(session, actor, query)
+    return await monitoring_snapshot(session, scope, query)
 
 
 async def monitoring_events(
-    request: Request, actor: CurrentActor, query: MonitorQuery
+    request: Request, scope: ActorScope, query: MonitorQuery
 ) -> AsyncIterator[str]:
     token = request.cookies.get("session")
     while not await request.is_disconnected():
@@ -225,12 +231,15 @@ async def monitoring_events(
                 ).get_current_actor_by_session_hash(
                     hash_session_token(token or ""), datetime.now(UTC)
                 )
-                if current is None or not current.roles.intersection(
-                    {"station_owner", "operator", "admin"}
-                ):
+                if current is None:
                     yield "event: access-denied\ndata: {}\n\n"
                     return
-                snapshot = await monitoring_snapshot(session, current, query)
+                try:
+                    enforce_role_policy(request.scope["endpoint"], current)
+                except HTTPException:
+                    yield "event: access-denied\ndata: {}\n\n"
+                    return
+                snapshot = await monitoring_snapshot(session, scope, query)
             yield f"retry: 1000\ndata: {snapshot.model_dump_json()}\n\n"
         except SQLAlchemyError:
             logging.getLogger("csms.ocpp").error("ocpp_monitor_stream_failed")
@@ -239,17 +248,18 @@ async def monitoring_events(
 
 
 @router.get("/events")
-@allow_roles("station_owner", "operator", "admin")
+@user_policy("owner.monitor.read", "owned", "station_owner")
 async def stream_connections(
     request: Request,
     query: Annotated[MonitorQuery, Query()],
     actor: CurrentActorDependency,
+    scope: RequestScope,
     session: Annotated[AsyncSession, Depends(get_db_session)],
 ) -> StreamingResponse:
     # Release the authentication transaction before starting a long-lived response.
     await session.commit()
     return StreamingResponse(
-        monitoring_events(request, actor, query),
+        monitoring_events(request, scope, query),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

@@ -5,7 +5,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from fastapi.routing import APIRoute
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.identity.admin_schemas import (
@@ -17,12 +16,17 @@ from src.modules.identity.admin_schemas import (
     RoleResponse,
 )
 from src.modules.identity.admin_service import AdminAccountService
-from src.modules.identity.authorization import allow_roles
-from src.modules.identity.dependencies import CurrentActorDependency, authorize_request
+from src.modules.identity.authorization import user_policy
+from src.modules.identity.dependencies import (
+    AuditEvidence,
+    CurrentActorDependency,
+    authorize_request,
+)
+from src.modules.identity.policy_routing import PolicyRoute
 from src.platform.database.session import get_db_session
 
 
-class AdminAccountRoute(APIRoute):
+class AdminAccountRoute(PolicyRoute):
     """Scoped error contract; validation must never echo a supplied password."""
 
     def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
@@ -86,13 +90,13 @@ AccountListQueryDependency = Annotated[AccountListQuery, Query()]
 
 
 @router.get("/roles", response_model=list[RoleResponse])
-@allow_roles("admin")
+@user_policy("admin.list_roles", "all", "admin")
 async def list_roles(db_session: DatabaseSession) -> list[RoleResponse]:
     return await AdminAccountService(db_session).roles()
 
 
 @router.get("/accounts", response_model=AccountListResponse)
-@allow_roles("admin")
+@user_policy("admin.list_accounts", "all", "admin")
 async def list_accounts(
     query: AccountListQueryDependency, db_session: DatabaseSession
 ) -> AccountListResponse:
@@ -100,27 +104,31 @@ async def list_accounts(
 
 
 @router.get("/accounts/{user_id}", response_model=AccountResponse)
-@allow_roles("admin")
+@user_policy("admin.get_account", "all", "admin")
 async def get_account(user_id: UUID, db_session: DatabaseSession) -> AccountResponse:
     return await AdminAccountService(db_session).detail(user_id)
 
 
 @router.post("/accounts", response_model=AccountResponse, status_code=201)
-@allow_roles("admin")
+@user_policy("admin.accounts.manage", "all", "admin")
 async def create_account(
     payload: AccountCreateRequest,
     actor: CurrentActorDependency,
+    authorization: AuditEvidence,
     db_session: DatabaseSession,
 ) -> AccountResponse:
-    return await AdminAccountService(db_session).create(payload, actor)
+    return await AdminAccountService(db_session).create(payload, actor, authorization)
 
 
 @router.patch("/accounts/{user_id}", response_model=AccountResponse)
-@allow_roles("admin")
+@user_policy("admin.accounts.manage", "all", "admin")
 async def update_account(
     user_id: UUID,
     payload: AccountUpdateRequest,
     actor: CurrentActorDependency,
+    authorization: AuditEvidence,
     db_session: DatabaseSession,
 ) -> AccountResponse:
-    return await AdminAccountService(db_session).change(user_id, payload, actor)
+    return await AdminAccountService(db_session).change(
+        user_id, payload, actor, authorization
+    )

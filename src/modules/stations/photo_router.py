@@ -9,8 +9,13 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 from sqlalchemy import select
 from sqlalchemy.orm import undefer
 
-from src.modules.identity.authorization import allow_roles, build_actor_scope
-from src.modules.identity.dependencies import CurrentActorDependency, authorize_request
+from src.modules.identity.authorization import user_policy
+from src.modules.identity.dependencies import (
+    CurrentActorDependency,
+    RequestScope,
+    authorize_request,
+)
+from src.modules.identity.policy_routing import PolicyRoute
 from src.modules.stations.exceptions import StationOwnershipDeniedError
 from src.modules.stations.models import Station
 from src.modules.stations.repository import StationRepository
@@ -18,6 +23,7 @@ from src.modules.stations.router import DatabaseSession
 from src.modules.stations.schemas import StationResponse
 
 router = APIRouter(
+    route_class=PolicyRoute,
     prefix="/api/v1/stations",
     tags=["station-photos"],
     dependencies=[Depends(authorize_request)],
@@ -66,15 +72,14 @@ def normalize_photo(data: bytes, mime: str) -> tuple[bytes, str]:
 async def station_for_photo(
     station_id: UUID,
     actor: CurrentActorDependency,
+    scope: RequestScope,
     db: DatabaseSession,
     *,
     lock: bool = False,
     load: bool = False,
 ) -> Station:
     try:
-        station = await StationRepository(db).get_station_by_id(
-            station_id, build_actor_scope(actor)
-        )
+        station = await StationRepository(db).get_station_by_id(station_id, scope)
     except StationOwnershipDeniedError as error:
         raise HTTPException(403, "permission_denied") from error
     if station is None:
@@ -91,15 +96,16 @@ async def station_for_photo(
 
 
 @router.put("/{station_id}/photo", response_model=StationResponse)
-@allow_roles("station_owner")
+@user_policy("owner.photos.put_photo", "owned", "station_owner")
 async def put_photo(
     station_id: UUID,
     request: Request,
     actor: CurrentActorDependency,
+    scope: RequestScope,
     db: DatabaseSession,
 ) -> StationResponse:
     # Check ownership before reading or decoding the upload.
-    await station_for_photo(station_id, actor, db)
+    await station_for_photo(station_id, actor, scope, db)
     mime = request.headers.get("content-type", "").split(";")[0].strip().lower()
     if mime not in FORMATS:
         raise HTTPException(415, "unsupported_station_photo_type")
@@ -112,7 +118,7 @@ async def put_photo(
         normalized, mime = await asyncio.to_thread(normalize_photo, bytes(data), mime)
     except ValueError as error:
         raise HTTPException(422, str(error)) from error
-    station = await station_for_photo(station_id, actor, db, lock=True)
+    station = await station_for_photo(station_id, actor, scope, db, lock=True)
     station.photo_data = normalized
     station.photo_mime = mime
     station.photo_digest = sha256(normalized).hexdigest()
@@ -122,13 +128,14 @@ async def put_photo(
 
 
 @router.get("/{station_id}/photo")
-@allow_roles("station_owner", "operator", "admin")
+@user_policy("owner.photos.get_photo", "owned", "station_owner")
 async def get_photo(
     station_id: UUID,
     actor: CurrentActorDependency,
+    scope: RequestScope,
     db: DatabaseSession,
 ) -> Response:
-    station = await station_for_photo(station_id, actor, db, load=True)
+    station = await station_for_photo(station_id, actor, scope, db, load=True)
     if station.photo_data is None:
         raise HTTPException(404, "station_photo_not_found")
     return Response(
@@ -142,13 +149,14 @@ async def get_photo(
 
 
 @router.delete("/{station_id}/photo", status_code=204)
-@allow_roles("station_owner")
+@user_policy("owner.photos.delete_photo", "owned", "station_owner")
 async def delete_photo(
     station_id: UUID,
     actor: CurrentActorDependency,
+    scope: RequestScope,
     db: DatabaseSession,
 ) -> Response:
-    station = await station_for_photo(station_id, actor, db, lock=True)
+    station = await station_for_photo(station_id, actor, scope, db, lock=True)
     station.photo_data = None
     station.photo_mime = None
     station.photo_digest = None

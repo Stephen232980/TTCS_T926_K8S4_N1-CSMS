@@ -117,7 +117,9 @@ async def test_global_roles_can_list_station_charge_points(
     await db_session.flush()
 
     async with api_client(db_session, actor(uuid4(), role)) as client:
-        response = await client.get(f"/api/v1/stations/{station.id}/charge-points")
+        response = await client.get(
+            f"/api/v1/{'ops' if role == 'operator' else 'admin'}/stations/{station.id}/charge-points"
+        )
 
     assert response.status_code == 200
     assert response.json()["total"] == 1

@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.identity.admin_router import AdminAccountRoute
 from src.modules.identity.admin_schemas import AccountStatus, RoleCode
-from src.modules.identity.authorization import allow_roles
+from src.modules.identity.authorization import user_policy
 from src.modules.identity.dependencies import authorize_request
 from src.modules.identity.models import AccountAudit, User
 from src.platform.database.session import get_db_session
@@ -52,6 +52,8 @@ class AccountAuditEntry(BaseModel):
     actor_email: str
     target_id: UUID
     action: str
+    permission: str | None
+    actor_roles: list[str] | None
     before: AccountAuditState | None
     after: AccountAuditState
     created_at: datetime
@@ -66,7 +68,7 @@ class AccountAuditPage(BaseModel):
 
 
 @router.get("", response_model=AccountAuditPage)
-@allow_roles("admin")
+@user_policy("admin.account_audit", "all", "admin")
 async def account_audit(
     db: Database,
     query: Annotated[AccountAuditQuery, Query()],
@@ -98,6 +100,8 @@ async def account_audit(
                 actor_email=email,
                 target_id=row.target_id,
                 action=row.action,
+                permission=row.permission,
+                actor_roles=row.actor_roles,
                 before=AccountAuditState.model_validate(row.before_state)
                 if row.before_state
                 else None,

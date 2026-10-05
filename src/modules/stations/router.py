@@ -6,11 +6,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.modules.identity.authorization import allow_roles, build_actor_scope
+from src.modules.identity.authorization import user_policy
 from src.modules.identity.dependencies import (
     CurrentActorDependency,
+    RequestScope,
     authorize_request,
 )
+from src.modules.identity.policy_routing import PolicyRoute
 from src.modules.stations.exceptions import (
     ChargePointCodeAlreadyExistsError,
     StationIdempotencyConflictError,
@@ -32,6 +34,7 @@ from src.modules.stations.schemas import (
 from src.platform.database.session import get_db_session
 
 router = APIRouter(
+    route_class=PolicyRoute,
     prefix="/api/v1/stations",
     tags=["stations"],
     dependencies=[Depends(authorize_request)],
@@ -54,13 +57,13 @@ def _station_create_request_hash(request: StationCreateRequest) -> str:
 
 
 @router.get("", response_model=StationListResponse)
-@allow_roles("station_owner", "operator", "admin")
+@user_policy("owner.stations.list_stations", "owned", "station_owner")
 async def list_stations(
     query: StationListQueryDependency,
     actor: CurrentActorDependency,
+    scope: RequestScope,
     db_session: DatabaseSession,
 ) -> StationListResponse:
-    scope = build_actor_scope(actor)
     page_result = await StationRepository(db_session).list_stations_page(
         scope=scope,
         page=query.page,
@@ -87,11 +90,12 @@ async def list_stations(
     response_model=StationResponse,
     status_code=status.HTTP_201_CREATED,
 )
-@allow_roles("station_owner")
+@user_policy("owner.stations.create_station", "owned", "station_owner")
 async def create_station(
     request: StationCreateRequest,
     idempotency_key: IdempotencyKey,
     actor: CurrentActorDependency,
+    scope: RequestScope,
     db_session: DatabaseSession,
 ) -> StationResponse:
     try:
@@ -116,14 +120,14 @@ async def create_station(
     "/{station_id}/charge-points",
     response_model=ChargePointListResponse,
 )
-@allow_roles("station_owner", "operator", "admin")
+@user_policy("owner.stations.list_charge_points", "owned", "station_owner")
 async def list_charge_points(
     station_id: UUID,
     query: ChargePointListQueryDependency,
     actor: CurrentActorDependency,
+    scope: RequestScope,
     db_session: DatabaseSession,
 ) -> ChargePointListResponse:
-    scope = build_actor_scope(actor)
 
     try:
         page_result = await StationRepository(db_session).list_charge_points_page(
@@ -181,14 +185,14 @@ async def list_charge_points(
     response_model=ChargePointResponse,
     status_code=status.HTTP_201_CREATED,
 )
-@allow_roles("station_owner")
+@user_policy("owner.stations.create_charge_point", "owned", "station_owner")
 async def create_charge_point(
     station_id: UUID,
     request: ChargePointCreateRequest,
     actor: CurrentActorDependency,
+    scope: RequestScope,
     db_session: DatabaseSession,
 ) -> ChargePointResponse:
-    scope = build_actor_scope(actor)
 
     try:
         charge_point = await StationRepository(db_session).create_charge_point(
@@ -239,13 +243,13 @@ async def create_charge_point(
 
 
 @router.get("/{station_id}", response_model=StationResponse)
-@allow_roles("station_owner", "operator", "admin")
+@user_policy("owner.stations.get_station", "owned", "station_owner")
 async def get_station(
     station_id: UUID,
     actor: CurrentActorDependency,
+    scope: RequestScope,
     db_session: DatabaseSession,
 ) -> StationResponse:
-    scope = build_actor_scope(actor)
     repository = StationRepository(db_session)
 
     try:
@@ -266,14 +270,14 @@ async def get_station(
 
 
 @router.patch("/{station_id}", response_model=StationResponse)
-@allow_roles("station_owner")
+@user_policy("owner.stations.update_station", "owned", "station_owner")
 async def update_station(
     station_id: UUID,
     request: StationUpdateRequest,
     actor: CurrentActorDependency,
+    scope: RequestScope,
     db_session: DatabaseSession,
 ) -> StationResponse:
-    scope = build_actor_scope(actor)
 
     try:
         station = await StationRepository(db_session).update_station(

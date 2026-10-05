@@ -7,14 +7,22 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.modules.identity.authorization import allow_roles
-from src.modules.identity.dependencies import CurrentActorDependency, authorize_request
+from src.modules.identity.authorization import user_policy
+from src.modules.identity.dependencies import (
+    AuditEvidence,
+    CurrentActorDependency,
+    authorize_request,
+)
+from src.modules.identity.policy_routing import PolicyRoute
 from src.modules.ocpp.control import command_status, execute_command
 from src.modules.ocpp.control_models import ControlRequest, ControlResult
 from src.platform.database.session import get_db_session
 
 router = APIRouter(
-    prefix="/api/v1/ocpp", tags=["control"], dependencies=[Depends(authorize_request)]
+    route_class=PolicyRoute,
+    prefix="/api/v1/ocpp",
+    tags=["control"],
+    dependencies=[Depends(authorize_request)],
 )
 Database = Annotated[AsyncSession, Depends(get_db_session)]
 
@@ -43,6 +51,8 @@ class AuditEntry(BaseModel):
     charge_point_code: str
     transaction_id: int | None
     action: str
+    permission: str | None
+    actor_roles: list[str] | None
     payload: dict[str, object]
     created_at: datetime
     status: str
@@ -50,45 +60,57 @@ class AuditEntry(BaseModel):
 
 
 @router.post("/charge-points/{charger_id}/reset")
-@allow_roles("operator", "admin")
+@user_policy("ops.connector.reset", "all", "operator")
 async def reset(
-    charger_id: UUID, body: ResetBody, actor: CurrentActorDependency, session: Database
+    charger_id: UUID,
+    body: ResetBody,
+    actor: CurrentActorDependency,
+    authorization: AuditEvidence,
+    session: Database,
 ) -> dict[str, object]:
     await session.commit()  # Release the authentication connection before waiting.
     return await execute_command(
-        actor.user_id, body.request_id, "Reset", charger_id, body.type
+        actor.user_id,
+        body.request_id,
+        "Reset",
+        charger_id,
+        body.type,
+        authorization=authorization,
     )
 
 
 @router.post("/sessions/{transaction_id}/stop")
-@allow_roles("operator", "admin")
+@user_policy("ops.session.stop", "all", "operator")
 async def remote_stop(
     transaction_id: int,
     body: CommandBody,
     actor: CurrentActorDependency,
+    authorization: AuditEvidence,
     session: Database,
 ) -> dict[str, object]:
     await session.commit()
     return await execute_command(
-        actor.user_id, body.request_id, "RemoteStopTransaction", transaction_id
+        actor.user_id,
+        body.request_id,
+        "RemoteStopTransaction",
+        transaction_id,
+        authorization=authorization,
     )
 
 
 @router.get("/commands/{command_id}")
-@allow_roles("operator", "admin")
+@user_policy("ops.commands.read", "own", "operator")
 async def get_command(
     command_id: UUID, actor: CurrentActorDependency, session: Database
 ) -> dict[str, object]:
     command = await session.get(ControlRequest, command_id)
-    if command is None or (
-        command.actor_id != actor.user_id and "admin" not in actor.roles
-    ):
+    if command is None or (command.actor_id != actor.user_id):
         raise HTTPException(404, "Không tìm thấy yêu cầu.")
     return {"id": command.id, "status": await command_status(session, command.id)}
 
 
 @router.get("/control-audit")
-@allow_roles("admin")
+@user_policy("admin.control_audit.read", "all", "admin")
 async def audit(
     query: Annotated[AuditQuery, Query()],
     actor: CurrentActorDependency,
@@ -134,6 +156,8 @@ async def audit(
             charge_point_code=row[2],
             transaction_id=row[0].transaction_id,
             action=row[0].action,
+            permission=row[0].permission,
+            actor_roles=row[0].actor_roles,
             payload=row[0].payload,
             created_at=row[0].created_at,
             status=row[3] or "Pending",

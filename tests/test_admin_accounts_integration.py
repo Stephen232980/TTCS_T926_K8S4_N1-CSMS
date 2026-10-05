@@ -122,6 +122,8 @@ async def test_create_account_roles_login_and_audit(
         select(AccountAudit).where(AccountAudit.target_id == stored.id)
     )
     assert audit and audit.before_state is None
+    assert audit.permission == "admin.accounts.manage"
+    assert audit.actor_roles == ["admin"]
     assert "password" not in str(audit.after_state)
     async with client_for(accounts, "target") as client:
         login = await client.post(

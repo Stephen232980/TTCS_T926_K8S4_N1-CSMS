@@ -1,5 +1,7 @@
 # API quản trị — Tài khoản và vai trò
 
+> Phân quyền hiện hành cập nhật 05/10/2026: [nền phân quyền endpoint](ENDPOINT_AUTHORIZATION_DELIVERY.md) thay thế quy tắc admin/operator tự nhận global scope và quyền điều khiển trong các mô tả lịch sử bên dưới. Chủ trạm dùng owned; vận hành/kế toán đọc qua namespace riêng; admin đơn thuần không gửi Reset/Stop/đóng tay.
+
 Phạm vi: nhóm đầu tiên trong ba màn hình quản trị đã chọn. API backend thật,
 chưa triển khai giao diện. S-61 được làm sớm phục vụ demo Sprint 2–3; backlog
 còn Later/chưa refine, không coi đây là nghiệm thu toàn bộ story hoặc sprint.

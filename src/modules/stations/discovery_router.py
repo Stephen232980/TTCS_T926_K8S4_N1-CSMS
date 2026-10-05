@@ -8,12 +8,14 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.modules.identity.authorization import allow_roles
+from src.modules.identity.authorization import user_policy
 from src.modules.identity.dependencies import authorize_request
+from src.modules.identity.policy_routing import PolicyRoute
 from src.modules.stations.models import Station
 from src.platform.database.session import get_db_session
 
 router = APIRouter(
+    route_class=PolicyRoute,
     prefix="/api/v1/driver/stations",
     tags=["driver"],
     dependencies=[Depends(authorize_request)],
@@ -44,7 +46,7 @@ class DiscoveryResponse(BaseModel):
 
 
 @router.get("", response_model=DiscoveryResponse)
-@allow_roles("driver")
+@user_policy("driver.discover_stations", "own", "driver")
 async def discover_stations(
     query: Annotated[DiscoveryQuery, Query()],
     session: Annotated[AsyncSession, Depends(get_db_session)],

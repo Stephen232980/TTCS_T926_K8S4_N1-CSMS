@@ -23,6 +23,8 @@ class ControlRequest(Base):
     )
     transaction_id: Mapped[int | None] = mapped_column(Integer)
     action: Mapped[str] = mapped_column(String(40))
+    permission: Mapped[str | None] = mapped_column(String(100))
+    actor_roles: Mapped[list[str] | None] = mapped_column(JSONB)
     payload: Mapped[dict[str, object]] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 

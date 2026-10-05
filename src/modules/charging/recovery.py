@@ -14,6 +14,7 @@ from src.modules.charging.models import (
     MeterSample,
 )
 from src.modules.charging.service import review
+from src.modules.identity.authorization import AuthorizationEvidence
 from src.modules.ocpp.monitoring import expired
 from src.modules.stations.models import ChargePoint, Connector
 
@@ -121,7 +122,12 @@ async def flag_abnormal_sessions(
 
 
 async def manual_close(
-    session: AsyncSession, transaction: ChargingSession, actor_id: UUID, reason: str
+    session: AsyncSession,
+    transaction: ChargingSession,
+    actor_id: UUID,
+    reason: str,
+    *,
+    authorization: AuthorizationEvidence | None = None,
 ) -> None:
     if transaction.ended_at is not None or transaction.abnormal_since is None:
         raise HTTPException(409, "Chỉ được đóng tay phiên bất thường còn mở.")
@@ -170,6 +176,8 @@ async def manual_close(
             actor_id=actor_id,
             action="manual_closure",
             details={
+                "permission": authorization.permission if authorization else None,
+                "actor_roles": list(authorization.roles) if authorization else None,
                 "reason": reason,
                 "meter_stop_wh": str(latest.value),
                 "meter_at": latest.timestamp.isoformat(),

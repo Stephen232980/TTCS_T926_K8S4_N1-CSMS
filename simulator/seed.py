@@ -13,7 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from simulator.config import SimulatorSettings, load_settings
 from src.modules.charging.models import ChargingCard
 from src.modules.charging.service import tag_hash
-from src.modules.identity.models import Role, User, UserRole
+from src.modules.identity.models import Role, User
+from src.modules.identity.role_assignment import assign_user_roles
 from src.modules.identity.security import hash_password
 from src.modules.stations.models import ChargePoint, Connector, Station
 from src.platform.database.session import SessionFactory
@@ -76,14 +77,7 @@ async def _user(session: AsyncSession, email: str, password: str) -> User:
 
 
 async def _assign_role(session: AsyncSession, user: User, role: Role) -> None:
-    assignment = await session.scalar(
-        select(UserRole).where(
-            UserRole.user_id == user.id,
-            UserRole.role_id == role.id,
-        )
-    )
-    if assignment is None:
-        session.add(UserRole(user_id=user.id, role_id=role.id))
+    await assign_user_roles(session, user.id, [role.code], replace=False)
 
 
 async def _station(
