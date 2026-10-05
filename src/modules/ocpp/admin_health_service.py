@@ -57,7 +57,7 @@ async def capture_sample(db: AsyncSession, now: datetime) -> None:
             Station.archived_at.is_(None),
             Connector.archived_at.is_(None),
             Connector.raw_ocpp_status == "Charging",
-            Connector.status == "charging",
+            Connector.status == "Charging",
             online,
         )
     )
