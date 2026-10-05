@@ -3,7 +3,8 @@
 API quản trị tài khoản bổ sung ngày 05/10/2026: xem
 [contract, quy tắc và kiểm chứng](ADMIN_ACCOUNT_API_DELIVERY.md).
 Nhóm endpoint `/api/v1/admin/accounts` và `/api/v1/admin/roles` chỉ dành cho
-admin; phần sức khỏe hệ thống S-63 chưa được bổ sung trong nhóm này.
+admin. Nhóm tiếp theo bổ sung đọc nhật ký tài khoản và sức khỏe hệ thống:
+[contract và định nghĩa chỉ số](ADMIN_MONITORING_API_DELIVERY.md).
 
 Trạng thái: baseline cho frontend và backend, chốt ngày 26/09/2026.
 
