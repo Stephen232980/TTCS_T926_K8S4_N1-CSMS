@@ -1,4 +1,6 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { ControlAction } from '../ocpp/ControlAction'
+import { ManualCloseForm } from '../charging/ManualCloseForm'
 import { MeterChart } from '../charging/MeterChart'
 import { Icon } from '../../components/icons/Icon'
 import {
@@ -19,9 +21,11 @@ import {
 } from './ownerApi'
 import { ChargerDrawing, Steps } from './OwnerVisuals'
 
-export function OwnerCharging({ initialSessionId, onInitialSessionOpened }: { initialSessionId?: number; onInitialSessionOpened?: () => void } = {}) {
+export function OwnerCharging({ initialSessionId, onInitialSessionOpened, area = '', initialState = 'all' }: { initialSessionId?: number; onInitialSessionOpened?: () => void; area?: '' | 'ops'; initialState?: string } = {}) {
+  const request = useCallback(<T,>(path: string, options?: RequestInit) => ownerRequest<T>(`${area ? '/' + area : ''}${path}`, options), [area])
+  const [closing, setClosing] = useState(false)
   const [mode, setMode] = useState<'sessions' | 'cards' | 'pending'>('sessions')
-  const [state, setState] = useState('all')
+  const [state, setState] = useState(initialState)
   const [page, setPage] = useState(1)
   const [revision, setRevision] = useState(0)
   const [sessions, setSessions] = useState<OwnerPage<OwnerSession> | null>(null)
@@ -54,6 +58,8 @@ export function OwnerCharging({ initialSessionId, onInitialSessionOpened }: { in
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState('')
   const [search, setSearch] = useState('')
+  const [stationFilter, setStationFilter] = useState('')
+  const [sessionObservedAt, setSessionObservedAt] = useState(() => Date.now())
   const selectedId = selected?.id ?? initialSessionId
   useEffect(() => {
     const controller = new AbortController()
@@ -63,17 +69,17 @@ export function OwnerCharging({ initialSessionId, onInitialSessionOpened }: { in
       running = true
       try {
         if (mode === 'sessions') {
-          const value = await ownerRequest<OwnerPage<OwnerSession>>(
+          const value = await request<OwnerPage<OwnerSession>>(
               `/charging/sessions?page=${page}&page_size=20&state=${state}`,
               { signal: controller.signal },
             )
-          if (!controller.signal.aborted) setSessions(value)
+          if (!controller.signal.aborted) { setSessions(value); setSessionObservedAt(Date.now()) }
           if (selectedId !== undefined) {
             let fresh = value.items.find(item => item.id === selectedId)
             // Closure can move a session outside the current filter or page.
             // The backend currently exposes only a scoped paginated collection.
             for (let lookupPage = 1, totalPages = 1; !fresh && lookupPage <= totalPages; lookupPage++) {
-              const all = await ownerRequest<OwnerPage<OwnerSession>>(
+              const all = await request<OwnerPage<OwnerSession>>(
                 `/charging/sessions?page=${lookupPage}&page_size=100&state=all`,
                 { signal: controller.signal },
               )
@@ -91,10 +97,10 @@ export function OwnerCharging({ initialSessionId, onInitialSessionOpened }: { in
           }
         }
         else if (mode === 'cards') {
-          const value = await ownerRequest<OwnerCard[]>('/charging/cards', { signal: controller.signal })
+          const value = await request<OwnerCard[]>('/charging/cards', { signal: controller.signal })
           if (!controller.signal.aborted) { setCards(value); setCardObservedAt(Date.now()) }
         } else {
-          const value = await ownerRequest<OwnerPending[]>('/charging/pending', { signal: controller.signal })
+          const value = await request<OwnerPending[]>('/charging/pending', { signal: controller.signal })
           if (!controller.signal.aborted) setPending(value)
         }
         if (!controller.signal.aborted) {
@@ -120,7 +126,7 @@ export function OwnerCharging({ initialSessionId, onInitialSessionOpened }: { in
       controller.abort()
       window.clearInterval(timer)
     }
-  }, [mode, page, state, revision, wizard, selectedId, initialSessionId, onInitialSessionOpened])
+  }, [mode, page, state, revision, wizard, selectedId, initialSessionId, onInitialSessionOpened, request])
   useEffect(() => {
     if (selectedId === undefined) return
     const controller = new AbortController()
@@ -130,17 +136,17 @@ export function OwnerCharging({ initialSessionId, onInitialSessionOpened }: { in
       running = true
       try {
         if (detailTab === 'samples') {
-          const value = await ownerRequest<OwnerPage<MeterSample>>(
+          const value = await request<OwnerPage<MeterSample>>(
             `/charging/sessions/${selectedId}/samples?page=${samplePage}&page_size=100`,
             { signal: controller.signal },
           )
-          const latest = samplePage === 1 ? value : await ownerRequest<OwnerPage<MeterSample>>(
+          const latest = samplePage === 1 ? value : await request<OwnerPage<MeterSample>>(
             `/charging/sessions/${selectedId}/samples?page=1&page_size=100`,
             { signal: controller.signal },
           )
           if (!controller.signal.aborted) { setSamples(value); setLatestSamples(latest.items) }
         } else {
-          const value = await ownerRequest<typeof events>(
+          const value = await request<typeof events>(
             `/charging/sessions/${selectedId}/events`,
             { signal: controller.signal },
           )
@@ -159,7 +165,7 @@ export function OwnerCharging({ initialSessionId, onInitialSessionOpened }: { in
     void load()
     const timer = window.setInterval(() => { if (!document.hidden) void load() }, 5000)
     return () => { controller.abort(); window.clearInterval(timer) }
-  }, [selectedId, detailTab, samplePage, revision])
+  }, [selectedId, detailTab, samplePage, revision, request])
   async function issue(event: FormEvent) {
     event.preventDefault()
     if (saving) return
@@ -175,7 +181,7 @@ export function OwnerCharging({ initialSessionId, onInitialSessionOpened }: { in
     }
     setSaving(true)
     try {
-      await ownerRequest(
+      await request(
         '/charging/cards',
         jsonBody('POST', {
           id_tag: tag.trim(),
@@ -202,7 +208,7 @@ export function OwnerCharging({ initialSessionId, onInitialSessionOpened }: { in
     setSaving(true)
     setActionError('')
     try {
-      await ownerRequest(
+      await request(
         `/charging/cards/${encodeURIComponent(card.id)}`,
         jsonBody('PATCH', {
           status: card.status === 'active' ? 'blocked' : 'active',
@@ -216,6 +222,7 @@ export function OwnerCharging({ initialSessionId, onInitialSessionOpened }: { in
       setSaving(false)
     }
   }
+  const operatorSessions = (sessions?.items ?? []).filter(item => (!stationFilter || item.station_name === stationFilter) && `${item.station_name} ${item.charge_point_code} ${item.id}`.toLocaleLowerCase('vi-VN').includes(search.toLocaleLowerCase('vi-VN')))
   const groups = groupBy(sessions?.items ?? [], (item) => item.station_name)
   const visibleCards = cards.filter((card) =>
     card.driver_email.toLowerCase().includes(search.toLowerCase()),
@@ -230,7 +237,7 @@ export function OwnerCharging({ initialSessionId, onInitialSessionOpened }: { in
             ['cards', 'Thẻ tài xế'],
             ['pending', 'Chờ đối chiếu'],
           ] as const
-        ).map(([key, label]) => (
+        ).filter(([key]) => !area || key !== 'cards').map(([key, label]) => (
           <button
             key={key}
             aria-pressed={mode === key}
@@ -266,7 +273,7 @@ export function OwnerCharging({ initialSessionId, onInitialSessionOpened }: { in
           <p>
             {selected
               ? `${selected.station_name} · ${selected.charge_point_code} · Đầu nối ${selected.connector_number}`
-              : 'Theo dõi trong phạm vi trạm của bạn.'}
+              : area ? 'Theo dõi phiên sạc toàn hệ thống.' : 'Theo dõi trong phạm vi trạm của bạn.'}
           </p>
         </div>
         {selected ? (
@@ -274,6 +281,7 @@ export function OwnerCharging({ initialSessionId, onInitialSessionOpened }: { in
             className="secondary-button"
             onClick={() => {
               setSelected(null)
+              setClosing(false)
               setSamples(null)
             }}
           >
@@ -429,6 +437,15 @@ export function OwnerCharging({ initialSessionId, onInitialSessionOpened }: { in
       ) : selected ? (
         <>
           <div className="owner-session-content">
+          {area === 'ops' && !selected.ended_at && <div className="operator-session-controls">
+            <ControlAction key={selected.id} sessionId={selected.id} label={`#${selected.id}`} onDone={() => setRevision(value => value + 1)} />
+            {selected.abnormal_since && <button className="secondary-button" onClick={() => setClosing(true)}>Đóng hồ sơ phiên</button>}
+          </div>}
+          {closing && area === 'ops' && !selected.ended_at && <ManualCloseForm key={selected.id} sessionId={selected.id} latestMeter={selected.latest_meter_wh} startMeter={selected.meter_start_wh} meterAt={selected.latest_meter_at} onCancel={() => setClosing(false)} onSubmit={async reason => {
+            await ownerRequest(`/charging/sessions/${selected.id}/close`, jsonBody('POST', { reason }))
+            setClosing(false); setRevision(value => value + 1); setNotice('Đã đóng hồ sơ phiên bằng số đo cuối. Trụ không nhận lệnh dừng sạc.')
+          }} />}
+
           <div className="owner-session-facts owner-panel">
             <div>
               <span>Bắt đầu</span>
@@ -572,7 +589,10 @@ export function OwnerCharging({ initialSessionId, onInitialSessionOpened }: { in
         </>
       ) : (
         <>
-          <div className="owner-toolbar">
+          {area === 'ops' && mode === 'sessions' && <details className="operator-session-guide"><summary>Hướng dẫn thao tác nhanh</summary><p>Chọn một phiên trong danh sách để xem biểu đồ, số đo và lịch sử. Dừng từ xa cần xác nhận; phiên chỉ kết thúc khi trụ gửi tin kết thúc. Phiên bất thường có thể đóng hồ sơ sau khi kiểm tra trụ.</p></details>}
+          <div className={`owner-toolbar${area === 'ops' && mode === 'sessions' ? ' operator-session-filters' : ''}`}>
+            {area === 'ops' && mode === 'sessions' && <><label className="owner-search"><Icon name="search"/><input type="search" aria-label="Tìm phiên trong trang" placeholder="Tìm trạm hoặc mã trụ trong trang" value={search} onChange={event=>setSearch(event.target.value)}/></label><label>Trạm trong trang <select value={stationFilter} onChange={event=>setStationFilter(event.target.value)}><option value="">Tất cả trạm</option>{Array.from(new Set(sessions?.items.map(item=>item.station_name) ?? [])).sort().map(name=><option key={name} value={name}>{name}</option>)}</select></label></>}
+
             {mode === 'sessions' ? (
               <label>
                 Trạng thái{' '}
@@ -623,6 +643,17 @@ export function OwnerCharging({ initialSessionId, onInitialSessionOpened }: { in
               <div className="owner-placeholder" role="status">
                 Đang tải dữ liệu…
               </div>
+            ) : mode === 'sessions' && area === 'ops' ? (
+              operatorSessions.length ? <div className="operator-session-list">{operatorSessions.map(session => {
+                const energy = session.ended_at ? session.energy_kwh : session.latest_meter_wh !== null && Number(session.latest_meter_wh) >= Number(session.meter_start_wh) ? (Number(session.latest_meter_wh) - Number(session.meter_start_wh)) / 1000 : null
+                const duration = Math.max(0, Math.floor(((session.ended_at ? Date.parse(session.ended_at) : sessionObservedAt) - Date.parse(session.started_at)) / 60000))
+                const review = session.review_reasons.length > 0
+                return <button className="operator-session-row" key={session.id} onClick={()=>{setSelected(session);setSamples(null);setLatestSamples([]);setSamplePage(1);setDetailTab('samples');setDetailError('');setEvents([]);setEventsSessionId(undefined)}}>
+                  <span><strong>Phiên #{session.id}</strong><span className={`operator-session-status${review ? ' is-review' : session.ended_at ? ' is-closed' : ''}`}>{review ? 'Cần xem xét' : session.ended_at ? 'Đã kết thúc' : 'Đang mở'}</span></span>
+                  <span>{session.station_name} · {session.charge_point_code} · Đầu nối {session.connector_number}</span>
+                  <span className="operator-session-summary"><span><b>{decimal(energy)}</b> <small>kWh{session.ended_at ? ' · đã chốt' : ' · điện đã cấp'}</small></span><span><b>{duration}</b> <small>phút</small></span><span>Số đo mới nhất: {clock(session.latest_meter_at)}</span></span>
+                </button>
+              })}</div> : <div className="owner-placeholder">{search || stationFilter ? 'Không có phiên khớp bộ lọc trong trang này.' : 'Chưa có phiên sạc phù hợp.'}</div>
             ) : mode === 'sessions' ? (
               sessions?.items.length ? (
                 Array.from(groups).map(([stationName, items]) => (
@@ -750,7 +781,7 @@ export function OwnerCharging({ initialSessionId, onInitialSessionOpened }: { in
           <footer className="owner-actions">
             <span>
               {mode === 'sessions'
-                ? `${sessions?.total ?? 0} phiên · Trang ${page} / ${sessions?.total_pages || 1}`
+                ? `${sessions?.total ?? 0} phiên · Trang ${page} / ${sessions?.total_pages || 1}${area === 'ops' ? ` · ${operatorSessions.length} phiên hiển thị trên trang` : ''}`
                 : mode === 'pending'
                   ? `${pending.length === 100 ? '100 bản tin mới nhất · ' : ''}Bản tin chỉ đọc; hệ thống đối chiếu khi nhận đủ dữ liệu.`
                   : `${visibleCards.length} thẻ${cards.length === 100 ? ' · đang xem 100 thẻ mới nhất' : ''}`}
