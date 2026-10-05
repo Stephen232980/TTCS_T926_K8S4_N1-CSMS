@@ -4,6 +4,10 @@ Phạm vi: nhóm đầu tiên trong ba màn hình quản trị đã chọn. API 
 chưa triển khai giao diện. S-61 được làm sớm phục vụ demo Sprint 2–3; backlog
 còn Later/chưa refine, không coi đây là nghiệm thu toàn bộ story hoặc sprint.
 
+Nhóm tiếp theo đã bổ sung API đọc nhật ký tài khoản và Sức khỏe hệ thống;
+xem [contract hiện tại](ADMIN_MONITORING_API_DELIVERY.md). Các ghi chú "chưa"
+dưới đây mô tả phạm vi nhóm tài khoản ban đầu, không phải tổng trạng thái mới.
+
 ## Phạm vi ba màn hình
 
 | Màn hình | Thiết kế đã chọn | Backend |

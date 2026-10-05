@@ -56,6 +56,7 @@ class AdminAccountRoute(APIRoute):
                         403: "permission_denied",
                         404: "resource_not_found",
                         409: "resource_conflict",
+                        422: "validation_error",
                     }.get(status_code, "bad_request")
                     message = str(exc.detail)
                 return JSONResponse(

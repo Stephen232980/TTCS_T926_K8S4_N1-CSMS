@@ -12,7 +12,10 @@ from src.config import settings
 from src.modules.charging import driver_models  # noqa: F401
 from src.modules.charging import models as charging_models  # noqa: F401
 from src.modules.identity import models  # noqa: F401
-from src.modules.ocpp import control_models  # noqa: F401
+from src.modules.ocpp import (
+    admin_health_models,  # noqa: F401
+    control_models,  # noqa: F401
+)
 from src.modules.ocpp import models as ocpp_models  # noqa: F401
 from src.modules.stations import models as stations_models  # noqa: F401
 from src.platform.database.base import Base
