@@ -93,7 +93,7 @@ describe('App', () => {
     ['station_owner', 'Trạm của tôi'],
     ['operator', 'Giám sát trụ'],
     ['admin', 'Tài khoản & vai trò'],
-    ['driver', 'Tìm trạm sạc'],
+    ['driver', 'Phiên sạc của bạn'],
     ['accountant', 'Phiên sạc'],
   ])('routes the %s role to its permitted screen', async (role, heading) => {
     const stationApi = new MockStationApi(undefined, 0)
