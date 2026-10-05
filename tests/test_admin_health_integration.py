@@ -20,6 +20,7 @@ from src.modules.ocpp import admin_health_service
 from src.modules.ocpp.admin_health_models import OcppTelemetryBucket, SystemHealthSample
 from src.modules.ocpp.admin_health_router import health_now
 from src.modules.ocpp.admin_health_service import collect_health
+from src.modules.ocpp.monitoring import StatusPayload, report_status
 from src.modules.ocpp.telemetry import TelemetryBuffer
 from src.modules.stations.models import ChargePoint, Connector, Station
 from src.platform.database.base import Base
@@ -97,7 +98,7 @@ async def make_charger(
     connector = Connector(
         charge_point_id=charger.id,
         connector_number=1,
-        status="charging" if raw == "Charging" else "unknown",
+        status=raw,
         raw_ocpp_status=raw,
     )
     db.add(connector)
@@ -117,6 +118,32 @@ async def make_charger(
     )
     await db.commit()
     return charger
+
+
+@pytest.mark.asyncio
+async def test_running_count_follows_status_notification_storage(
+    health_db: AsyncSession,
+) -> None:
+    charger = await make_charger(health_db, raw="Available")
+    buffer = TelemetryBuffer(started_at=NOW - timedelta(minutes=6))
+    for offset, (status, expected) in enumerate(
+        [("Available", 0), ("Charging", 1), ("SuspendedEV", 0), ("Charging", 1)]
+    ):
+        await report_status(
+            health_db,
+            charger,
+            StatusPayload(connectorId=1, status=status, errorCode="NoError"),
+        )
+        await health_db.commit()
+        instant = NOW + timedelta(seconds=offset * 30)
+        await collect_health(now=instant, buffer=buffer)
+        sample = await health_db.scalar(
+            select(SystemHealthSample)
+            .where(SystemHealthSample.collected_at == instant)
+            .execution_options(populate_existing=True)
+        )
+        assert sample is not None
+        assert sample.running_sessions == expected
 
 
 @pytest.mark.asyncio

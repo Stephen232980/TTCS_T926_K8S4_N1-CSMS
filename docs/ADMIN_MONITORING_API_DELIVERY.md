@@ -131,6 +131,16 @@ cửa sổ 5 phút cần tích lũy; biểu đồ 24 giờ đầy dần theo d�
 
 ## Kiểm chứng
 
+### Hồi quy khi chạy demo OCPP
+
+Phép đếm phiên đang sạc dùng trạng thái `Charging` đúng như
+`StatusNotification` lưu ở monitoring. Trước đây bộ lọc `charging` không
+khớp bản tin thật, nên trụ trực tuyến và phiên có số đo vẫn bị đếm là 0.
+Fixture kiểm thử đã dùng trạng thái chuẩn OCPP; có kiểm thử đường ghi
+`report_status` từ Available → Charging → SuspendedEV → Charging,
+kiểm tra số phiên lần lượt 0 → 1 → 0 → 1. Không thay đổi tiêu chí loại
+phiên đã đóng, bất thường, trụ ngoại tuyến, trạm bị khóa hoặc thiết bị archive.
+
 13 test mới đạt qua PostgreSQL schema riêng và HTTP: số liệu thật, phiên
 paused/offline không đếm như running, lọc trụ archive/blocked, trọng số độ trễ,
 window warm-up, stale, lịch sử null, quyền admin, lọc/read-only audit, rollback
