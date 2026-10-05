@@ -16,8 +16,10 @@ from src.modules.identity.authorization import AccessPolicy, access_policy, user
 from src.modules.identity.dependencies import CurrentActorDependency
 from src.modules.identity.policy_routing import PolicyRoute
 from src.modules.identity.repository import IdentityRepository
+from src.modules.identity.role_assignment import get_default_role, set_default_role
 from src.modules.identity.schemas import (
     CurrentUserResponse,
+    DefaultRoleRequest,
     LoginRequest,
     LoginResponse,
 )
@@ -137,4 +139,25 @@ async def get_current_user(
         id=user.id,
         email=user.email,
         roles=sorted(actor.roles),
+        default_role=await get_default_role(db_session, actor.user_id),
     )
+
+
+@router.put("/default-role", response_model=CurrentUserResponse)
+@user_policy(
+    "identity.default_role.choose",
+    "own",
+    "admin",
+    "operator",
+    "accountant",
+    "station_owner",
+    "driver",
+)
+async def choose_default_role(
+    payload: DefaultRoleRequest,
+    response: Response,
+    actor: CurrentActorDependency,
+    db_session: DatabaseSession,
+) -> CurrentUserResponse:
+    await set_default_role(db_session, actor.user_id, payload.role)
+    return await get_current_user(response, actor, db_session)

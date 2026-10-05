@@ -111,7 +111,9 @@ bằng chứng mới, không xóa bản ghi audit cũ; chỉ kiểm hạ trên d
 - 401 tests đạt, gồm phục hồi thực 20 trụ qua WebSocket, snapshot dưới 2 giây,
   quyền theo tổ hợp, truy cập chéo sở hữu, thêm/gỡ vai trò với cùng phiên và audit.
 - Migration upgrade/downgrade/upgrade và `alembic check` đạt trên DB thử nghiệm riêng.
-- Kiểm kê hiện có 100 mục method/path, bao gồm HTTP, WebSocket và tài liệu API.
+- PR #53 kiểm kê 100 mục method/path, bao gồm HTTP, WebSocket và tài liệu API.
+  Bổ sung lựa chọn mặc định nâng inventory hiện tại lên 101 mục;
+  xem [DEFAULT_ROLE_DELIVERY.md](DEFAULT_ROLE_DELIVERY.md).
 
 Sinh bảng (chạy tại root):
 

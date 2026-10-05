@@ -1,7 +1,7 @@
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, SecretStr
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, SecretStr
 
 
 class LoginRequest(BaseModel):
@@ -17,3 +17,9 @@ class CurrentUserResponse(BaseModel):
     id: UUID
     email: EmailStr
     roles: list[str]
+    default_role: str | None = None
+
+
+class DefaultRoleRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    role: Literal["admin", "operator", "station_owner", "driver", "accountant"]

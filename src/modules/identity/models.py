@@ -3,7 +3,16 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, func
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    func,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
@@ -95,7 +104,18 @@ class Role(Base):
 
 class UserRole(Base):
     __tablename__ = "user_roles"
-    __table_args__ = (Index("ix_user_roles_role_id", "role_id"),)
+    __table_args__ = (
+        Index("ix_user_roles_role_id", "role_id"),
+        Index(
+            "uq_user_roles_default",
+            "user_id",
+            unique=True,
+            postgresql_where=text("is_default = true"),
+        ),
+    )
+    is_default: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
 
     user_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),
