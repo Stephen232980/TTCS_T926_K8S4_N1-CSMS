@@ -18,13 +18,20 @@ from src.modules.charging.models import (
 )
 from src.modules.charging.recovery import manual_close
 from src.modules.charging.service import tag_hash
-from src.modules.identity.authorization import allow_roles, build_actor_scope
-from src.modules.identity.dependencies import CurrentActorDependency, authorize_request
+from src.modules.identity.authorization import user_policy
+from src.modules.identity.dependencies import (
+    AuditEvidence,
+    CurrentActorDependency,
+    RequestScope,
+    authorize_request,
+)
 from src.modules.identity.models import Role, User, UserRole
+from src.modules.identity.policy_routing import PolicyRoute
 from src.modules.stations.models import ChargePoint, Connector, Station
 from src.platform.database.session import get_db_session
 
 router = APIRouter(
+    route_class=PolicyRoute,
     prefix="/api/v1/charging",
     tags=["charging"],
     dependencies=[Depends(authorize_request)],
@@ -88,15 +95,6 @@ class ManualCloseRequest(BaseModel):
     ]
 
 
-def charging_owner(actor: CurrentActorDependency) -> UUID | None:
-    # Accounting access is local to charging reads, never a global management scope.
-    if "accountant" in actor.roles and actor.roles.isdisjoint(
-        {"station_owner", "operator", "admin"}
-    ):
-        return None
-    return build_actor_scope(actor).owner_id
-
-
 class SampleResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     timestamp: datetime
@@ -122,12 +120,14 @@ class SamplePage(BaseModel):
 
 
 @router.get("/cards", response_model=list[CardResponse])
-@allow_roles("station_owner", "operator", "admin")
-async def cards(actor: CurrentActorDependency, session: Database) -> list[CardResponse]:
+@user_policy("owner.charging.cards", "owned", "station_owner")
+async def cards(
+    actor: CurrentActorDependency, scope: RequestScope, session: Database
+) -> list[CardResponse]:
     query = select(ChargingCard, User.email).join(
         User, User.id == ChargingCard.driver_id
     )
-    owner = build_actor_scope(actor).owner_id
+    owner = scope.owner_id
     if owner is not None:
         query = query.where(ChargingCard.issuer_id == owner)
     rows = (
@@ -146,9 +146,12 @@ async def cards(actor: CurrentActorDependency, session: Database) -> list[CardRe
 
 
 @router.post("/cards", response_model=CardResponse, status_code=201)
-@allow_roles("station_owner", "operator", "admin")
+@user_policy("owner.charging.create_card", "owned", "station_owner")
 async def create_card(
-    body: CardCreate, actor: CurrentActorDependency, session: Database
+    body: CardCreate,
+    actor: CurrentActorDependency,
+    scope: RequestScope,
+    session: Database,
 ) -> CardResponse:
     driver = await session.scalar(
         select(User)
@@ -185,16 +188,20 @@ async def create_card(
 
 
 @router.patch("/cards/{card_id}", response_model=CardResponse)
-@allow_roles("station_owner", "operator", "admin")
+@user_policy("owner.charging.update_card", "owned", "station_owner")
 async def update_card(
-    card_id: UUID, body: CardUpdate, actor: CurrentActorDependency, session: Database
+    card_id: UUID,
+    body: CardUpdate,
+    actor: CurrentActorDependency,
+    scope: RequestScope,
+    session: Database,
 ) -> CardResponse:
     query = (
         select(ChargingCard, User.email)
         .join(User, User.id == ChargingCard.driver_id)
         .where(ChargingCard.id == card_id)
     )
-    owner = build_actor_scope(actor).owner_id
+    owner = scope.owner_id
     if owner is not None:
         query = query.where(ChargingCard.issuer_id == owner)
     row = (await session.execute(query.with_for_update(of=ChargingCard))).first()
@@ -245,10 +252,11 @@ def session_row(
 
 
 @router.get("/sessions", response_model=SessionPage)
-@allow_roles("station_owner", "operator", "admin", "accountant")
+@user_policy("owner.charging.sessions", "owned", "station_owner")
 async def sessions(
     query: Annotated[SessionQuery, Query()],
     actor: CurrentActorDependency,
+    scope: RequestScope,
     session: Database,
 ) -> SessionPage:
     latest = (
@@ -286,7 +294,7 @@ async def sessions(
             latest, (latest.c.session_id == ChargingSession.id) & (latest.c.rank == 1)
         )
     )
-    owner = charging_owner(actor)
+    owner = scope.owner_id
     if owner is not None:
         statement = statement.where(Station.owner_id == owner)
     if query.state == "open":
@@ -324,23 +332,24 @@ async def sessions(
 
 
 @router.get("/sessions/{transaction_id}/samples", response_model=SamplePage)
-@allow_roles("station_owner", "operator", "admin", "accountant")
+@user_policy("owner.charging.samples", "owned", "station_owner")
 async def samples(
     transaction_id: int,
     query: Annotated[SessionQuery, Query()],
     actor: CurrentActorDependency,
+    scope: RequestScope,
     session: Database,
 ) -> SamplePage:
-    scope = (
+    scoped_query = (
         select(ChargingSession.id)
         .join(ChargePoint, ChargePoint.id == ChargingSession.charge_point_id)
         .join(Station, Station.id == ChargePoint.station_id)
         .where(ChargingSession.id == transaction_id)
     )
-    owner = charging_owner(actor)
+    owner = scope.owner_id
     if owner is not None:
-        scope = scope.where(Station.owner_id == owner)
-    if await session.scalar(scope) is None:
+        scoped_query = scoped_query.where(Station.owner_id == owner)
+    if await session.scalar(scoped_query) is None:
         raise HTTPException(404, "Không tìm thấy phiên trong phạm vi quản lý.")
     statement = select(MeterSample).where(MeterSample.session_id == transaction_id)
     total = (
@@ -361,11 +370,13 @@ async def samples(
 
 
 @router.post("/sessions/{transaction_id}/close")
-@allow_roles("operator", "admin")
+@user_policy("ops.sessions.close", "all", "operator")
 async def close_session(
+    authorization: AuditEvidence,
     transaction_id: int,
     body: ManualCloseRequest,
     actor: CurrentActorDependency,
+    scope: RequestScope,
     session: Database,
 ) -> dict[str, object]:
     charger_id = await session.scalar(
@@ -385,7 +396,9 @@ async def close_session(
     )
     if transaction is None:
         raise HTTPException(404, "Không tìm thấy phiên.")
-    await manual_close(session, transaction, actor.user_id, body.reason)
+    await manual_close(
+        session, transaction, actor.user_id, body.reason, authorization=authorization
+    )
     await session.flush()
     return {
         "id": transaction.id,
@@ -395,20 +408,23 @@ async def close_session(
 
 
 @router.get("/sessions/{transaction_id}/events")
-@allow_roles("station_owner", "operator", "admin", "accountant")
+@user_policy("owner.charging.session_events", "owned", "station_owner")
 async def session_events(
-    transaction_id: int, actor: CurrentActorDependency, session: Database
+    transaction_id: int,
+    actor: CurrentActorDependency,
+    scope: RequestScope,
+    session: Database,
 ) -> list[dict[str, object]]:
-    scope = (
+    scoped_query = (
         select(ChargingSession.id)
         .join(ChargePoint, ChargePoint.id == ChargingSession.charge_point_id)
         .join(Station, Station.id == ChargePoint.station_id)
         .where(ChargingSession.id == transaction_id)
     )
-    owner = charging_owner(actor)
+    owner = scope.owner_id
     if owner is not None:
-        scope = scope.where(Station.owner_id == owner)
-    if await session.scalar(scope) is None:
+        scoped_query = scoped_query.where(Station.owner_id == owner)
+    if await session.scalar(scoped_query) is None:
         raise HTTPException(404, "Không tìm thấy phiên trong phạm vi quản lý.")
     rows = (
         await session.execute(
@@ -434,16 +450,16 @@ async def session_events(
 
 
 @router.get("/pending")
-@allow_roles("station_owner", "operator", "admin")
+@user_policy("owner.charging.pending_messages", "owned", "station_owner")
 async def pending_messages(
-    actor: CurrentActorDependency, session: Database
+    actor: CurrentActorDependency, scope: RequestScope, session: Database
 ) -> list[dict[str, object]]:
     statement = (
         select(PendingChargingMessage, ChargePoint.code)
         .join(ChargePoint, ChargePoint.id == PendingChargingMessage.charge_point_id)
         .join(Station, Station.id == ChargePoint.station_id)
     )
-    owner = build_actor_scope(actor).owner_id
+    owner = scope.owner_id
     if owner is not None:
         statement = statement.where(Station.owner_id == owner)
     rows = (

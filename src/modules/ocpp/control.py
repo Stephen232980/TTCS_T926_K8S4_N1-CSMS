@@ -10,6 +10,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.charging.models import ChargingSession, ChargingSessionEvent
+from src.modules.identity.authorization import AuthorizationEvidence
 from src.modules.identity.models import User
 from src.modules.ocpp.connection_registry import OcppConnection, ocpp_connections
 from src.modules.ocpp.control_models import ControlRequest, ControlResult
@@ -45,6 +46,8 @@ async def execute_command(
     action: str,
     target: UUID | int,
     reset_type: str = "Soft",
+    *,
+    authorization: AuthorizationEvidence | None = None,
 ) -> dict[str, object]:
     now = datetime.now(UTC)
     payload: dict[str, object] = (
@@ -104,6 +107,8 @@ async def execute_command(
                 charge_point_id=charger_id,
                 transaction_id=transaction_id,
                 action=action,
+                permission=authorization.permission if authorization else None,
+                actor_roles=list(authorization.roles) if authorization else None,
                 payload=payload,
                 created_at=now,
             )

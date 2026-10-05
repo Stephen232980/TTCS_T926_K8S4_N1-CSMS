@@ -13,13 +13,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.charging.driver import remote_start, start_result
 from src.modules.charging.driver_models import DriverStartRequest
 from src.modules.charging.models import ChargingSession, MeterSample
-from src.modules.identity.authorization import allow_roles
-from src.modules.identity.dependencies import CurrentActorDependency, authorize_request
+from src.modules.identity.authorization import user_policy
+from src.modules.identity.dependencies import (
+    AuditEvidence,
+    CurrentActorDependency,
+    authorize_request,
+)
+from src.modules.identity.policy_routing import PolicyRoute
 from src.modules.stations.models import ChargePoint, Connector, Station
 from src.platform.database.session import get_db_session
 
 router = APIRouter(
-    prefix="/api/v1/driver", tags=["driver"], dependencies=[Depends(authorize_request)]
+    route_class=PolicyRoute,
+    prefix="/api/v1/driver",
+    tags=["driver"],
+    dependencies=[Depends(authorize_request)],
 )
 Database = Annotated[AsyncSession, Depends(get_db_session)]
 
@@ -79,7 +87,7 @@ async def owned_session(
 
 
 @router.get("/charging/current")
-@allow_roles("driver")
+@user_policy("driver.current", "own", "driver")
 async def current(
     actor: CurrentActorDependency, session: Database
 ) -> dict[str, object]:
@@ -105,7 +113,7 @@ async def current(
 
 
 @router.get("/charging/sessions/{session_id}")
-@allow_roles("driver")
+@user_policy("driver.detail", "own", "driver")
 async def detail(
     session_id: int, actor: CurrentActorDependency, session: Database
 ) -> dict[str, object]:
@@ -118,16 +126,21 @@ async def detail(
 
 
 @router.post("/charging/start")
-@allow_roles("driver")
+@user_policy("driver.start", "own", "driver")
 async def start(
-    body: StartBody, actor: CurrentActorDependency, session: Database
+    body: StartBody,
+    actor: CurrentActorDependency,
+    authorization: AuditEvidence,
+    session: Database,
 ) -> dict[str, object]:
     await session.commit()  # Release authentication connection during the OCPP wait.
-    return await remote_start(actor.user_id, body.request_id, body.connector_id)
+    return await remote_start(
+        actor.user_id, body.request_id, body.connector_id, authorization=authorization
+    )
 
 
 @router.get("/stations/{station_id}/connectors")
-@allow_roles("driver")
+@user_policy("driver.connectors", "own", "driver")
 async def connectors(station_id: UUID, session: Database) -> dict[str, object]:
     station = await session.get(Station, station_id)
     if station is None or station.status != "active" or station.archived_at is not None:

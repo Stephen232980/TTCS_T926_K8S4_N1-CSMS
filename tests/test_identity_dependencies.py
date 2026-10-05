@@ -5,7 +5,7 @@ import pytest
 from fastapi import HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.modules.identity.authorization import CurrentActor, allow_roles
+from src.modules.identity.authorization import CurrentActor, user_policy
 from src.modules.identity.dependencies import authorize_request, get_current_actor
 from src.modules.identity.repository import IdentityRepository
 from src.modules.identity.security import hash_session_token
@@ -65,7 +65,7 @@ async def test_get_current_actor_returns_actor_for_valid_session() -> None:
 
 @pytest.mark.asyncio
 async def test_authorize_request_allows_matching_role() -> None:
-    @allow_roles("admin")
+    @user_policy("admin.test", "all", "admin")
     def handler() -> None:
         pass
 

@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.identity.admin_router import AdminAccountRoute
-from src.modules.identity.authorization import allow_roles
+from src.modules.identity.authorization import user_policy
 from src.modules.identity.dependencies import authorize_request
 from src.modules.ocpp.admin_health_models import SystemHealthSample
 from src.platform.database.session import get_db_session
@@ -61,7 +61,7 @@ class HealthResponse(BaseModel):
 
 
 @router.get("", response_model=HealthResponse)
-@allow_roles("admin")
+@user_policy("admin.health.read", "all", "admin")
 async def current_health(db: Database, now: Clock) -> HealthResponse:
     sample = await db.scalar(
         select(SystemHealthSample)
@@ -103,7 +103,7 @@ class HealthHistoryResponse(BaseModel):
 
 
 @router.get("/history", response_model=HealthHistoryResponse)
-@allow_roles("admin")
+@user_policy("admin.health.read", "all", "admin")
 async def health_history(
     db: Database,
     now: Clock,

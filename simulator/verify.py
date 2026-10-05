@@ -85,7 +85,7 @@ async def _verify_connections(
         while monotonic() < deadline:
             try:
                 response = await client.get(
-                    "/api/v1/ocpp/connections", params={"page": 1, "page_size": 100}
+                    "/api/v1/ops/ocpp/connections", params={"page": 1, "page_size": 100}
                 )
                 if response.status_code != 200:
                     latest_error = (

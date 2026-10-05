@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, WebSocket
 
+from src.modules.identity.authorization import AccessPolicy, access_policy
 from src.modules.ocpp.connection_registry import OcppConnection, ocpp_connections
 from src.modules.ocpp.frames import error_frame
 from src.modules.ocpp.service import find_registered_charge_point
@@ -13,11 +14,19 @@ from src.modules.ocpp.transport import handle_message, record_contact
 
 OCPP_SUBPROTOCOL = "ocpp1.6"
 
-router = APIRouter(tags=["OCPP"])
+from src.modules.identity.policy_routing import PolicyRoute
+
+router = APIRouter(route_class=PolicyRoute, tags=["OCPP"])
 _logger = logging.getLogger("csms.ocpp")
 
 
 @router.websocket("/ocpp/{charge_point_code}")
+@access_policy(
+    AccessPolicy(
+        "device",
+        note="S-06 registered charger and OCPP subprotocol admission; S-08 Boot authorization",
+    )
+)
 async def connect_charge_point(websocket: WebSocket, charge_point_code: str) -> None:
     """Accept registered charge points and keep their WebSocket open."""
     # S-06: only accept if the client offered the exact OCPP 1.6J subprotocol.

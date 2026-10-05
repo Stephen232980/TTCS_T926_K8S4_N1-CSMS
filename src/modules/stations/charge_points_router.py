@@ -4,8 +4,13 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.modules.identity.authorization import allow_roles, build_actor_scope
-from src.modules.identity.dependencies import CurrentActorDependency, authorize_request
+from src.modules.identity.authorization import user_policy
+from src.modules.identity.dependencies import (
+    CurrentActorDependency,
+    RequestScope,
+    authorize_request,
+)
+from src.modules.identity.policy_routing import PolicyRoute
 from src.modules.stations.exceptions import (
     ChargePointCodeAlreadyExistsError,
     ChargePointCodeLockedError,
@@ -23,6 +28,7 @@ from src.modules.stations.schemas import (
 from src.platform.database.session import get_db_session
 
 router = APIRouter(
+    route_class=PolicyRoute,
     prefix="/api/v1/charge-points",
     tags=["charge-points"],
     dependencies=[Depends(authorize_request)],
@@ -36,7 +42,7 @@ CodeAvailabilityQuery = Annotated[ChargePointCodeAvailabilityQuery, Query()]
     "/code-availability",
     response_model=ChargePointCodeAvailabilityResponse,
 )
-@allow_roles("station_owner")
+@user_policy("owner.chargers.get_code_availability", "owned", "station_owner")
 async def get_code_availability(
     query: CodeAvailabilityQuery,
     db_session: DatabaseSession,
@@ -51,14 +57,14 @@ async def get_code_availability(
 
 
 @router.patch("/{charge_point_id}", response_model=ChargePointResponse)
-@allow_roles("station_owner")
+@user_policy("owner.chargers.update_charge_point_code", "owned", "station_owner")
 async def update_charge_point_code(
     charge_point_id: UUID,
     request: ChargePointUpdateRequest,
     actor: CurrentActorDependency,
+    scope: RequestScope,
     db_session: DatabaseSession,
 ) -> ChargePointResponse:
-    scope = build_actor_scope(actor)
     try:
         charge_point = await StationRepository(db_session).update_charge_point_code(
             charge_point_id,

@@ -336,3 +336,37 @@ async def test_admin_audit_filters_and_no_edit_routes(db_session):
                 ).status_code == 405
     finally:
         app.dependency_overrides.clear()
+
+
+async def test_reset_audit_uses_endpoint_permission_and_role_snapshot(db_session):
+    station, charger, conn, _ = await fixture(db_session)
+    reply_with(conn)
+    uid = uuid4()
+    app.dependency_overrides[get_current_actor] = lambda: CurrentActor(
+        station.owner_id, frozenset({"admin", "operator", "station_owner"})
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        result = await client.post(
+            f"/api/v1/ocpp/charge-points/{charger.id}/reset",
+            json={"request_id": str(uid)},
+        )
+        assert result.status_code == 200
+        entry = await db_session.get(ControlRequest, uid)
+        assert entry.permission == "ops.connector.reset"
+        assert entry.actor_roles == ["admin", "operator", "station_owner"]
+        spoof = await client.post(
+            f"/api/v1/ocpp/charge-points/{charger.id}/reset",
+            json={"request_id": str(uuid4()), "permission": "admin.accounts.manage"},
+        )
+        assert spoof.status_code == 422
+        app.dependency_overrides[get_current_actor] = lambda: CurrentActor(
+            station.owner_id, frozenset({"admin"})
+        )
+        assert (
+            await client.post(
+                f"/api/v1/ocpp/charge-points/{charger.id}/reset",
+                json={"request_id": str(uuid4())},
+            )
+        ).status_code == 403

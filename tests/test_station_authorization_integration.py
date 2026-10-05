@@ -334,7 +334,7 @@ async def test_admin_lists_stations_in_global_scope_through_http(
 
     async with station_api_client(db_session, actor) as client:
         response = await client.get(
-            "/api/v1/stations",
+            "/api/v1/admin/stations",
             params={
                 "page": 1,
                 "page_size": 20,

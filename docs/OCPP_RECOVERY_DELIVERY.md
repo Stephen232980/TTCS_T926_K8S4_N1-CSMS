@@ -1,5 +1,7 @@
 # Nhóm 4 — Phục hồi phiên sạc
 
+> Phân quyền hiện hành cập nhật 05/10/2026: [nền phân quyền endpoint](ENDPOINT_AUTHORIZATION_DELIVERY.md) thay thế quy tắc admin/operator tự nhận global scope và quyền điều khiển trong các mô tả lịch sử bên dưới. Chủ trạm dùng owned; vận hành/kế toán đọc qua namespace riêng; admin đơn thuần không gửi Reset/Stop/đóng tay.
+
 Phạm vi S-21, S-25 trong Backlog CSMS.xlsx, nhánh `feature/S-21-phuc-hoi-phien-sac`. Phát triển trên main đã có nhóm 3. Code, giao diện và kiểm chứng dưới đây là cục bộ; Jira và CI của PR được xác nhận riêng.
 
 ## Coverage Matrix

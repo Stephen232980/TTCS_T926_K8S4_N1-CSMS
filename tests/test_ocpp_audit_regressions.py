@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy import func, select
 
 from src.modules.charging.models import ChargingSession
-from src.modules.identity.authorization import CurrentActor
+from src.modules.identity.authorization import CurrentActor, build_actor_scope
 from src.modules.ocpp.connection_registry import ocpp_connections
 from src.modules.ocpp.dispatcher import process_call
 from src.modules.ocpp.frames import Frame, decode_frame
@@ -131,7 +131,9 @@ async def test_cached_boot_rechecks_station_without_overwriting_reply(
     )
     snapshot = await monitoring_snapshot(
         db_session,
-        CurrentActor(station.owner_id, frozenset({"station_owner"})),
+        build_actor_scope(
+            CurrentActor(station.owner_id, frozenset({"station_owner"})), "owned"
+        ),
         MonitorQuery(),
     )
     assert all(not item.online for item in snapshot.items)
@@ -175,7 +177,9 @@ async def test_rejected_boot_is_not_online_even_with_recent_contact(
     assert decode_frame(await boot(db_session, conn)).payload["status"] == "Rejected"
     snapshot = await monitoring_snapshot(
         db_session,
-        CurrentActor(station.owner_id, frozenset({"station_owner"})),
+        build_actor_scope(
+            CurrentActor(station.owner_id, frozenset({"station_owner"})), "owned"
+        ),
         MonitorQuery(),
     )
     assert charger.last_seen_at is not None
@@ -192,24 +196,44 @@ async def test_online_distinguishes_unbooted_socket_and_survives_registry_restar
     snapshot = AsyncMock(return_value={})
     monkeypatch.setattr(ocpp_connections, "snapshot", snapshot)
     assert (
-        (await monitoring_snapshot(db_session, actor, MonitorQuery())).items[0].online
+        (
+            await monitoring_snapshot(
+                db_session, build_actor_scope(actor, "all"), MonitorQuery()
+            )
+        )
+        .items[0]
+        .online
     )
     snapshot.return_value = {charger.id: connection(charger.id, station.id)}
     assert (
-        not (await monitoring_snapshot(db_session, actor, MonitorQuery()))
+        not (
+            await monitoring_snapshot(
+                db_session, build_actor_scope(actor, "all"), MonitorQuery()
+            )
+        )
         .items[0]
         .online
     )
     snapshot.return_value = {charger.id: conn}
     assert (
-        (await monitoring_snapshot(db_session, actor, MonitorQuery())).items[0].online
+        (
+            await monitoring_snapshot(
+                db_session, build_actor_scope(actor, "all"), MonitorQuery()
+            )
+        )
+        .items[0]
+        .online
     )
     snapshot.return_value = {}
     future = charger.last_seen_at + timedelta(
         seconds=2 * charger.heartbeat_interval_seconds + 1
     )
     assert (
-        not (await monitoring_snapshot(db_session, actor, MonitorQuery(), future))
+        not (
+            await monitoring_snapshot(
+                db_session, build_actor_scope(actor, "all"), MonitorQuery(), future
+            )
+        )
         .items[0]
         .online
     )

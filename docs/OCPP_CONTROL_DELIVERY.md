@@ -1,5 +1,7 @@
 # Nhóm 5 — điều khiển OCPP
 
+> Phân quyền hiện hành cập nhật 05/10/2026: [nền phân quyền endpoint](ENDPOINT_AUTHORIZATION_DELIVERY.md) thay thế quy tắc admin/operator tự nhận global scope và quyền điều khiển trong các mô tả lịch sử bên dưới. Chủ trạm dùng owned; vận hành/kế toán đọc qua namespace riêng; admin đơn thuần không gửi Reset/Stop/đóng tay.
+
 Phạm vi: S-16 Reset, S-23 RemoteStopTransaction, S-27 nhật ký điều khiển.
 Nhánh triển khai: `feature/ocpp-remote-control`. Migration: `f52c813d7a09`.
 Đây là bằng chứng kiểm thử cục bộ; không thay trạng thái Jira, CI remote hoặc nghiệm thu thiết bị thật.

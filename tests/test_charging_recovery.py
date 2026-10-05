@@ -23,7 +23,11 @@ from src.modules.charging.models import (
 )
 from src.modules.charging.recovery import flag_abnormal_sessions
 from src.modules.charging.router import ManualCloseRequest, close_session
-from src.modules.identity.authorization import CurrentActor
+from src.modules.identity.authorization import (
+    ActorScope,
+    AuthorizationEvidence,
+    CurrentActor,
+)
 from src.modules.identity.dependencies import get_current_actor
 from src.modules.identity.models import User
 from src.modules.ocpp.dispatcher import dispatch_call
@@ -282,10 +286,10 @@ async def test_manual_close_api_permissions_reason_latest_aggregate_and_audit(
                 ).status_code == 403
             actor = CurrentActor(station.owner_id, frozenset({"accountant"}))
             assert (
-                await client.get("/api/v1/charging/sessions?state=abnormal")
+                await client.get("/api/v1/accounting/charging/sessions?state=abnormal")
             ).json()["total"] == 1
             assert (
-                await client.get(f"/api/v1/charging/sessions/{tid}/samples")
+                await client.get(f"/api/v1/accounting/charging/sessions/{tid}/samples")
             ).status_code == 200
             assert (await client.get("/api/v1/charging/cards")).status_code == 403
             actor = CurrentActor(station.owner_id, frozenset({"operator"}))
@@ -308,7 +312,7 @@ async def test_manual_close_api_permissions_reason_latest_aggregate_and_audit(
                 closed.json()["energy_kwh"]
             ) == Decimal("2.5")
             assert (
-                await client.get("/api/v1/charging/sessions?state=abnormal")
+                await client.get("/api/v1/ops/charging/sessions?state=abnormal")
             ).json()["total"] == 0
             assert (
                 await client.post(
@@ -316,7 +320,7 @@ async def test_manual_close_api_permissions_reason_latest_aggregate_and_audit(
                 )
             ).status_code == 409
             events = (
-                await client.get(f"/api/v1/charging/sessions/{tid}/events")
+                await client.get(f"/api/v1/ops/charging/sessions/{tid}/events")
             ).json()
             assert (
                 events[0]["action"] == "manual_closure"
@@ -411,9 +415,11 @@ async def test_manual_close_and_late_stop_serialize_without_overwrite():
             async with SessionFactory() as session, session.begin():
                 try:
                     await close_session(
+                        AuthorizationEvidence("ops.sessions.close", ("operator",)),
                         tid,
                         ManualCloseRequest(reason="Kiểm tra"),
                         CurrentActor(owner_id, frozenset({"operator"})),
+                        ActorScope(owner_id, None),
                         session,
                     )
                     return 200

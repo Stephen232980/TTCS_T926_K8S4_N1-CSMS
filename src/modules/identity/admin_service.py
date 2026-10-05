@@ -4,7 +4,7 @@ from typing import cast
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import delete, func, select, text, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,8 +18,12 @@ from src.modules.identity.admin_schemas import (
     RoleCode,
     RoleResponse,
 )
-from src.modules.identity.authorization import CurrentActor
+from src.modules.identity.authorization import AuthorizationEvidence, CurrentActor
 from src.modules.identity.models import AccountAudit, Role, Session, User, UserRole
+from src.modules.identity.role_assignment import (
+    assign_user_roles,
+    validate_role_assignment,
+)
 from src.modules.identity.security import hash_password
 
 ROLE_NAMES: dict[RoleCode, str] = {
@@ -133,12 +137,6 @@ class AdminAccountService:
             raise HTTPException(403, "Không còn quyền quản trị tài khoản")
         return user
 
-    async def _role_ids(self, codes: list[RoleCode]) -> list[UUID]:
-        ids = list(await self.db.scalars(select(Role.id).where(Role.code.in_(codes))))
-        if len(ids) != len(codes):
-            raise HTTPException(409, "Danh mục vai trò chưa được khởi tạo đầy đủ")
-        return ids
-
     def _audit(
         self,
         actor: User,
@@ -146,6 +144,7 @@ class AdminAccountService:
         action: str,
         before: AccountResponse | None,
         after: AccountResponse,
+        authorization: AuthorizationEvidence | None,
     ) -> None:
         def state(account: AccountResponse) -> dict[str, object]:
             return {
@@ -159,6 +158,8 @@ class AdminAccountService:
                 actor_id=actor.id,
                 target_id=target.id,
                 action=action,
+                permission=authorization.permission if authorization else None,
+                actor_roles=list(authorization.roles) if authorization else None,
                 before_state=state(before) if before else None,
                 after_state=state(after),
                 created_at=datetime.now(UTC),
@@ -166,21 +167,24 @@ class AdminAccountService:
         )
 
     async def create(
-        self, payload: AccountCreateRequest, actor: CurrentActor
+        self,
+        payload: AccountCreateRequest,
+        actor: CurrentActor,
+        authorization: AuthorizationEvidence | None = None,
     ) -> AccountResponse:
         password_hash = await asyncio.to_thread(
             hash_password, payload.password.get_secret_value()
         )
         try:
             admin = await self._lock_admin(actor)
-            ids = await self._role_ids(payload.roles)
+            validate_role_assignment(payload.roles)
             user = User(email=str(payload.email), password_hash=password_hash)
             self.db.add(user)
             await self.db.flush()
-            self.db.add_all([UserRole(user_id=user.id, role_id=r) for r in ids])
+            await assign_user_roles(self.db, user.id, payload.roles)
             await self.db.flush()
             result = await self.account(user)
-            self._audit(admin, user, "account_created", None, result)
+            self._audit(admin, user, "account_created", None, result, authorization)
             await self.db.commit()
             return result
         except IntegrityError as exc:
@@ -193,7 +197,11 @@ class AdminAccountService:
             raise
 
     async def change(
-        self, user_id: UUID, payload: AccountUpdateRequest, actor: CurrentActor
+        self,
+        user_id: UUID,
+        payload: AccountUpdateRequest,
+        actor: CurrentActor,
+        authorization: AuthorizationEvidence | None = None,
     ) -> AccountResponse:
         try:
             admin = await self._lock_admin(actor)
@@ -213,6 +221,7 @@ class AdminAccountService:
             if user.status not in {"active", "suspended"}:
                 raise HTTPException(409, "Không thể sửa tài khoản đã ngừng hoạt động")
             new_roles = payload.roles if payload.roles is not None else before.roles
+            validate_role_assignment(new_roles)
             new_status = payload.status or before.status
             loses_admin = "admin" in before.roles and (
                 "admin" not in new_roles or new_status != "active"
@@ -241,11 +250,7 @@ class AdminAccountService:
                 await self.db.rollback()
                 return before
             if payload.roles is not None:
-                ids = await self._role_ids(payload.roles)
-                await self.db.execute(
-                    delete(UserRole).where(UserRole.user_id == user_id)
-                )
-                self.db.add_all([UserRole(user_id=user_id, role_id=r) for r in ids])
+                await assign_user_roles(self.db, user_id, payload.roles)
             user.status = new_status
             user.updated_at = datetime.now(UTC)
             if new_status == "suspended":
@@ -256,7 +261,7 @@ class AdminAccountService:
                 )
             await self.db.flush()
             result = await self.account(user)
-            self._audit(admin, user, "account_updated", before, result)
+            self._audit(admin, user, "account_updated", before, result, authorization)
             await self.db.commit()
             return result
         except Exception:
