@@ -21,6 +21,7 @@ import { HttpStationApi } from './features/stations/api/httpStationApi'
 import { HttpChargePointApi } from './features/chargePoints/api/httpChargePointApi'
 import { OwnerWorkspace } from './features/owner/OwnerWorkspace'
 const OperatorWorkspace = lazy(() => import('./features/operator/OperatorWorkspace').then(module => ({ default: module.OperatorWorkspace })))
+const DriverWorkspace = lazy(() => import('./features/driver/DriverWorkspace').then(module => ({ default: module.DriverWorkspace })))
 const AdminWorkspace = lazy(() =>
   import('./features/admin/AdminWorkspace').then(module => ({ default: module.AdminWorkspace })),
 )
@@ -191,6 +192,10 @@ function App({
         onAdmin={switchArea}
       />
     )
+  }
+
+  if (primaryRole === 'driver') {
+    return <Suspense fallback={<main className="auth-checking" role="status">Đang tải khu vực tài xế…</main>}><DriverWorkspace currentUser={workspaceUser} onLogout={handleLogout} onExit={switchArea} /></Suspense>
   }
 
   return (

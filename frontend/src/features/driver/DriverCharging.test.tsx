@@ -51,6 +51,29 @@ it('explains rejected starts and allows another attempt', async () => {
   expect(screen.getByRole('button', { name: 'Bắt đầu sạc' })).toBeEnabled()
 })
 
+it('opens the session view only after current confirms the matching started session', async () => {
+  let current: object = empty
+  const accepted = { id: 'request-one', status: 'Accepted', deadline: new Date(Date.now() + 60000).toISOString() }
+  const fetchMock = vi.fn().mockImplementation(async (url: string, options?: RequestInit) => ({
+    ok: true, json: async () => options?.method === 'POST' ? accepted : url.includes('/connectors') ? connectors : current,
+  }))
+  vi.stubGlobal('fetch', fetchMock)
+  const onSessionStarted = vi.fn()
+  const user = userEvent.setup()
+  render(<DriverCharging stationId="station-one" onSessionStarted={onSessionStarted} />)
+  await user.selectOptions(await screen.findByLabelText('Trụ và đầu nối'), 'connector-one')
+  await user.click(screen.getByRole('checkbox'))
+  await user.click(screen.getByRole('button', { name: 'Bắt đầu sạc' }))
+  expect(await screen.findByText(/Trụ đã chấp nhận/)).toBeInTheDocument()
+  expect(onSessionStarted).not.toHaveBeenCalled()
+  const session = { id: 3, station_name: 'Trạm xác nhận', charge_point_code: 'TRU-01', connector_number: 1, started_at: new Date().toISOString(), energy_kwh: 0, elapsed_seconds: 0, latest_meter_at: null, needs_attention: false }
+  current = { session, start_request: { ...accepted, status: 'Started', session_id: 4 } }
+  await screen.findByText('Trạm xác nhận', {}, { timeout: 2500 })
+  expect(onSessionStarted).not.toHaveBeenCalled()
+  current = { session, start_request: { ...accepted, status: 'Started', session_id: 3 } }
+  await waitFor(() => expect(onSessionStarted).toHaveBeenCalledTimes(1), { timeout: 2500 })
+})
+
 it('updates actual energy and elapsed time within the one second poll', async () => {
   vi.useFakeTimers()
   let energy = 1.5

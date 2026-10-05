@@ -1,0 +1,187 @@
+.driver-shell {
+  --ink: #193d4b;
+  --muted: #526e7b;
+  --canvas: #f2f6f7;
+  --surface: #fff;
+  --accent: #14795e;
+  --accent-strong: #14795e;
+  --accent-hover: #0d624b;
+  --field-border: #b9cdd6;
+  --line: #e4edf0;
+  font-family: 'Segoe UI', sans-serif;
+  color: var(--ink);
+  background: var(--canvas);
+  min-height: 100dvh;
+}
+.driver-shell ::selection { background: var(--accent); color: #fff; }
+.driver-shell * { scrollbar-color: #9ab3bd #edf3f5; }
+.driver-shell :focus-visible { outline: 3px solid #2688c1; outline-offset: 3px; }
+.driver-shell svg { width: 22px; height: 22px; flex-shrink: 0; }
+.driver-shell input, .driver-shell select { font: inherit; font-size: 16px; caret-color: var(--accent); }
+.driver-shell input::placeholder { color: var(--muted); }
+.driver-shell button { min-height: 44px; cursor: pointer; }
+.driver-shell button:disabled { cursor: not-allowed; }
+.driver-shell .primary-button, .driver-shell .secondary-button {
+  display: inline-flex; justify-content: center; align-items: center; gap: 8px;
+  min-height: 44px; padding: 10px 16px; border: 0; border-radius: 10px;
+  transform: none; box-shadow: none; width: auto; font-size: 14px;
+}
+.driver-shell .primary-button { background: var(--accent); color: #fff; }
+.driver-shell .primary-button:hover { background: var(--accent-hover); transform: none; box-shadow: none; }
+.driver-shell .secondary-button { background: #eaf2f5; color: #244e60; }
+.driver-shell .secondary-button:hover { background: #dce9ee; }
+.driver-shell a { color: #116443; text-underline-offset: 3px; }
+.driver-shell h1 { font-size: 26px; line-height: 1.2; letter-spacing: -.02em; margin: 0 0 8px; }
+.driver-shell h2 { font-size: 22px; line-height: 1.3; margin: 0 0 14px; }
+.driver-shell h3 { font-size: 16px; margin: 0 0 7px; }
+.driver-shell p { font-size: 14px; line-height: 1.6; color: var(--muted); }
+.driver-sidebar { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: #173b47; color: #d7e8ee; }
+.driver-shell .driver-brand { color: #fff; display: flex; align-items: center; gap: 10px; text-decoration: none; font-size: 23px; }
+.driver-brand svg { color: #b9ebd9; width: 25px; height: 30px; }
+.driver-brand span { display: none; }
+.driver-navigation { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1000; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px 12px max(8px, env(safe-area-inset-bottom)); background: #173b47; }
+.driver-shell .driver-navigation a { color: #d7e8ee; min-height: 52px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 10px; border-radius: 12px; text-decoration: none; font-size: 14px; font-weight: 650; }
+.driver-navigation a:hover, .driver-navigation a[aria-current] { background: #2c5664; color: #fff; }
+.driver-account { margin-left: auto; position: relative; }
+.driver-account summary { display: flex; align-items: center; gap: 6px; min-height: 44px; font-size: 13px; cursor: pointer; }
+.driver-account details > div { position: absolute; top: 48px; right: 0; width: min(280px, calc(100vw - 32px)); display: grid; gap: 12px; padding: 20px; border-radius: 12px; background: #173b47; z-index: 1100; box-shadow: 0 8px 24px rgba(25, 61, 75, .2); }
+.driver-account span[title] { overflow-wrap: anywhere; font-size: 13px; }
+.driver-account button { display: flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: 9px; color: #fff; background: #2c5664; padding: 8px 12px; font: inherit; }
+.driver-shell .driver-account p { color: #fff; margin: 0; }
+.driver-main { display: flex; flex-direction: column; gap: 20px; padding: 22px 16px calc(88px + env(safe-area-inset-bottom)); min-width: 0; }
+.driver-heading p { margin: 0; }
+.driver-session-layout { display: grid; gap: 20px; }
+.driver-shell .driver-charging, .driver-shell .driver-connectors, .driver-session-guide {
+  background: #fff; border: 0; border-radius: 16px; padding: 22px 18px; margin: 0;
+  box-shadow: 0 10px 28px rgba(25, 61, 75, .045); min-width: 0;
+}
+.driver-session-guide { display: none; }
+.driver-session-guide > div { display: flex; align-items: flex-start; gap: 14px; margin-top: 24px; }
+.driver-session-guide > div > svg { color: var(--accent); }
+.driver-session-guide p { margin: 0; }
+.driver-shell .driver-session-location { display: flex; align-items: center; gap: 14px; margin-bottom: 24px; }
+.driver-shell .driver-session-location .owner-charger-drawing { width: 60px; height: 96px; color: var(--ink); }
+.driver-session-location > div { min-width: 0; }
+.driver-shell .driver-session-location h2 { font-size: 20px; margin: 12px 0 6px; overflow-wrap: anywhere; }
+.driver-session-location p { margin: 0; font-size: 13px; }
+.driver-session-badge, .driver-session-connector { display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px; border-radius: 9px; color: #155e9e; background: #e8f2ff; font-size: 13px; }
+.driver-session-badge svg, .driver-session-connector svg { width: 16px; height: 16px; }
+.driver-shell .driver-session-values { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 0 0 22px; padding: 16px; background: var(--canvas); border-radius: 12px; }
+.driver-session-values dt { font-size: 14px; }
+.driver-shell .driver-session-values dd { margin: 12px 0 0; font-size: 27px; line-height: 1.3; font-weight: 720; font-variant-numeric: tabular-nums; }
+.driver-shell .driver-session-values dd span { font-size: 13px; }
+.driver-session-facts { display: grid; gap: 14px; margin: 0; font-size: 14px; }
+.driver-session-facts > div { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.driver-session-facts dt { color: var(--muted); }
+.driver-session-facts dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.driver-shell .driver-reading-age { margin: 20px 0 0; font-size: 13px; }
+.driver-empty { text-align: center; padding: 28px 0; }
+.driver-shell .driver-empty .owner-charger-drawing { width: 90px; height: 120px; color: var(--muted); margin-bottom: 20px; }
+.driver-shell .driver-primary-link { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; padding: 10px 18px; border-radius: 10px; background: var(--accent); color: #fff; text-decoration: none; font-size: 14px; font-weight: 650; }
+.driver-map-container { min-width: 0; }
+.driver-map-page { display: flex; flex-direction: column; gap: 18px; min-height: 0; }
+.driver-station-search { display: grid; gap: 12px; }
+.driver-station-search label { display: grid; gap: 8px; font-size: 14px; font-weight: 600; }
+.driver-station-search input { width: 100%; min-height: 44px; border: 1px solid var(--field-border); background: #fff; color: var(--ink); border-radius: 9px; padding: 10px 12px; }
+.driver-station-layout { display: grid; gap: 20px; }
+.driver-map-panel { min-width: 0; }
+.driver-shell .station-map__canvas { height: clamp(280px, 40dvh, 400px); }
+.driver-shell .station-map__tools button { flex: 1; }
+.driver-shell .leaflet-control-zoom a { width: 44px; height: 44px; line-height: 44px; }
+.driver-shell .station-map p { font-size: 13px; }
+.driver-station-results { min-width: 0; }
+.driver-results-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.driver-shell .driver-results-heading h2 { font-size: 20px; margin: 0; }
+.driver-results-heading > span { white-space: nowrap; color: var(--muted); font-size: 13px; }
+.driver-shell .driver-subtle { margin: 10px 0 16px; font-size: 13px; }
+.driver-station-card { background: #fff; border-radius: 14px; padding: 16px; margin-bottom: 12px; box-shadow: 0 6px 18px rgba(25, 61, 75, .045); }
+.driver-station-card.is-selected { outline: 2px solid #2688c1; outline-offset: -2px; }
+.driver-station-select { width: 100%; display: flex; align-items: flex-start; gap: 10px; border: 0; padding: 0; text-align: left; background: transparent; color: var(--ink); font: inherit; }
+.driver-station-select > svg { color: var(--accent); }
+.driver-station-select > span:first-of-type { flex: 1; min-width: 0; }
+.driver-station-select strong { display: block; font-size: 16px; }
+.driver-station-select > span > span { display: block; margin-top: 8px; font-size: 14px; line-height: 1.5; font-weight: 400; color: var(--muted); }
+.driver-distance { font-size: 13px; font-weight: 650; white-space: nowrap; font-variant-numeric: tabular-nums; color: #116443; }
+.driver-station-actions { display: flex; align-items: center; gap: 16px; margin-top: 14px; }
+.driver-station-actions button { flex: 1; }
+.driver-station-actions a { min-height: 44px; display: flex; align-items: center; font-size: 13px; }
+.driver-shell .driver-error { padding: 16px; border-radius: 12px; background: #fff0ec; }
+.driver-error p, .driver-charging > [role='alert'], .driver-connectors > [role='alert'] { color: #a3382c; }
+.driver-return button { width: 100%; }
+.driver-connector-picker { display: grid; gap: 8px; margin-bottom: 18px; font-size: 14px; }
+.driver-shell .driver-connectors select { max-width: none; font-size: 16px; }
+.driver-connector-groups details { border-bottom: 1px solid var(--line); padding: 12px 0; }
+.driver-connector-groups summary { min-height: 44px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.driver-connector-groups summary > span { color: var(--muted); font-size: 13px; }
+.driver-connector-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+.driver-connector-tile { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 9px 4px; border: 0; border-radius: 9px; background: #eaf2f5; color: #244e60; }
+.driver-connector-tile small { font: inherit; font-size: 11px; }
+.driver-connector-tile.available, .driver-connector-tile.preparing { color: #116443; background: #e4f5eb; }
+.driver-connector-tile.charging { color: #155e9e; background: #e8f2ff; }
+.driver-connector-tile.faulted { color: #a3382c; background: #fff0ec; }
+.driver-connector-tile[aria-pressed='true'] { outline: 2px solid #2688c1; outline-offset: 2px; }
+.driver-connector-tile:disabled { opacity: 1; }
+.driver-start-footer { display: grid; gap: 12px; padding-top: 8px; }
+.driver-shell .driver-plug-confirm { min-height: 44px; font-size: 14px; margin: 8px 0; }
+.driver-shell .driver-connectors .driver-start-footer > button { width: 100%; }
+.driver-shell .driver-start-status { padding: 14px; border-radius: 10px; background: #eaf2f5; color: #244e60; font-size: 14px; }
+.driver-shell [hidden] { display: none !important; }
+@media (min-width: 700px) {
+  .driver-shell { display: grid; grid-template-columns: 88px minmax(0, 1fr); height: 100dvh; overflow: hidden; }
+  .driver-sidebar { flex-direction: column; padding: 24px 8px; align-items: stretch; }
+  .driver-brand { justify-content: center; }
+  .driver-brand strong { display: none; }
+  .driver-brand svg { width: 30px; height: 38px; }
+  .driver-navigation { position: static; display: grid; grid-template-columns: 1fr; gap: 14px; padding: 10px 0; }
+  .driver-shell .driver-navigation a { flex-direction: column; min-height: 80px; font-size: 12px; padding: 8px 4px; }
+  .driver-account { margin: auto 0 0; }
+  .driver-account summary { justify-content: center; flex-direction: column; font-size: 12px; }
+  .driver-account details > div { left: 80px; right: auto; bottom: 0; top: auto; }
+  .driver-main { padding: 26px 24px 18px; overflow: auto; min-height: 0; }
+  .driver-shell h1 { font-size: 30px; }
+  .driver-session-layout { flex-shrink: 0; }
+  .driver-shell .driver-charging, .driver-shell .driver-connectors { padding: 28px; }
+  .driver-shell .driver-session-location .owner-charger-drawing { width: 86px; height: 124px; }
+  .driver-shell .driver-session-location { gap: 24px; }
+  .driver-shell .driver-session-location h2 { font-size: 24px; }
+  .driver-shell .driver-session-values { padding: 22px; gap: 24px; }
+  .driver-shell .driver-session-values dd { font-size: 38px; }
+  .driver-shell .driver-session-values dd span { font-size: 16px; }
+  .driver-station-search { grid-template-columns: minmax(0, 1fr) auto; align-items: end; }
+  .driver-station-layout { grid-template-columns: minmax(0, 1.3fr) minmax(250px, 1fr); gap: 20px; }
+  .driver-shell .station-map__canvas { height: clamp(360px, 60dvh, 680px); }
+  .driver-station-results { max-height: calc(60dvh + 54px); overflow-y: auto; padding: 2px; }
+  .driver-return button { width: auto; }
+}
+@media (min-width: 1100px) {
+  .driver-shell { grid-template-columns: 220px minmax(0, 1fr); }
+  .driver-sidebar { padding: 28px 18px 20px; gap: 20px; }
+  .driver-brand { justify-content: flex-start; padding: 0 12px; }
+  .driver-brand strong { display: inline; font-size: 30px; }
+  .driver-brand svg { width: 25px; height: 30px; }
+  .driver-shell .driver-navigation a { flex-direction: row; justify-content: flex-start; padding: 0 14px; min-height: 50px; font-size: 14px; }
+  .driver-account summary { flex-direction: row; justify-content: flex-start; font-size: 14px; }
+  .driver-account details > div { left: 0; bottom: 48px; }
+  .driver-main { padding: 28px 32px 20px; }
+  .driver-session-layout { grid-template-columns: minmax(0, 1.55fr) minmax(280px, 1fr); flex: 1; min-height: 0; }
+  .driver-charging, .driver-session-guide { min-height: 0; overflow-y: auto; }
+  .driver-session-guide { display: block; padding: 28px; }
+  .driver-station-layout { grid-template-columns: minmax(0, 1.65fr) minmax(310px, 1fr); }
+  .driver-map-container { min-height: 0; flex: 1; overflow-y: auto; }
+}
+@media (max-width: 370px) {
+  .driver-main { padding-left: 12px; padding-right: 12px; }
+  .driver-shell .driver-charging { padding: 18px 14px; }
+  .driver-shell .driver-session-values { padding: 14px 10px; gap: 10px; }
+  .driver-shell .driver-session-values dd { font-size: 23px; }
+  .driver-shell .driver-session-location h2 { font-size: 18px; }
+  .driver-shell .driver-session-location .owner-charger-drawing { width: 48px; }
+  .driver-station-select { flex-wrap: wrap; }
+  .driver-distance { margin-left: 32px; }
+  .driver-connector-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 700px) and (max-height: 650px) {
+  .driver-session-layout { flex: none; }
+  .driver-shell .station-map__canvas { height: 330px; }
+  .driver-station-results { max-height: 384px; }
+}

@@ -11,23 +11,26 @@ interface Props {
   selectedId?: string
   onSelect?: (id: string) => void
   disabled?: boolean
+  onLocate?: (position: MapPosition) => void
+  userPosition?: MapPosition
 }
 const emptyStations: MapStation[] = []
 const markerIcon = L.divIcon({ className: 'station-map-pin', html: '<span></span>', iconSize: [24, 24], iconAnchor: [12, 12] })
 
-export function StationMap({ stations = emptyStations, position, onPick, selectedId, onSelect, disabled = false }: Props) {
+export function StationMap({ stations = emptyStations, position, onPick, selectedId, onSelect, disabled = false, onLocate, userPosition }: Props) {
   const container = useRef<HTMLDivElement>(null)
   const map = useRef<L.Map | null>(null)
-  const callbacks = useRef({ onPick, onSelect, disabled })
+  const callbacks = useRef({ onPick, onSelect, disabled, onLocate })
   const [tileError, setTileError] = useState(false)
   const [locationError, setLocationError] = useState('')
   const [locating, setLocating] = useState(false)
-  useEffect(() => { callbacks.current = { onPick, onSelect, disabled } }, [onPick, onSelect, disabled])
+  useEffect(() => { callbacks.current = { onPick, onSelect, disabled, onLocate } }, [onPick, onSelect, disabled, onLocate])
 
   useEffect(() => {
     if (!container.current) return
     const instance = L.map(container.current, { scrollWheelZoom: false }).setView([16.1, 106.2], 5)
     map.current = instance
+    instance.createPane('driver-location').style.zIndex = '650'
     const tiles = L.tileLayer(import.meta.env.VITE_MAP_TILE_URL || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: import.meta.env.VITE_MAP_ATTRIBUTION || '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -61,11 +64,14 @@ export function StationMap({ stations = emptyStations, position, onPick, selecte
       L.marker([position.latitude, position.longitude], { icon: markerIcon, title: 'Vị trí trạm đã chọn' }).addTo(markers)
       instance.setView([position.latitude, position.longitude], Math.max(instance.getZoom(), 15))
     } else if (stations.length) {
-      instance.fitBounds(L.latLngBounds(stations.map(s => [s.latitude, s.longitude])), { padding: [35, 35], maxZoom: 15 })
+      const points: [number, number][] = stations.map(s => [s.latitude, s.longitude])
+      if (userPosition) points.push([userPosition.latitude, userPosition.longitude])
+      instance.fitBounds(L.latLngBounds(points), { padding: [35, 35], maxZoom: 15 })
     }
+    if (userPosition) L.circleMarker([userPosition.latitude, userPosition.longitude], { pane: 'driver-location', radius: 8, color: '#fff', weight: 3, fillColor: '#2688c1', fillOpacity: 1 }).bindTooltip('Vị trí của bạn').addTo(markers)
     selectedMarker?.openPopup()
     return () => { markers.remove() }
-  }, [stations, position, selectedId])
+  }, [stations, position, selectedId, userPosition])
 
   function locate() {
     if (locating) return
@@ -76,6 +82,7 @@ export function StationMap({ stations = emptyStations, position, onPick, selecte
       if (!map.current) return
       setLocating(false)
       map.current?.setView([coords.latitude, coords.longitude], 15)
+      callbacks.current.onLocate?.({ latitude: coords.latitude, longitude: coords.longitude })
     }, error => {
       if (!map.current) return
       setLocating(false)
