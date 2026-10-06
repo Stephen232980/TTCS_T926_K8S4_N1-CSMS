@@ -17,32 +17,33 @@ async def main():
             session.add(admin_role)
             await session.commit()
             await session.refresh(admin_role)
-            
+
         # Check if user exists
         email = "Admin@gmail.com".lower()
         result = await session.execute(select(User).where(User.email == email))
         user = result.scalar_one_or_none()
         if not user:
             user = User(
-                email=email,
-                password_hash=hash_password("admin123"),
-                status="active"
+                email=email, password_hash=hash_password("admin123"), status="active"
             )
             session.add(user)
             await session.commit()
             await session.refresh(user)
-            
+
         # Assign role
         result = await session.execute(
-            select(UserRole).where(UserRole.user_id == user.id, UserRole.role_id == admin_role.id)
+            select(UserRole).where(
+                UserRole.user_id == user.id, UserRole.role_id == admin_role.id
+            )
         )
         user_role = result.scalar_one_or_none()
         if not user_role:
             user_role = UserRole(user_id=user.id, role_id=admin_role.id)
             session.add(user_role)
             await session.commit()
-            
+
         print("Admin user created successfully.")
+
 
 import selectors
 
