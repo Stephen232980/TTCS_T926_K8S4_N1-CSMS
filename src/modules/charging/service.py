@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 
-from sqlalchemy import select
+from sqlalchemy import select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.charging.models import (
@@ -146,27 +146,31 @@ async def store_samples(
     blocks: Sequence[MeterBlock],
     *,
     backfill: bool = False,
+    latest: dict[tuple[str, str, str], tuple[datetime, Decimal]] | None = None,
 ) -> None:
     if backfill:
         await store_recovery_samples(session, transaction, blocks)
         return
-    previous = (
-        await session.scalars(
-            select(MeterSample)
-            .where(MeterSample.session_id == transaction.id)
-            .distinct(MeterSample.measurand, MeterSample.phase, MeterSample.location)
-            .order_by(
-                MeterSample.measurand,
-                MeterSample.phase,
-                MeterSample.location,
-                MeterSample.timestamp.desc(),
+    if latest is None:
+        previous = (
+            await session.scalars(
+                select(MeterSample)
+                .where(MeterSample.session_id == transaction.id)
+                .distinct(
+                    MeterSample.measurand, MeterSample.phase, MeterSample.location
+                )
+                .order_by(
+                    MeterSample.measurand,
+                    MeterSample.phase,
+                    MeterSample.location,
+                    MeterSample.timestamp.desc(),
+                )
             )
-        )
-    ).all()
-    latest = {
-        (item.measurand, item.phase, item.location): (item.timestamp, item.value)
-        for item in previous
-    }
+        ).all()
+        latest = {
+            (item.measurand, item.phase, item.location): (item.timestamp, item.value)
+            for item in previous
+        }
     for block in blocks:
         for sample in block.sampledValue:
             numeric = numeric_sample(sample)
@@ -347,9 +351,30 @@ async def start_transaction(
 async def meter_values(
     session: AsyncSession, charger: ChargePoint, frame: Frame, payload: MeterPayload
 ) -> dict[str, object]:
+    # Read the session and its latest series in one round trip while keeping
+    # the same charger -> session lock order and durable replay transaction.
+    latest_sample = (
+        select(
+            MeterSample.measurand,
+            MeterSample.phase,
+            MeterSample.location,
+            MeterSample.timestamp,
+            MeterSample.value,
+        )
+        .where(MeterSample.session_id == ChargingSession.id)
+        .distinct(MeterSample.measurand, MeterSample.phase, MeterSample.location)
+        .order_by(
+            MeterSample.measurand,
+            MeterSample.phase,
+            MeterSample.location,
+            MeterSample.timestamp.desc(),
+        )
+        .lateral("latest_meter_sample")
+    )
     statement = (
-        select(ChargingSession)
+        select(ChargingSession, latest_sample)
         .join(Connector, Connector.id == ChargingSession.connector_id)
+        .outerjoin(latest_sample, true())
         .where(
             ChargingSession.charge_point_id == charger.id,
             Connector.connector_number == payload.connectorId,
@@ -359,7 +384,11 @@ async def meter_values(
         statement = statement.where(ChargingSession.id == payload.transactionId)
     else:
         statement = statement.where(ChargingSession.ended_at.is_(None))
-    transaction = await session.scalar(statement.with_for_update(of=ChargingSession))
+    rows = (await session.execute(statement.with_for_update(of=ChargingSession))).all()
+    transaction = rows[0][0] if rows else None
+    latest = {
+        (row[1], row[2], row[3]): (row[4], row[5]) for row in rows if row[1] is not None
+    }
     if (
         transaction is None
         or transaction.manual_closed_at is not None
@@ -371,6 +400,7 @@ async def meter_values(
             session,
             transaction,
             payload.meterValue,
+            latest=latest,
             backfill=payload.transactionId is not None
             and transaction.recovery_at is not None,
         )
