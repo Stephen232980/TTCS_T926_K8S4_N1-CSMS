@@ -7,7 +7,32 @@ from uuid import uuid4
 
 from websockets.asyncio.server import serve
 
-from scripts.ocpp_control_simulator import ConnectorState, run
+from scripts.ocpp_control_simulator import ConnectorState, meter_samples, run
+
+
+def test_meter_telemetry_integrates_energy_and_keeps_connectors_independent():
+    state = ConnectorState()
+    other = ConnectorState()
+    first = {s["measurand"]: s for s in meter_samples(state, 10)}
+    assert first["Energy.Active.Import.Register"]["value"] == "1020"
+    assert first["Power.Active.Import"] == {
+        "measurand": "Power.Active.Import",
+        "value": "7200",
+        "unit": "W",
+    }
+    assert set(first) == {
+        "Energy.Active.Import.Register",
+        "Power.Active.Import",
+        "Temperature",
+        "Voltage",
+        "Current.Import",
+        "SoC",
+        "Frequency",
+    }
+    second = {s["measurand"]: s for s in meter_samples(state, 10)}
+    assert second["Energy.Active.Import.Register"]["value"] == "1040"
+    assert other.meter_wh == 1000
+    assert meter_samples(other, 10)[0]["value"] == "1020"
 
 
 async def test_control_simulator_routes_sessions_and_rejects_unready_connectors():
@@ -104,6 +129,19 @@ async def test_control_simulator_routes_sessions_and_rejects_unready_connectors(
             assert meters[2]["transactionId"] == 102
             assert meters[3]["transactionId"] == 103
             assert int(meters[2]["meterValue"][0]["sampledValue"][0]["value"]) > 1000
+            for number in (2, 3):
+                readings = {
+                    s["measurand"]: s
+                    for s in meters[number]["meterValue"][0]["sampledValue"]
+                }
+                assert {
+                    "Power.Active.Import",
+                    "Temperature",
+                    "Voltage",
+                    "Current.Import",
+                    "SoC",
+                    "Frequency",
+                } <= readings.keys()
             assert (await command("RemoteStopTransaction", {"transactionId": 102}))[
                 "status"
             ] == "Accepted"

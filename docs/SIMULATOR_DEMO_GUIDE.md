@@ -70,6 +70,12 @@ dùng `--connector 2` để chọn đầu nối khác. Không truyền `--id-tag
 tài xế chủ động bắt đầu qua ứng dụng. Các cờ `--outcome Rejected/Timeout`,
 `--omit-start`, `--omit-stop` vẫn dùng cho tình huống lỗi có chủ ý.
 
+Simulator từng trụ và fleet gửi đủ điện năng, công suất, nhiệt độ, điện áp,
+dòng điện, SoC và tần số cho mỗi đầu nối đang sạc. Điện năng tăng theo công
+suất và thời gian giữa các lần gửi. Đây là số đo giả lập phục vụ demo.
+Các bản ghi cũ chỉ có điện năng giữ nguyên; thông số bổ sung xuất hiện từ
+khi chạy phiên bản simulator mới.
+
 ## Kiểm chứng ngày 06/10/2026
 
 - Kiểm thử WebSocket thật xác nhận bắt đầu đồng thời đầu nối 2/3, định tuyến

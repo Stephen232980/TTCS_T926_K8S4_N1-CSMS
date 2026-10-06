@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import ROUND_CEILING
 from pathlib import Path
+from time import monotonic
 from uuid import uuid4
 
 from websockets.asyncio.client import connect
@@ -19,6 +20,9 @@ class ConnectorState:
     transaction_id: int | None = None
     meter_wh: int = 1000
     starting: bool = False
+    sample_count: int = 0
+    fractional_wh: float = 0
+    last_meter_at: float | None = None
 
     def reserve_start(self) -> bool:
         if (
@@ -29,6 +33,44 @@ class ConnectorState:
             return False
         self.starting = True
         return True
+
+
+def meter_samples(
+    state: ConnectorState, elapsed_seconds: float
+) -> list[dict[str, str]]:
+    """Simulated telemetry, with energy integrated from the reported power."""
+    watts = 7200 + (state.sample_count % 5) * 180
+    energy = state.fractional_wh + watts * elapsed_seconds / 3600
+    whole_wh = int(energy)
+    state.meter_wh += whole_wh
+    state.fractional_wh = energy - whole_wh
+    samples = [
+        {
+            "measurand": "Energy.Active.Import.Register",
+            "value": str(state.meter_wh),
+            "unit": "Wh",
+        },
+        {"measurand": "Power.Active.Import", "value": str(watts), "unit": "W"},
+        {
+            "measurand": "Temperature",
+            "value": str(36 + (state.sample_count % 8) * 0.25),
+            "unit": "Celsius",
+        },
+        {"measurand": "Voltage", "value": "230", "unit": "V"},
+        {
+            "measurand": "Current.Import",
+            "value": str(round(watts / 230, 2)),
+            "unit": "A",
+        },
+        {
+            "measurand": "SoC",
+            "value": str(min(90, 40 + state.sample_count // 30)),
+            "unit": "Percent",
+        },
+        {"measurand": "Frequency", "value": "50", "unit": "Hertz"},
+    ]
+    state.sample_count += 1
+    return samples
 
 
 async def load_connectors(
@@ -188,6 +230,7 @@ async def run(
                     authorized = result.get("idTagInfo", {}).get("status") == "Accepted"
                     if authorized:
                         state.status = "Charging"
+                        state.last_meter_at = monotonic()
                         await report(number)
                         print(
                             f"Connector {number}: actual StartTransaction {value}.",
@@ -304,9 +347,16 @@ async def run(
                 await call("Heartbeat", {})
                 for number, state in states.items():
                     async with locks[number]:
-                        if state.transaction_id is None:
+                        if state.transaction_id is None or state.status != "Charging":
                             continue
-                        state.meter_wh += 50
+                        now = monotonic()
+                        elapsed = (
+                            now - state.last_meter_at
+                            if state.last_meter_at is not None
+                            else 2
+                        )
+                        state.last_meter_at = now
+                        samples = meter_samples(state, elapsed)
                         await call(
                             "MeterValues",
                             {
@@ -315,9 +365,7 @@ async def run(
                                 "meterValue": [
                                     {
                                         "timestamp": datetime.now(UTC).isoformat(),
-                                        "sampledValue": [
-                                            {"value": str(state.meter_wh), "unit": "Wh"}
-                                        ],
+                                        "sampledValue": samples,
                                     }
                                 ],
                             },
