@@ -41,3 +41,30 @@ giảm lượt truy vấn không phải cam kết mọi môi trường đều đ
 
 Sau khi push commit sửa, cần xác nhận lại quality, simulator-scenario và
 required build check trên GitHub Actions. Kết quả local không thay CI remote.
+
+## Lần CI tiếp theo vẫn vượt ngưỡng
+
+Log mới sau commit tối ưu ghi 215,3 ms và 407 bài khác đạt. Bản tối ưu
+truy vấn vì vậy chưa đủ để kết luận check remote ổn định. Thử lại trên
+Linux/Python 3.12 local, giới hạn container ở hai CPU, chạy các bài trước
+benchmark theo thứ tự CI: 108 bài đạt, benchmark 73 ms. Trace garbage
+collection không ghi nhận pause lớn trong lượt đó; chưa chứng minh được
+GC hay một yếu tố cụ thể là nguyên nhân của lượt remote thất bại.
+
+Workflow nay chạy bài đo trong một tiến trình pytest riêng ngay sau
+migration, trước nhóm chức năng. Nhóm chức năng chỉ deselect đúng node ID
+của bài đã chạy riêng. Tất cả 408 bài vẫn phải đạt qua hai bước thuộc cùng
+job quality; không bỏ bài đo, tăng ngưỡng, retry hoặc cho phép thất bại.
+Required build/S-26 dependency giữ nguyên.
+
+Việc tách tiến trình giảm ảnh hưởng trạng thái Python và workload database
+của các bài chạy trước, đồng thời làm log benchmark rõ hơn. Đây là cải
+thiện cách đo; cần chạy lại trên GitHub Actions để xác nhận kết quả remote,
+không phải cam kết hiệu năng production.
+
+Ki?m ch?ng workflow m?i tr?n Linux/Python 3.12 v?i container gi?i h?n hai
+CPU: ba ti?n tr?nh benchmark ??c l?p ??t 109 / 75 / 72 ms. Nh?m ch?c n?ng
+??t 406 b?i trong container; b?i Compose ch?y ri?ng tr?n host v? ??t.
+T?ng c?ng b?i ?o l? 408 b?i. Test pipeline thay placeholder ?? ki?m tra
+b?i ?o kh?ng ???c b? qua/cho ph?p th?t b?i, nh?m ch?c n?ng ch? deselect
+b?i ch?y ri?ng, v? dependency quality ? S-26 ? required build gi? nguy?n.
