@@ -25,6 +25,9 @@ const DriverWorkspace = lazy(() => import('./features/driver/DriverWorkspace').t
 const AdminWorkspace = lazy(() =>
   import('./features/admin/AdminWorkspace').then(module => ({ default: module.AdminWorkspace })),
 )
+const AccountantWorkspace = lazy(() =>
+  import('./features/accountant/AccountantWorkspace').then(module => ({ default: module.AccountantWorkspace })),
+)
 
 interface AppProps {
   authApi?: AuthApi
@@ -196,6 +199,14 @@ function App({
 
   if (primaryRole === 'driver') {
     return <Suspense fallback={<main className="auth-checking" role="status">Đang tải khu vực tài xế…</main>}><DriverWorkspace currentUser={workspaceUser} onLogout={handleLogout} onExit={switchArea} /></Suspense>
+  }
+
+  if (primaryRole === 'accountant') {
+    return (
+      <Suspense fallback={<main className="auth-checking" role="status">Đang tải khu vực kế toán…</main>}>
+        <AccountantWorkspace currentUser={workspaceUser} onLogout={handleLogout} onExit={switchArea} />
+      </Suspense>
+    )
   }
 
   return (
