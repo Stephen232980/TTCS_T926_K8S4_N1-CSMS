@@ -59,8 +59,18 @@ jobs:
       - name: Apply database migrations
         run: alembic upgrade head
 
-      - name: Run tests
-        run: pytest
+      # Keep the latency gate mandatory, but isolate its Python process and
+      # run it before the functional suite changes caches/DB workload.
+      - name: Run MeterValues latency check
+        run: >-
+          pytest
+          tests/test_charging_sessions.py::test_committed_replay_and_twenty_concurrent_meter_replies_under_200ms
+          -q -s
+
+      - name: Run functional tests
+        run: >-
+          pytest
+          --deselect=tests/test_charging_sessions.py::test_committed_replay_and_twenty_concurrent_meter_replies_under_200ms
 
   frontend-quality:
     name: Frontend lint, test and build
