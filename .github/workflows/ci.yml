@@ -7,6 +7,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' && 'csms-staging' || format('{0}-{1}-{2}', github.workflow, github.event_name, github.ref) }}
+  cancel-in-progress: false
+
 jobs:
   quality:
     name: Lint, typecheck and test
@@ -203,12 +207,14 @@ jobs:
           docker tag csms:test "ghcr.io/${IMAGE_LOWER}:latest"
 
       - name: Push image to GitHub Container Registry
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
         run: |
           IMAGE_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           docker push "ghcr.io/${IMAGE_LOWER}:${{ github.sha }}"
-          docker push "ghcr.io/${IMAGE_LOWER}:latest"
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            docker push "ghcr.io/${IMAGE_LOWER}:latest"
+          fi
 
   frontend-build:
     name: Build frontend Docker image
@@ -230,17 +236,19 @@ jobs:
           docker tag csms-frontend:test "ghcr.io/${IMAGE_LOWER}-frontend:latest"
 
       - name: Push frontend image to GitHub Container Registry
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
         run: |
           IMAGE_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           docker push "ghcr.io/${IMAGE_LOWER}-frontend:${{ github.sha }}"
-          docker push "ghcr.io/${IMAGE_LOWER}-frontend:latest"
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            docker push "ghcr.io/${IMAGE_LOWER}-frontend:latest"
+          fi
 
   deploy:
     name: Deploy to Staging
     needs: [quality, build, simulator-scenario]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -292,7 +300,7 @@ jobs:
   frontend-deploy:
     name: Deploy frontend to Staging
     needs: [frontend-quality, frontend-build, deploy]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: read
