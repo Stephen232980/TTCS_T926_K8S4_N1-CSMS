@@ -19,6 +19,7 @@ from src.modules.ocpp import (
 from src.modules.ocpp import models as ocpp_models  # noqa: F401
 from src.modules.pricing import models as pricing_models  # noqa: F401
 from src.modules.stations import models as stations_models  # noqa: F401
+from src.modules.wallet import models as wallet_models  # noqa: F401
 from src.platform.database.base import Base
 
 # this is the Alembic Config object, which provides
