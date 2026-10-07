@@ -147,7 +147,7 @@ async def ghi_so_cai(
     ):
         raise WalletAdjustmentAuditError("Adjustment audit balance is stale")
     async with session.begin_nested():
-        row = await session.scalar(
+        row: WalletLedger | None = await session.scalar(
             insert(WalletLedger)
             .values(
                 wallet_id=wallet_id,
