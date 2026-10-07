@@ -300,7 +300,7 @@ jobs:
   frontend-deploy:
     name: Deploy frontend to Staging
     needs: [frontend-quality, frontend-build, deploy]
-        if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: read
