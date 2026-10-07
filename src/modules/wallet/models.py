@@ -88,3 +88,40 @@ class WalletLedger(Base):
 Index(
     "ix_wallet_ledger_wallet_id_id_desc", WalletLedger.wallet_id, WalletLedger.id.desc()
 )
+
+
+class WalletAudit(Base):
+    """Administrative evidence; a cache repair is not a monetary ledger entry."""
+
+    __tablename__ = "wallet_audits"
+    __table_args__ = (
+        CheckConstraint(
+            "action IN ('cache_repaired', 'adjustment_authorized')",
+            name="ck_wallet_audits_action",
+        ),
+        CheckConstraint("btrim(reason) <> ''", name="ck_wallet_audits_reason"),
+        CheckConstraint(
+            "(action = 'cache_repaired' AND amount_vnd IS NULL) OR "
+            "(action = 'adjustment_authorized' AND amount_vnd IS NOT NULL "
+            "AND amount_vnd <> 0 AND after_balance_vnd::numeric = "
+            "before_balance_vnd::numeric + amount_vnd::numeric)",
+            name="ck_wallet_audits_amount",
+        ),
+        Index("ix_wallet_audits_wallet_created", "wallet_id", "created_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    wallet_id: Mapped[UUID] = mapped_column(
+        ForeignKey("wallets.id", ondelete="RESTRICT"), nullable=False
+    )
+    actor_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    action: Mapped[str] = mapped_column(String(40), nullable=False)
+    before_balance_vnd: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    after_balance_vnd: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    amount_vnd: Mapped[int | None] = mapped_column(BigInteger)
+    reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
