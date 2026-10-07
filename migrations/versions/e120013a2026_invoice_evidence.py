@@ -1,7 +1,7 @@
 """invoice_evidence
 
 Revision ID: e120013a2026
-Revises: c100011a2026
+Revises: d110012a2026
 Create Date: 2026-10-07 22:13:23.680547
 
 """
@@ -13,7 +13,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "e120013a2026"
-down_revision: str | Sequence[str] | None = "c100011a2026"
+down_revision: str | Sequence[str] | None = "d110012a2026"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

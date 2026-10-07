@@ -288,7 +288,7 @@ async def test_migration_round_trip_keeps_existing_session(committed_invoice_db)
     env = os.environ | {
         "DATABASE_URL": factory.kw["bind"].url.render_as_string(hide_password=False)
     }
-    for command in [("downgrade", "c100011a2026"), ("upgrade", "head")]:
+    for command in [("downgrade", "d110012a2026"), ("upgrade", "head")]:
         await asyncio.to_thread(
             subprocess.run,
             [sys.executable, "-m", "alembic", *command],
