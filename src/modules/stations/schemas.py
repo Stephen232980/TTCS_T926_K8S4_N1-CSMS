@@ -5,6 +5,11 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from src.modules.stations.timezones import (
+    DEFAULT_STATION_TIMEZONE,
+    validate_station_timezone,
+)
+
 
 class StationCreateRequest(BaseModel):
     model_config = ConfigDict(
@@ -14,6 +19,13 @@ class StationCreateRequest(BaseModel):
 
     name: str = Field(min_length=1, max_length=150)
     address: str = Field(min_length=1, max_length=500)
+    timezone: str = Field(default=DEFAULT_STATION_TIMEZONE, max_length=64)
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, value: str) -> str:
+        return validate_station_timezone(value)
+
     latitude: Decimal = Field(
         ge=Decimal(-90),
         le=Decimal(90),
@@ -32,6 +44,13 @@ class StationUpdateRequest(BaseModel):
 
     name: str | None = Field(default=None, min_length=1, max_length=150)
     address: str | None = Field(default=None, min_length=1, max_length=500)
+    timezone: str | None = Field(default=None, max_length=64)
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, value: str | None) -> str | None:
+        return validate_station_timezone(value) if value is not None else None
+
     latitude: Decimal | None = Field(
         default=None,
         ge=Decimal(-90),
@@ -79,6 +98,7 @@ class StationResponse(BaseModel):
     latitude: float
     longitude: float
     status: str
+    timezone: str
     created_at: datetime
     updated_at: datetime
 

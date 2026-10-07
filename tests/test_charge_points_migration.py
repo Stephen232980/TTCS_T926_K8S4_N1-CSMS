@@ -3,7 +3,7 @@ from alembic.script import ScriptDirectory
 
 REVISION = "ecbbbbc04358"
 DOWN_REVISION = "04645d9d9d66"
-CURRENT_HEAD = "e030007a2026"
+CURRENT_HEAD = "a080009a2026"
 
 
 def test_charge_points_migration_revision_chain() -> None:
@@ -18,7 +18,7 @@ def test_charge_points_migration_revision_chain() -> None:
     assert callable(revision.module.downgrade)
 
 
-def test_charge_points_migration_is_only_alembic_head() -> None:
+def test_migration_chain_has_only_expected_alembic_head() -> None:
     config = Config("alembic.ini")
     script = ScriptDirectory.from_config(config)
 
