@@ -19,7 +19,7 @@ Phạm vi: S-15, S-17, S-18, S-19, S-20 theo Backlog CSMS.xlsx. Code nằm trên
 | S-18: transactionId không biết; transactionData | CALLRESULT và pending; số đo kết thúc qua cùng bộ xử lý MeterValues | Test unknown/zero/foreign transaction, empty sampledValue |
 | S-19: số đo đã biết; đại lượng lạ | Lưu số đo gắn phiên; bỏ qua đại lượng lạ, SignedData hoặc giá trị không hữu hạn | Test known/unknown numeric và đơn vị |
 | S-19: không có phiên phù hợp | Pending, không tự tạo phiên | Test unmatched messages |
-| S-19 NFR: 20 trụ, chu kỳ 10 giây, trả lời dưới 200 ms | Gộp contact và MeterValues trong một transaction; pool giữ 20 kết nối | Test 20 phản hồi đồng thời, gồm transport/commit/send; đo sau warm-up, không gồm mở socket/DB lần đầu |
+| S-19 NFR: 20 trụ, chu kỳ 10 giây, trả lời dưới 200 ms | Gộp contact và MeterValues trong một transaction; pool giữ 20 kết nối | Test transport/commit/send và `test_s19_meter_latency.py`: 20 WebSocket thật, 3 đợt cách nhau 10 giây; đo sau Boot/Heartbeat, xác nhận commit và replay |
 | S-20: thời gian cũ/trùng; điện năng giảm | So theo timestamp trụ và từng series; cũ bỏ qua có cảnh báo, trùng cùng giá trị bỏ qua yên lặng, giá trị giảm vẫn lưu và review | Test ordering/dedup/regression, đổi Wh/kWh, xung đột cùng timestamp |
 | Quyền và UI | Owner theo trạm/thẻ đã cấp; operator/admin quản lý; driver không vào màn hình quản lý | Test owner scope/403; UI desktop/mobile và Vitest |
 
@@ -38,7 +38,21 @@ Nâng migration bằng `python -m alembic upgrade head`; head mới `d830a62f194
 
 Số đo hỗ trợ Energy.Active.Import.Register (Wh/kWh), Power.Active.Import/Power.Offered (W/kW), Current.Import (A), Voltage (V), SoC (Percent), Frequency (Hertz), Temperature (Celsius/Celcius). Chuẩn hóa năng lượng về Wh, công suất W; giữ phase/location. Công tơ đầu/cuối OCPP là Wh. Không diễn giải SignedData thành số.
 
-DATABASE_POOL_SIZE=20 là số kết nối giữ lại cho mỗi process, overflow tối đa 10. Điều chỉnh theo ngân sách kết nối PostgreSQL khi tăng worker. Bằng chứng NFR là máy local, một process, DB đã kết nối (lần đo cuối tối đa 110 ms); không cam kết độ trễ triển khai qua Internet.
+DATABASE_POOL_SIZE=20 là số kết nối giữ lại cho mỗi process, overflow tối đa 10. Điều chỉnh theo ngân sách kết nối PostgreSQL khi tăng worker. Bằng chứng NFR là máy local, một process, DB đã kết nối; kết quả đo cập nhật nằm dưới đây, không cam kết độ trễ triển khai qua Internet.
+
+## Kiểm chứng S-19 AC4 ngày 06/10/2026
+
+Các tài liệu bàn giao trước từng ghi nhận 206–210 ms, vì vậy không thể kết luận AC4 đạt chỉ dựa trên kết quả 110 ms cũ. Đo lại mã hiện tại trên database riêng `csms_s19_perf_20261006`, PostgreSQL trong Docker, backend Python trên Windows:
+
+- Bài đo transport hiện có, 20 trụ đồng thời: năm lượt riêng có max 132 / 177 / 152 / 111 / 109 ms; khi chạy cùng nhóm regression đo 86 ms.
+- Bài mới `tests/test_s19_meter_latency.py` chạy ứng dụng ASGI thật bằng Uvicorn, vòng đời ứng dụng bật, 20 kết nối OCPP 1.6J qua TCP loopback. Sau BootNotification và Heartbeat, gửi đồng thời ba đợt MeterValues cách nhau 10 giây. Mỗi trụ gửi bốn đại lượng: điện năng, công suất, điện áp và dòng điện.
+- Độ trễ từ trước client gửi CALL tới sau client nhận CALLRESULT: max từng đợt 115,9 / 123,6 / 123,5 ms; khi chạy cùng nhóm regression là 113,6 / 126,0 / 112,9 ms; chạy lại bản test cuối là 106,8 / 119,5 / 110,4 ms. Cả chín đợt đều dưới 200 ms. Không tính thời gian mở socket/Boot/warm-up vào độ trễ MeterValues.
+- Sau mỗi đợt, một DB session độc lập xác nhận đủ số đo đã commit. Gửi lại cùng messageId trả cùng phản hồi; tổng cuối vẫn 240 số đo, không ghi trùng.
+- Nhóm charging sessions/recovery/OCPP foundation/monitoring và bài mới: 80 tests passed.
+
+Kết luận: **AC4 đạt trong môi trường local được đo ngày 06/10/2026**. Chưa tái hiện lỗi vượt 200 ms của các lượt trước; không sửa thuật toán xử lý, ngưỡng 200 ms, pool hoặc cấu hình bền vững DB để lấy kết quả đạt. Kết quả này không xác nhận độ trễ mạng Internet hay tải production.
+
+Chạy lại trên database kiểm thử đã migration (không dùng database nghiệp vụ): đặt `DATABASE_URL` cho database riêng rồi chạy `python -m pytest tests/test_s19_meter_latency.py -q -s`. Test tự tạo/xóa fleet của nó và dùng cổng TCP còn trống.
 
 ## Kiểm thử thủ công
 
