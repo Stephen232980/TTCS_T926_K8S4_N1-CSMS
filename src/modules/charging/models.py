@@ -3,6 +3,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Identity,
@@ -54,6 +55,12 @@ class AuthorizationAttempt(Base):
 class ChargingSession(Base):
     __tablename__ = "charging_sessions"
     __table_args__ = (
+        CheckConstraint(
+            "(settlement_completed_at IS NULL AND settlement_reason IS NULL) OR "
+            "(settlement_completed_at IS NOT NULL AND settlement_reason IS NOT NULL "
+            "AND settlement_reason IN ('debited', 'zero_invoice', 'legacy_exempt'))",
+            name="ck_charging_sessions_settlement",
+        ),
         Index("ix_charging_sessions_charge_point_id", "charge_point_id"),
         Index(
             "uq_charging_sessions_open_connector",
@@ -78,6 +85,10 @@ class ChargingSession(Base):
     authorization_status: Mapped[str] = mapped_column(String(20))
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    settlement_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    settlement_reason: Mapped[str | None] = mapped_column(String(20))
     meter_start_wh: Mapped[Decimal] = mapped_column(Numeric(24, 6))
     meter_stop_wh: Mapped[Decimal | None] = mapped_column(Numeric(24, 6))
     energy_kwh: Mapped[Decimal | None] = mapped_column(Numeric(24, 6))
