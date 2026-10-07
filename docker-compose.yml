@@ -22,7 +22,7 @@ services:
     command:
       - sh
       - -c
-      - alembic upgrade head && exec uvicorn src.entrypoints.http:app --host 0.0.0.0 --port 8000
+      - alembic upgrade head && python scripts/create_test_accounts.py && exec uvicorn src.entrypoints.http:app --host 0.0.0.0 --port 8000
     healthcheck:
       test:
         [
@@ -44,7 +44,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
