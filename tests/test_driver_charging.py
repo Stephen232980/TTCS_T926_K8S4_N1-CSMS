@@ -60,7 +60,12 @@ async def test_start_reply_reuse_virtual_tag_and_safe_audit(
     await db_session.refresh(driver)
     assert await virtual_tag(db_session, driver) == raw
     assert (
-        await db_session.scalar(select(func.count()).select_from(DriverVirtualTag)) == 1
+        await db_session.scalar(
+            select(func.count())
+            .select_from(DriverVirtualTag)
+            .where(DriverVirtualTag.driver_id == driver.id)
+        )
+        == 1
     )
     request = await db_session.get(ControlRequest, key)
     assert request.payload == {"connectorId": 1}

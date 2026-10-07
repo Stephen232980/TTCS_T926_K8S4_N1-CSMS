@@ -9,6 +9,7 @@ from fastapi import HTTPException
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.modules.charging.driver_provisioning import ensure_driver_resources
 from src.modules.identity.models import Role, User, UserRole
 
 KNOWN_ROLES = frozenset({"admin", "operator", "accountant", "station_owner", "driver"})
@@ -68,6 +69,9 @@ async def assign_user_roles(
         ]
     )
     await db.flush()
+
+    if "driver" in final:
+        await ensure_driver_resources(db, user)
 
 
 async def get_default_role(db: AsyncSession, user_id: UUID) -> str | None:
