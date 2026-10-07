@@ -63,3 +63,5 @@ T-87 phải xác minh sổ cái và liên kết hóa đơn trước khi gọi. H
 ## Kiểm chứng
 
 `tests/test_wallet_service.py` kiểm tra giao dịch thật, replay/xung đột, ví khóa, quyền/audit, phục hồi cache và ACL. Các ca commit đồng thời tự tạo/xóa database tạm có tên `t86_<uuid>`; tài khoản kiểm thử cần CREATEDB. Không dùng tài khoản runtime để chạy bộ test này, không trỏ test vào database demo/staging. Ca 100 lần ghi dùng hai kết nối PostgreSQL thật; ca tranh khóa dùng `pg_blocking_pids` để xác nhận có chờ khóa trước khi commit.
+
+Trong CI, benchmark MeterValues nội bộ và benchmark 20 socket thật chạy ở hai bước pytest riêng, trước bộ chức năng. Cả hai bước vẫn bắt buộc thành công trong job `quality`; benchmark socket giữ ba vòng đo và ngưỡng 200 ms. Bộ chức năng chỉ loại hai ca đã chạy riêng, không bỏ kiểm tra hiệu năng. `tests/test_ci_pipeline.py` kiểm tra cả hai cổng và dependency của simulator/build để không thể merge khi benchmark lỗi.

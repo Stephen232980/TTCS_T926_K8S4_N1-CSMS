@@ -63,18 +63,25 @@ jobs:
       - name: Apply database migrations
         run: alembic upgrade head
 
-      # Keep the latency gate mandatory, but isolate its Python process and
-      # run it before the functional suite changes caches/DB workload.
+      # Keep both latency gates mandatory in separate Python processes,
+      # before the functional suite changes caches/DB workload.
       - name: Run MeterValues latency check
         run: >-
           pytest
           tests/test_charging_sessions.py::test_committed_replay_and_twenty_concurrent_meter_replies_under_200ms
           -q -s
 
+      - name: Run real OCPP socket latency check
+        run: >-
+          pytest
+          tests/test_s19_meter_latency.py::test_twenty_real_sockets_periodic_meter_replies_under_200ms
+          -q -s
+
       - name: Run functional tests
         run: >-
           pytest
           --deselect=tests/test_charging_sessions.py::test_committed_replay_and_twenty_concurrent_meter_replies_under_200ms
+          --deselect=tests/test_s19_meter_latency.py::test_twenty_real_sockets_periodic_meter_replies_under_200ms
 
   frontend-quality:
     name: Frontend lint, test and build
