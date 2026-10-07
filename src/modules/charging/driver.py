@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-import secrets
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -12,8 +11,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.charging.driver_models import DriverStartRequest, DriverVirtualTag
+from src.modules.charging.driver_provisioning import ensure_driver_resources
 from src.modules.charging.models import ChargingCard, ChargingSession
-from src.modules.charging.service import tag_hash
 from src.modules.identity.authorization import AuthorizationEvidence
 from src.modules.identity.models import Role, User, UserRole
 from src.modules.ocpp import control
@@ -51,20 +50,7 @@ async def expire_start_requests(
 
 
 async def virtual_tag(session: AsyncSession, driver: User) -> str:
-    tag = await session.get(DriverVirtualTag, driver.id)
-    if tag is None:
-        raw = secrets.token_urlsafe(15)
-        card = ChargingCard(
-            tag_hash=tag_hash(raw),
-            tag_tail=raw[-4:],
-            driver_id=driver.id,
-            issuer_id=driver.id,
-        )
-        session.add(card)
-        await session.flush()
-        tag = DriverVirtualTag(driver_id=driver.id, card_id=card.id, id_tag=raw)
-        session.add(tag)
-        await session.flush()
+    tag = await ensure_driver_resources(session, driver)
     stored_card = await session.get(ChargingCard, tag.card_id)
     if (
         stored_card is None
