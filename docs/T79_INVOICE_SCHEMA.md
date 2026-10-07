@@ -1,7 +1,7 @@
 # T-79 — Schema hoá đơn (S-33)
 
 `Invoice` và `InvoiceLine` nằm trong `src.modules.billing.models`. Migration
-`e120013a2026` nối `c100011a2026`. Không có API, hàm tính tiền hay chốt phiên trong task này.
+`e120013a2026` nối `d110012a2026`. Không có API, hàm tính tiền hay chốt phiên trong task này.
 
 ## Hợp đồng cho T-80/T-81/T-102
 
@@ -43,5 +43,4 @@ Chỉ dùng rollback này trên database thử hoặc sau khi có phương án s
 chấp thuận. Test round-trip giữ dữ liệu phiên sạc cũ.
 
 Giữ unique theo phiên. Phí sau StopTransaction/hoá đơn bổ sung chưa được chốt,
-không thay đổi thiết kế ở task này. T-85 đang có migration riêng cùng parent;
-PR merge sau phải nối lại down_revision và cập nhật test head để giữ một Alembic head.
+không thay đổi thiết kế ở task này. T-85 đã merge trước; T-79 nối sau migration T-85 để giữ một Alembic head.
