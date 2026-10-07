@@ -1,6 +1,8 @@
 import asyncio
 import selectors
+
 from sqlalchemy import select
+
 from src.modules.identity.models import Role, User, UserRole
 from src.modules.identity.security import hash_password
 from src.platform.database.session import SessionFactory
