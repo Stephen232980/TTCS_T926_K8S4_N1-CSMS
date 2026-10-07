@@ -10,10 +10,12 @@ Tài liệu này định nghĩa giao diện (interface) và các ví dụ (test 
 from typing import List, Dict
 from datetime import datetime, date
 
+
 class MeterValue:
     def __init__(self, timestamp: datetime, energy_kwh: float):
         self.timestamp = timestamp
         self.energy_kwh = energy_kwh
+
 
 class TariffFrame:
     def __init__(self, start_time: str, end_time: str, price: float):
@@ -22,15 +24,16 @@ class TariffFrame:
         self.end_time = end_time
         self.price = price
 
+
 def chia_doan(
-    session_start: datetime, 
-    session_end: datetime, 
-    meter_values: List[MeterValue], 
-    daily_tariffs: Dict[date, List[TariffFrame]]
+    session_start: datetime,
+    session_end: datetime,
+    meter_values: List[MeterValue],
+    daily_tariffs: Dict[date, List[TariffFrame]],
 ) -> List[Dict]:
     """
     Hàm thuần cắt phiên sạc thành các đoạn dựa trên ranh giới khung giờ biểu giá và ranh giới nửa đêm.
-    
+
     :param session_start: Thời gian bắt đầu phiên sạc.
     :param session_end: Thời gian kết thúc phiên sạc.
     :param meter_values: Danh sách các bản ghi chỉ số công tơ điện trong suốt phiên sạc.
@@ -47,13 +50,13 @@ Hàm sẽ trả về một List các Dictionary (mỗi Dict đại diện cho m�
 ```python
 [
     {
-        "start_time": datetime,      # Bắt đầu đoạn
-        "end_time": datetime,        # Kết thúc đoạn
-        "energy_consumed_kwh": float,# Lượng điện tiêu thụ trong đoạn (được nội suy nếu cần)
-        "price_per_kwh": float,      # Đơn giá áp dụng cho đoạn này
-        "total_cost": float          # Thành tiền của đoạn (đã làm tròn)
+        "start_time": datetime,  # Bắt đầu đoạn
+        "end_time": datetime,  # Kết thúc đoạn
+        "energy_consumed_kwh": float,  # Lượng điện tiêu thụ trong đoạn (được nội suy nếu cần)
+        "price_per_kwh": float,  # Đơn giá áp dụng cho đoạn này
+        "total_cost": float,  # Thành tiền của đoạn (đã làm tròn)
     },
-    ...
+    ...,
 ]
 ```
 
