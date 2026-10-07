@@ -38,6 +38,8 @@ class Tariff(Base):
     )
     # Local calendar date in the station's timezone, not a UTC timestamp.
     effective_from: Mapped[date] = mapped_column(Date, nullable=False)
+    # Set in the invoice transaction; never clear when invoices are retained.
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     idle_rate_vnd_per_minute: Mapped[int] = mapped_column(BigInteger, nullable=False)
     grace_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
