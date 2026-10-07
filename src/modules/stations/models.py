@@ -19,6 +19,10 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from src.modules.identity.models import User
+from src.modules.stations.timezones import (
+    DEFAULT_STATION_TIMEZONE,
+    validate_station_timezone,
+)
 from src.platform.database.base import Base
 
 
@@ -67,8 +71,8 @@ class Station(Base):
     )
     timezone: Mapped[str] = mapped_column(
         String(64),
-        default="Asia/Ho_Chi_Minh",
-        server_default="Asia/Ho_Chi_Minh",
+        default=DEFAULT_STATION_TIMEZONE,
+        server_default=DEFAULT_STATION_TIMEZONE,
         nullable=False,
     )
     archived_at: Mapped[datetime | None] = mapped_column(
@@ -88,6 +92,11 @@ class Station(Base):
     )
 
     owner: Mapped[User] = relationship(User)
+
+    @validates("timezone")
+    def validate_timezone(self, _key: str, value: str) -> str:
+        return validate_station_timezone(value)
+
     charge_points: Mapped[list[ChargePoint]] = relationship(
         "ChargePoint",
         back_populates="station",

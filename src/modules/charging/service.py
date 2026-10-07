@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 
-from sqlalchemy import select, true
+from sqlalchemy import case, literal, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.charging.models import (
@@ -147,9 +147,10 @@ async def store_samples(
     *,
     backfill: bool = False,
     latest: dict[tuple[str, str, str], tuple[datetime, Decimal]] | None = None,
+    history: dict[tuple[str, str, str], dict[datetime, Decimal]] | None = None,
 ) -> None:
     if backfill:
-        await store_recovery_samples(session, transaction, blocks)
+        await store_recovery_samples(session, transaction, blocks, history=history)
         return
     if latest is None:
         previous = (
@@ -227,19 +228,25 @@ async def store_samples(
 
 
 async def store_recovery_samples(
-    session: AsyncSession, transaction: ChargingSession, blocks: Sequence[MeterBlock]
+    session: AsyncSession,
+    transaction: ChargingSession,
+    blocks: Sequence[MeterBlock],
+    *,
+    history: dict[tuple[str, str, str], dict[datetime, Decimal]] | None = None,
 ) -> None:
     """Late buffered samples retain their timestamps, including gaps before newest data."""
-    values = (
-        await session.scalars(
-            select(MeterSample).where(MeterSample.session_id == transaction.id)
-        )
-    ).all()
-    series: dict[tuple[str, str, str], dict[datetime, Decimal]] = {}
-    for item in values:
-        series.setdefault((item.measurand, item.phase, item.location), {})[
-            item.timestamp
-        ] = item.value
+    if history is None:
+        values = (
+            await session.scalars(
+                select(MeterSample).where(MeterSample.session_id == transaction.id)
+            )
+        ).all()
+        history = {}
+        for item in values:
+            history.setdefault((item.measurand, item.phase, item.location), {})[
+                item.timestamp
+            ] = item.value
+    series = history
     for block in sorted(blocks, key=lambda item: item.timestamp):
         if block.timestamp < transaction.started_at or (
             transaction.ended_at is not None and block.timestamp > transaction.ended_at
@@ -288,6 +295,11 @@ async def store_recovery_samples(
 async def start_transaction(
     session: AsyncSession, charger: ChargePoint, frame: Frame, payload: StartPayload
 ) -> dict[str, object]:
+    # Serialize the first session with station-timezone changes. The dispatcher
+    # already locks the charger; keep charger -> station -> connector lock order.
+    await session.scalar(
+        select(Station.id).where(Station.id == charger.station_id).with_for_update()
+    )
     connector = await session.scalar(
         select(Connector)
         .where(
@@ -351,8 +363,13 @@ async def start_transaction(
 async def meter_values(
     session: AsyncSession, charger: ChargePoint, frame: Frame, payload: MeterPayload
 ) -> dict[str, object]:
-    # Read the session and its latest series in one round trip while keeping
-    # the same charger -> session lock order and durable replay transaction.
+    # Recovery needs every timestamp to validate buffered gaps; ordinary reports
+    # need only the newest point per series. Fetch either in the same locked read.
+    recovery_timestamp = (
+        case((ChargingSession.recovery_at.is_not(None), MeterSample.timestamp))
+        if payload.transactionId is not None
+        else case((literal(False), MeterSample.timestamp))
+    )
     latest_sample = (
         select(
             MeterSample.measurand,
@@ -362,11 +379,17 @@ async def meter_values(
             MeterSample.value,
         )
         .where(MeterSample.session_id == ChargingSession.id)
-        .distinct(MeterSample.measurand, MeterSample.phase, MeterSample.location)
+        .distinct(
+            MeterSample.measurand,
+            MeterSample.phase,
+            MeterSample.location,
+            recovery_timestamp,
+        )
         .order_by(
             MeterSample.measurand,
             MeterSample.phase,
             MeterSample.location,
+            recovery_timestamp,
             MeterSample.timestamp.desc(),
         )
         .lateral("latest_meter_sample")
@@ -386,9 +409,14 @@ async def meter_values(
         statement = statement.where(ChargingSession.ended_at.is_(None))
     rows = (await session.execute(statement.with_for_update(of=ChargingSession))).all()
     transaction = rows[0][0] if rows else None
-    latest = {
-        (row[1], row[2], row[3]): (row[4], row[5]) for row in rows if row[1] is not None
-    }
+    latest: dict[tuple[str, str, str], tuple[datetime, Decimal]] = {}
+    history: dict[tuple[str, str, str], dict[datetime, Decimal]] = {}
+    for row in rows:
+        if row[1] is not None:
+            key = (row[1], row[2], row[3])
+            history.setdefault(key, {})[row[4]] = row[5]
+            if key not in latest or row[4] > latest[key][0]:
+                latest[key] = (row[4], row[5])
     if (
         transaction is None
         or transaction.manual_closed_at is not None
@@ -401,6 +429,7 @@ async def meter_values(
             transaction,
             payload.meterValue,
             latest=latest,
+            history=history,
             backfill=payload.transactionId is not None
             and transaction.recovery_at is not None,
         )
