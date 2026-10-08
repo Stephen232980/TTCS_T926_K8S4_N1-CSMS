@@ -27,3 +27,9 @@ class WalletAdjustmentAuditError(WalletError):
 
 class WalletAdminRequiredError(WalletError):
     pass
+
+
+class WalletReconciliationError(WalletError):
+    def __init__(self, checks: list[str]):
+        self.checks = checks
+        super().__init__("Wallet checks failed: " + ", ".join(checks))

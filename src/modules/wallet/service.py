@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.modules.identity.authorization import AuthorizationEvidence
 from src.modules.identity.models import Role, User, UserRole
 from src.modules.wallet.exceptions import (
     WalletAdjustmentAuditError,
@@ -17,6 +18,7 @@ from src.modules.wallet.exceptions import (
     WalletNotFoundError,
 )
 from src.modules.wallet.models import Wallet, WalletAudit, WalletLedger
+from src.platform.audit.service import ghi_nhat_ky
 
 EntryType = Literal["gateway_topup", "manual_topup", "charging_debit", "adjustment"]
 MIN_VND = -(2**63)
@@ -179,7 +181,12 @@ async def ghi_so_cai(
 
 
 async def phuc_hoi_so_du_cache(
-    session: AsyncSession, *, wallet_id: UUID, actor_id: UUID, reason: str
+    session: AsyncSession,
+    *,
+    wallet_id: UUID,
+    actor_id: UUID,
+    reason: str,
+    authorization: AuthorizationEvidence | None = None,
 ) -> Wallet:
     """Repair only the cached balance, with audit; never unlock or add money.
 
@@ -199,16 +206,29 @@ async def phuc_hoi_so_du_cache(
     if wallet.balance_vnd == balance:
         return wallet
     async with session.begin_nested():
-        session.add(
-            WalletAudit(
-                wallet_id=wallet.id,
-                actor_id=actor_id,
-                action="cache_repaired",
-                before_balance_vnd=wallet.balance_vnd,
-                after_balance_vnd=balance,
-                reason=reason.strip(),
-            )
+        audit = WalletAudit(
+            wallet_id=wallet.id,
+            actor_id=actor_id,
+            action="cache_repaired",
+            before_balance_vnd=wallet.balance_vnd,
+            after_balance_vnd=balance,
+            reason=reason.strip(),
         )
+        session.add(audit)
         wallet.balance_vnd = balance
         await session.flush()
+        await ghi_nhat_ky(
+            session,
+            actor_id=actor_id,
+            action="wallet.cache_repaired",
+            object_type="wallet_audit",
+            object_id=str(audit.id),
+            data={
+                "wallet_id": str(wallet.id),
+                "before_balance_vnd": audit.before_balance_vnd,
+                "after_balance_vnd": audit.after_balance_vnd,
+            },
+            permission=authorization.permission if authorization else None,
+            actor_roles=authorization.roles if authorization else None,
+        )
     return wallet
