@@ -79,8 +79,6 @@ def interpolate_meter_value(
     raise ValueError(f"Không thể nội suy cho {target_time}.")
 
 
-
-
 def chia_doan(
     session_start: datetime,
     session_end: datetime,

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -9,17 +9,11 @@ from src.modules.billing.segmentation import MeterValue, interpolate_meter_value
 def test_interpolate_exact_match():
     """T-72 Rule 1: Trùng mốc thì trả về đúng chỉ số gốc, interpolated = False."""
     mvs = [
-        MeterValue(
-            datetime(2023, 10, 25, 21, 50, tzinfo=timezone.utc), Decimal("1000")
-        ),
-        MeterValue(
-            datetime(2023, 10, 25, 22, 0, tzinfo=timezone.utc), Decimal("50123.75")
-        ),
-        MeterValue(
-            datetime(2023, 10, 25, 22, 10, tzinfo=timezone.utc), Decimal("60000")
-        ),
+        MeterValue(datetime(2023, 10, 25, 21, 50, tzinfo=UTC), Decimal(1000)),
+        MeterValue(datetime(2023, 10, 25, 22, 0, tzinfo=UTC), Decimal("50123.75")),
+        MeterValue(datetime(2023, 10, 25, 22, 10, tzinfo=UTC), Decimal(60000)),
     ]
-    target = datetime(2023, 10, 25, 22, 0, tzinfo=timezone.utc)
+    target = datetime(2023, 10, 25, 22, 0, tzinfo=UTC)
 
     val, is_interpolated = interpolate_meter_value(target, mvs)
 
@@ -34,18 +28,14 @@ def test_interpolate_linear_rounding():
     # Nửa thời gian (22:00) => 40000.4 + 10000 = 50000.4
     # Cần làm tròn lên 50000 Wh.
     mvs = [
-        MeterValue(
-            datetime(2023, 10, 25, 21, 50, tzinfo=timezone.utc), Decimal("40000.4")
-        ),
-        MeterValue(
-            datetime(2023, 10, 25, 22, 10, tzinfo=timezone.utc), Decimal("60000.4")
-        ),
+        MeterValue(datetime(2023, 10, 25, 21, 50, tzinfo=UTC), Decimal("40000.4")),
+        MeterValue(datetime(2023, 10, 25, 22, 10, tzinfo=UTC), Decimal("60000.4")),
     ]
-    target = datetime(2023, 10, 25, 22, 0, tzinfo=timezone.utc)
+    target = datetime(2023, 10, 25, 22, 0, tzinfo=UTC)
 
     val, is_interpolated = interpolate_meter_value(target, mvs)
 
-    assert val == Decimal("50000")
+    assert val == Decimal(50000)
     assert is_interpolated is True
 
 
@@ -56,25 +46,25 @@ def test_interpolate_round_half_up():
     # 22:10 -> 15 Wh
     # => Nội suy 50% = 7.5 Wh. ROUND_HALF_UP của 7.5 là 8.
     mvs = [
-        MeterValue(datetime(2023, 10, 25, 21, 50, tzinfo=timezone.utc), Decimal("0")),
-        MeterValue(datetime(2023, 10, 25, 22, 10, tzinfo=timezone.utc), Decimal("15")),
+        MeterValue(datetime(2023, 10, 25, 21, 50, tzinfo=UTC), Decimal(0)),
+        MeterValue(datetime(2023, 10, 25, 22, 10, tzinfo=UTC), Decimal(15)),
     ]
-    target = datetime(2023, 10, 25, 22, 0, tzinfo=timezone.utc)
+    target = datetime(2023, 10, 25, 22, 0, tzinfo=UTC)
 
     val, is_interpolated = interpolate_meter_value(target, mvs)
 
-    assert val == Decimal("8")
+    assert val == Decimal(8)
     assert is_interpolated is True
 
 
 def test_interpolate_out_of_bounds():
     """T-72 Rule 3: Nằm ngoài mảng đo thì văng lỗi."""
     mvs = [
-        MeterValue(datetime(2023, 10, 25, 22, 10, tzinfo=timezone.utc), Decimal("15")),
-        MeterValue(datetime(2023, 10, 25, 22, 20, tzinfo=timezone.utc), Decimal("20")),
+        MeterValue(datetime(2023, 10, 25, 22, 10, tzinfo=UTC), Decimal(15)),
+        MeterValue(datetime(2023, 10, 25, 22, 20, tzinfo=UTC), Decimal(20)),
     ]
 
     # 22:00 nằm trước 22:10
-    target = datetime(2023, 10, 25, 22, 0, tzinfo=timezone.utc)
+    target = datetime(2023, 10, 25, 22, 0, tzinfo=UTC)
     with pytest.raises(ValueError, match="nằm ngoài khoảng"):
         interpolate_meter_value(target, mvs)
