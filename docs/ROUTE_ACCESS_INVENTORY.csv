@@ -13,6 +13,7 @@ GET,/api/v1/admin/charging/pending,user,admin.charging.pending_messages,all,admi
 GET,/api/v1/admin/charging/sessions,user,admin.charging.sessions,all,admin,
 GET,/api/v1/admin/charging/sessions/{transaction_id}/events,user,admin.charging.session_events,all,admin,
 GET,/api/v1/admin/charging/sessions/{transaction_id}/samples,user,admin.charging.samples,all,admin,
+POST,/api/v1/admin/drivers/{driver_id}/wallet/manual-topups,user,admin.wallet.manual_topup,all,admin,
 GET,/api/v1/admin/ocpp/connections,user,admin.monitor.read,all,admin,
 GET,/api/v1/admin/ocpp/connections/events,user,admin.monitor.read,all,admin,
 GET,/api/v1/admin/roles,user,admin.list_roles,all,admin,

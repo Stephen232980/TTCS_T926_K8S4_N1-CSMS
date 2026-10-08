@@ -480,3 +480,25 @@ S-22 và S-24 thêm phiên hiện tại theo tài khoản đăng nhập, cập n
 ## Bổ sung API phục vụ thiết kế chủ trạm
 
 Ảnh đại diện trạm, tên trụ và cấu hình danh định đầu nối được mô tả trong [OWNER_UI_API_DELIVERY.md](OWNER_UI_API_DELIVERY.md). Migration `a4d901ce8207` bổ sung ảnh trạm. Đây là mở rộng API cho thiết kế đã chốt, chưa triển khai giao diện và không thay các story biểu giá/phân bổ công suất/doanh thu/đổi trạng thái trạm.
+
+## Quản trị nạp ví theo phiếu thu
+
+`POST /api/v1/admin/drivers/{driver_id}/wallet/manual-topups` dùng cookie
+`session`, quyền `admin.wallet.manual_topup`, phạm vi `all`, chỉ admin hoạt động.
+
+Body: `{"amount_vnd": 500000, "receipt_code": "PT-001"}`. Tiền phải là số
+nguyên dương (không nhận boolean, số lẻ hay chuỗi); tối đa mặc định 10.000.000
+đồng, cấu hình `WALLET_MANUAL_TOPUP_MAX_VND`. Mã phiếu 1–128 ký tự sau khi bỏ
+khoảng trắng ở hai đầu, phân biệt hoa/thường; từ chối trường thừa.
+
+201 trả `ledger_id`, `wallet_id`, `driver_id`, `amount_vnd`,
+`balance_after_vnd`, `receipt_code`, `actor_id`, `created_at`. Số dư trả về là
+số dư ngay sau dòng nạp này. Một giao dịch ghi cả sổ cái và nhật ký; không
+nạp nếu không ghi được nhật ký. Không tự tạo ví cho tài xế chưa có ví.
+
+401 chưa đăng nhập; 403 không đủ quyền; 404 `resource_not_found` nếu không
+có ví; 409 `receipt_already_used` nếu mã phiếu đã dùng, hoặc `wallet_locked`
+nếu ví khoá; 422 với tên trường `amount_vnd` nếu vượt giới hạn/tràn số dư,
+và lỗi schema cho các đầu vào sai khác. Gửi lại cùng phiếu, kể cả cùng ví và
+số tiền, trả 409. Mã phiếu duy nhất toàn hệ thống trong loại `manual_topup`;
+hai request cùng phiếu đồng thời chỉ một request thành công.
