@@ -41,6 +41,7 @@ POST,/api/v1/charging/sessions/{transaction_id}/close,user,ops.sessions.close,al
 GET,/api/v1/charging/sessions/{transaction_id}/events,user,owner.charging.session_events,owned,station_owner,
 GET,/api/v1/charging/sessions/{transaction_id}/samples,user,owner.charging.samples,owned,station_owner,
 GET,/api/v1/driver/charging/current,user,driver.current,own,driver,
+GET,/api/v1/driver/charging/current/events,user,driver.current,own,driver,
 GET,/api/v1/driver/charging/sessions/{session_id},user,driver.detail,own,driver,
 POST,/api/v1/driver/charging/start,user,driver.start,own,driver,
 GET,/api/v1/driver/stations,user,driver.discover_stations,own,driver,
