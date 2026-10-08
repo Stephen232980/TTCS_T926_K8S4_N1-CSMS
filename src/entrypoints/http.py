@@ -18,6 +18,7 @@ from src.modules.ocpp.control_router import router as control_router
 from src.modules.ocpp.lifecycle import ocpp_lifespan
 from src.modules.ocpp.monitor_router import router as monitor_router
 from src.modules.ocpp.router import router as ocpp_router
+from src.modules.pricing.router import router as tariff_router
 from src.modules.stations.charge_points_router import router as charge_points_router
 from src.modules.stations.discovery_router import router as discovery_router
 from src.modules.stations.photo_router import router as station_photo_router
@@ -39,6 +40,7 @@ app.include_router(identity_router)
 app.include_router(admin_accounts_router)
 app.include_router(admin_audit_router)
 app.include_router(stations_router)
+app.include_router(tariff_router)
 app.include_router(station_photo_router)
 app.include_router(charge_points_router)
 # S-06: serve the OCPP WebSocket endpoint from the existing ASGI application.
