@@ -89,7 +89,6 @@ async def monitoring_snapshot(
     query: MonitorQuery,
     now: datetime | None = None,
 ) -> MonitorResponse:
-    now = now or datetime.now(UTC)
     latest_errors = select(
         ConnectorError.connector_id,
         ConnectorError.error_code,
@@ -111,6 +110,7 @@ async def monitoring_snapshot(
             latest_errors.c.error_code,
             latest_errors.c.vendor_error_code,
             latest_errors.c.occurred_at,
+            func.statement_timestamp().label("observed_at"),
         )
         .join(Station, Station.id == ChargePoint.station_id)
         .outerjoin(
@@ -151,7 +151,9 @@ async def monitoring_snapshot(
         error,
         vendor_error,
         error_at,
+        observed_at,
     ) in rows:
+        snapshot_time = now if now is not None else observed_at
         if charger.id not in grouped:
             connection = connections.get(charger.id)
             online = (
@@ -159,7 +161,7 @@ async def monitoring_snapshot(
                 and charger.last_boot_at is not None
                 and (connection is None or connection.boot_accepted)
                 and charger.last_seen_at is not None
-                and now - charger.last_seen_at
+                and snapshot_time - charger.last_seen_at
                 <= timedelta(seconds=2 * charger.heartbeat_interval_seconds)
             )
             grouped[charger.id] = ConnectionResponse(

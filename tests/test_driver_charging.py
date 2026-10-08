@@ -288,3 +288,18 @@ async def test_idempotency_key_cannot_be_rebound(db_session, fixture):
         await remote_start(uuid4(), key, connector.id)
     assert error.value.status_code == 409
     assert conn.websocket.send_text.await_count == 1
+
+
+async def test_remote_start_checks_contact_using_database_time(
+    db_session, fixture, monkeypatch
+):
+    _, charger, connector, driver, _, conn, _ = fixture
+    database_now = charger.last_seen_at + timedelta(
+        seconds=2 * charger.heartbeat_interval_seconds + 1
+    )
+    clock = AsyncMock(return_value=database_now)
+    monkeypatch.setattr(driver_service, "database_time", clock)
+    result = await remote_start(driver.id, uuid4(), connector.id)
+    assert result["status"] == "Offline"
+    assert conn.websocket.send_text.await_count == 0
+    clock.assert_awaited_once()

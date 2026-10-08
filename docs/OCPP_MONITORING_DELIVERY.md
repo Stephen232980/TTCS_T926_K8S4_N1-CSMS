@@ -45,3 +45,35 @@ Trụ DEMO-OCPP-01 ngoại tuyến vì simulator `--hold 3600` đã hết thời
 Định vị là phần bản đồ, không thuộc S-09–S-12. Trên máy người dùng, Chrome/Edge đều timeout dù đã cấp quyền; chưa xác định được nguyên nhân nguồn định vị. Đã sửa giao diện phân biệt từ chối quyền/nguồn vị trí không khả dụng/timeout; báo đang lấy vị trí, chặn yêu cầu lặp, chờ tối đa 30 giây, cho phép kết quả cache dưới một phút, giữ chọn vị trí thủ công và bỏ qua callback sau unmount. Kiểm thử lỗi/retry, chọn thủ công, thành công và unmount đạt; chưa xác nhận lấy vị trí thực tế trên máy người dùng.
 
 Kết quả rà soát: 225 backend và 120 frontend tests đạt; lint/build/Ruff/mypy đạt, migration nâng/hạ/nâng lại đạt trên DB kiểm thử riêng. Không có sửa backend giám sát sau rà soát; bổ sung kiểm thử trạng thái đồng thời, cải thiện simulator và xử lý lỗi định vị. Chưa commit/push/merge.
+
+
+## Bổ sung T-26 — thống nhất giờ database
+
+`last_seen_at` được ghi bằng PostgreSQL `clock_timestamp()` sau khi lấy
+khoá dòng trụ. Job ngoại tuyến lấy một mốc giờ database cho mỗi lượt quét,
+giữ ngưỡng quá hai chu kỳ heartbeat, SKIP LOCKED và cập nhật idempotent.
+Các tham số `now` chỉ phục vụ kiểm thử có mốc thời gian cố định.
+
+Snapshot theo dõi lấy `statement_timestamp()` trong cùng truy vấn hiện có
+(một truy vấn cho toàn bộ trụ), để các dòng cùng mốc thời gian. Phép kiểm
+ngoại tuyến trước RemoteStart cũng đọc giờ database. Deadline lệnh, kiểm
+phiên đăng nhập và timestamp lỗi/trạng thái OCPP giữ phạm vi hiện hành.
+
+Không thêm migration, API hoặc thay đổi giao diện. Không triển khai T-20,
+T-40 hay T-48. Kiểm thử phủ đồng hồ ứng dụng lệch ±7 ngày, đúng ranh giới
+hai chu kỳ, đọc clock một lần mỗi lượt quét, clock trong giao dịch đã mở,
+nhánh trụ đã khoá và rollback của người gọi. Luồng RemoteStart có test
+khẳng định không gửi lệnh khi giờ database cho thấy liên lạc đã hết hạn.
+
+Kiểm chứng local 08/10/2026: 104 test liên quan đạt trên PostgreSQL 16
+riêng, gồm 8 ca mới và hai ca latency 20 trụ; 4 cảnh báo deprecation có sẵn.
+Ruff lint, format (259 file), mypy (92 file) và diff check đạt.
+Database thử rỗng upgrade đến head b150015a2026 đạt.
+
+Hồi quy backend đầy đủ sau triển khai, trên database PostgreSQL 16 thử riêng:
+811 passed, 2 deselected, 4 cảnh báo deprecation có sẵn, 185,08 giây.
+Hai ca deselected đã chạy riêng trước bộ chức năng theo cấu hình CI:
+- MeterValues 20 trụ: đạt, độ trễ tối đa 104 ms.
+- WebSocket thật 20 trụ, ba chu kỳ: đạt, tối đa 129,9 ms.
+Tổng 813 ca backend đạt; không có ca chức năng/latency bị bỏ qua.
+CI của PR và nghiệm thu staging chưa được chạy trong lượt này.
