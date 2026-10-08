@@ -9,7 +9,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 from sqlalchemy import and_, func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -28,6 +28,10 @@ from src.modules.identity.policy_routing import PolicyRoute
 from src.modules.identity.repository import IdentityRepository
 from src.modules.identity.security import hash_session_token
 from src.modules.ocpp.connection_registry import ocpp_connections
+from src.modules.stations.connector_status import (
+    ConnectorStatusGroup,
+    connector_status_group,
+)
 from src.modules.stations.models import ChargePoint, Connector, ConnectorError, Station
 from src.platform.database.session import SessionFactory, get_db_session
 
@@ -53,6 +57,11 @@ class ConnectorResponse(BaseModel):
     last_error_code: str | None
     last_vendor_error_code: str | None
     last_error_at: datetime | None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def status_group(self) -> ConnectorStatusGroup:
+        return connector_status_group(self.status)
 
 
 class ConnectionResponse(BaseModel):

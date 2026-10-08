@@ -20,6 +20,7 @@ from src.modules.identity.dependencies import (
     authorize_request,
 )
 from src.modules.identity.policy_routing import PolicyRoute
+from src.modules.stations.connector_status import connector_status_group
 from src.modules.stations.models import ChargePoint, Connector, Station
 from src.platform.database.session import get_db_session
 
@@ -162,6 +163,7 @@ async def connectors(station_id: UUID, session: Database) -> dict[str, object]:
                 "charge_point_code": row[1].code,
                 "connector_number": row[0].connector_number,
                 "status": row[0].status,
+                "status_group": connector_status_group(row[0].status),
             }
             for row in rows
         ]

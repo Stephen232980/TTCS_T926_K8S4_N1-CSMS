@@ -206,6 +206,13 @@ async def process_call(
                 )
                 response = encode_frame(Frame(3, frame.message_id, {}))
         except (ValidationError, ValueError):
+            if frame.action == "StatusNotification":
+                # Do not log arbitrary values or payloads: malformed fields may
+                # contain identifiers, tokens or log-injection characters.
+                logger.warning(
+                    "ocpp_invalid_status_notification charger_id=%s",
+                    charge_point.id,
+                )
             response = error_frame(
                 frame.message_id,
                 "PropertyConstraintViolation",

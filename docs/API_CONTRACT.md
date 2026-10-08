@@ -537,3 +537,31 @@ charging_session và reference_id là mã phiên dạng chuỗi chuẩn.
 Sửa cache hoặc mở khoá đã đạt trạng thái mong muốn không tạo thêm audit.
 Adjustment không thay thế dòng trừ phí sai/thiếu, nên không làm các kiểm tra
 hoá đơn sai trở thành đạt chỉ vì số dư tổng đã khớp.
+
+
+## Nhóm trạng thái đầu nối
+
+Các response đầu nối trong API quản lý trạm/trụ, snapshot/SSE theo dõi OCPP
+và `GET /api/v1/driver/stations/{station_id}/connectors` có thêm
+`status_group` (chỉ đọc, tính từ `status`). Trường `status` và trạng thái
+OCPP chi tiết giữ nguyên hợp đồng hiện tại.
+
+| status | status_group | Ý nghĩa hiển thị |
+| --- | --- | --- |
+| Available | available | Rảnh |
+| Preparing, Charging, SuspendedEV, SuspendedEVSE, Finishing | occupied | Đang sử dụng |
+| Reserved | reserved | Đặt chỗ |
+| Unavailable | unavailable | Không khả dụng |
+| Faulted | faulted | Lỗi |
+| unknown, NULL hoặc giá trị không nhận diện | unknown | Chưa rõ |
+
+API theo dõi ngoại tuyến trả `status='unknown'` và `status_group='unknown'`
+kể cả khi database còn quan sát Available cũ. Các API cấu hình đầu nối
+vẫn mô tả trạng thái được lưu; nhóm tổng hợp không phải quyền bắt đầu sạc.
+Quyết định bắt đầu phiên tiếp tục kiểm trạm, liên lạc, đầu nối và phiên mở
+ở dịch vụ hiện hành, không dựa vào status_group.
+
+StatusNotification không hợp lệ tiếp tục nhận PropertyConstraintViolation,
+không ghi đè trạng thái hợp lệ. Log chẩn đoán chỉ ghi mã trụ nội bộ và mã
+sự kiện; không ghi payload hoặc giá trị trạng thái tuỳ ý. Không thêm bảng
+hay cột trạng thái tổng hợp.

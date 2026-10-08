@@ -202,6 +202,11 @@ async def test_driver_endpoint_roles_body_and_empty_state(db_session, fixture):
         assert (
             await client.get(f"/api/v1/driver/stations/{station.id}/connectors")
         ).json()["items"][0]["id"] == str(connector.id)
+        connector_payload = (
+            await client.get(f"/api/v1/driver/stations/{station.id}/connectors")
+        ).json()["items"][0]
+        assert connector_payload["status"] == "Available"
+        assert connector_payload["status_group"] == "available"
         assert (
             await client.post(
                 "/api/v1/driver/charging/start",
