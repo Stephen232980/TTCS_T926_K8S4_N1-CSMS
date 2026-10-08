@@ -145,7 +145,7 @@ def chia_doan(
 
         current_date += timedelta(days=1)
 
-    sorted_points = sorted(list(cut_points))
+    sorted_points = sorted(cut_points)
     segments = []
 
     for i in range(len(sorted_points) - 1):

@@ -2,8 +2,6 @@ from datetime import date, datetime
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
-import pytest
-
 from src.modules.billing.segmentation import MeterValue, TariffFrame, chia_doan
 
 
@@ -112,9 +110,9 @@ def test_case_5_exact_decimal() -> None:
     start = datetime(2023, 10, 25, 21, 50, tzinfo=tz)
     end = datetime(2023, 10, 25, 22, 10, tzinfo=tz)
     mvs = [
-        MeterValue(start, Decimal("40000")),
+        MeterValue(start, Decimal(40000)),
         MeterValue(datetime(2023, 10, 25, 22, 0, tzinfo=tz), Decimal("50123.75")),
-        MeterValue(end, Decimal("60000")),
+        MeterValue(end, Decimal(60000)),
     ]
     tariffs = {
         date(2023, 10, 25): [
@@ -127,7 +125,7 @@ def test_case_5_exact_decimal() -> None:
     assert len(segments) == 2
     assert segments[0]["end_interpolated"] is False
     assert segments[1]["start_interpolated"] is False
-    assert segments[0]["energy_consumed_wh"] == Decimal("50123.75") - Decimal("40000")
+    assert segments[0]["energy_consumed_wh"] == Decimal("50123.75") - Decimal(40000)
 
 
 def test_case_6_segment_amount_rounding() -> None:
@@ -137,9 +135,9 @@ def test_case_6_segment_amount_rounding() -> None:
     end = datetime(2023, 10, 25, 23, 0, tzinfo=tz)
 
     mvs = [
-        MeterValue(start, Decimal("0")),
+        MeterValue(start, Decimal(0)),
         MeterValue(datetime(2023, 10, 25, 22, 0, tzinfo=tz), Decimal("1166.5")),
-        MeterValue(end, Decimal("2333")),
+        MeterValue(end, Decimal(2333)),
     ]
     tariffs = {
         date(2023, 10, 25): [
