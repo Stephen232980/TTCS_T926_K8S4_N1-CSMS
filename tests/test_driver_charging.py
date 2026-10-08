@@ -202,6 +202,11 @@ async def test_driver_endpoint_roles_body_and_empty_state(db_session, fixture):
         assert (
             await client.get(f"/api/v1/driver/stations/{station.id}/connectors")
         ).json()["items"][0]["id"] == str(connector.id)
+        connector_payload = (
+            await client.get(f"/api/v1/driver/stations/{station.id}/connectors")
+        ).json()["items"][0]
+        assert connector_payload["status"] == "Available"
+        assert connector_payload["status_group"] == "available"
         assert (
             await client.post(
                 "/api/v1/driver/charging/start",
@@ -288,3 +293,18 @@ async def test_idempotency_key_cannot_be_rebound(db_session, fixture):
         await remote_start(uuid4(), key, connector.id)
     assert error.value.status_code == 409
     assert conn.websocket.send_text.await_count == 1
+
+
+async def test_remote_start_checks_contact_using_database_time(
+    db_session, fixture, monkeypatch
+):
+    _, charger, connector, driver, _, conn, _ = fixture
+    database_now = charger.last_seen_at + timedelta(
+        seconds=2 * charger.heartbeat_interval_seconds + 1
+    )
+    clock = AsyncMock(return_value=database_now)
+    monkeypatch.setattr(driver_service, "database_time", clock)
+    result = await remote_start(driver.id, uuid4(), connector.id)
+    assert result["status"] == "Offline"
+    assert conn.websocket.send_text.await_count == 0
+    clock.assert_awaited_once()
