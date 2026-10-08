@@ -217,3 +217,35 @@ def chia_doan(
         )
 
     return segments
+
+
+def tinh_tien_theo_ngay(
+    session_start: datetime,
+    session_end: datetime,
+    meter_values: list[MeterValue],
+    daily_tariffs: dict[date, list[TariffFrame]],
+    station_timezone: str,
+) -> dict[date, dict[str, Any]]:
+    """
+    Task T-75 (S-31): Tính tiền và gom nhóm các đoạn (segments) theo từng ngày.
+    Mỗi ngày sẽ là một nhóm riêng để tính hoá đơn theo ngày.
+    """
+    segments = chia_doan(
+        session_start, session_end, meter_values, daily_tariffs, station_timezone
+    )
+
+    result: dict[date, dict[str, Any]] = {}
+    for seg in segments:
+        d = seg["local_date"]
+        if d not in result:
+            result[d] = {
+                "date": d,
+                "segments": [],
+                "total_energy_wh": Decimal(0),
+                "total_amount_vnd": 0,
+            }
+        result[d]["segments"].append(seg)
+        result[d]["total_energy_wh"] += seg["energy_consumed_wh"]
+        result[d]["total_amount_vnd"] += seg["amount_vnd"]
+
+    return result
