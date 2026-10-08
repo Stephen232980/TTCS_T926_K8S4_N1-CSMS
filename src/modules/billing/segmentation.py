@@ -1,6 +1,7 @@
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
+from zoneinfo import ZoneInfo
 
 
 class MeterValue:
@@ -87,7 +88,132 @@ def chia_doan(
     station_timezone: str,
 ) -> list[dict[str, Any]]:
     """
-    Hàm chia đoạn (S-30). Đang trong quá trình triển khai.
-    (Sẽ gọi hàm interpolate_meter_value cho các mốc chuyển giờ/đổi ngày).
+    Hàm chia đoạn (S-30).
+    Cắt phiên sạc thành các đoạn dựa trên ranh giới khung giờ biểu giá và ranh giới nửa đêm.
     """
-    return []
+    if session_start >= session_end:
+        return []
+
+    tz = ZoneInfo(station_timezone)
+    start_local = session_start.astimezone(tz)
+    end_local = session_end.astimezone(tz)
+
+    cut_points = set()
+    cut_points.add(session_start)
+    cut_points.add(session_end)
+
+    current_date = start_local.date()
+    end_date = end_local.date()
+
+    while current_date <= end_date:
+        # Nửa đêm
+        midnight = datetime.combine(current_date, time(0, 0), tzinfo=tz)
+        if session_start < midnight < session_end:
+            cut_points.add(midnight)
+
+        # Biên biểu giá
+        tariffs = daily_tariffs.get(current_date, [])
+        for tf in tariffs:
+            st_parts = list(map(int, tf.start_time.split(":")))
+            et_parts = list(map(int, tf.end_time.split(":")))
+
+            st_h, st_m, st_s = (
+                st_parts[0],
+                st_parts[1],
+                st_parts[2] if len(st_parts) > 2 else 0,
+            )
+            et_h, et_m, et_s = (
+                et_parts[0],
+                et_parts[1],
+                et_parts[2] if len(et_parts) > 2 else 0,
+            )
+
+            st_dt = datetime.combine(current_date, time(st_h, st_m, st_s), tzinfo=tz)
+            if et_h == 24:
+                et_dt = datetime.combine(
+                    current_date + timedelta(days=1), time(0, 0), tzinfo=tz
+                )
+            else:
+                et_dt = datetime.combine(
+                    current_date, time(et_h, et_m, et_s), tzinfo=tz
+                )
+
+            if session_start < st_dt < session_end:
+                cut_points.add(st_dt)
+            if session_start < et_dt < session_end:
+                cut_points.add(et_dt)
+
+        current_date += timedelta(days=1)
+
+    sorted_points = sorted(list(cut_points))
+    segments = []
+
+    for i in range(len(sorted_points) - 1):
+        seg_start = sorted_points[i]
+        seg_end = sorted_points[i + 1]
+
+        # Chọn ngày local (lấy trung điểm để an toàn nằm trong đoạn)
+        mid_point = seg_start + (seg_end - seg_start) / 2
+        seg_local_date = mid_point.astimezone(tz).date()
+
+        applied_tariff = None
+        for tf in daily_tariffs.get(seg_local_date, []):
+            st_parts = list(map(int, tf.start_time.split(":")))
+            et_parts = list(map(int, tf.end_time.split(":")))
+
+            st_h, st_m, st_s = (
+                st_parts[0],
+                st_parts[1],
+                st_parts[2] if len(st_parts) > 2 else 0,
+            )
+            et_h, et_m, et_s = (
+                et_parts[0],
+                et_parts[1],
+                et_parts[2] if len(et_parts) > 2 else 0,
+            )
+
+            st_dt = datetime.combine(seg_local_date, time(st_h, st_m, st_s), tzinfo=tz)
+            if et_h == 24:
+                et_dt = datetime.combine(
+                    seg_local_date + timedelta(days=1), time(0, 0), tzinfo=tz
+                )
+            else:
+                et_dt = datetime.combine(
+                    seg_local_date, time(et_h, et_m, et_s), tzinfo=tz
+                )
+
+            if st_dt <= mid_point < et_dt:
+                applied_tariff = tf
+                break
+
+        if not applied_tariff:
+            # Dự phòng nếu không tìm thấy giá (ít xảy ra vì input chuẩn)
+            continue
+
+        start_wh, start_interp = interpolate_meter_value(seg_start, meter_values)
+        end_wh, end_interp = interpolate_meter_value(seg_end, meter_values)
+
+        energy_consumed_wh = end_wh - start_wh
+
+        # Tính tiền T-71
+        price = applied_tariff.price_vnd_per_kwh
+        amount = (energy_consumed_wh * price / Decimal(1000)).quantize(
+            Decimal(1), rounding=ROUND_HALF_UP
+        )
+
+        segments.append(
+            {
+                "local_date": seg_local_date,
+                "start_time": seg_start,
+                "end_time": seg_end,
+                "energy_consumed_wh": energy_consumed_wh,
+                "price_vnd_per_kwh": price,
+                "amount_vnd": int(amount),
+                "tariff_version": applied_tariff.tariff_version,
+                "frame_label": applied_tariff.frame_label,
+                "start_interpolated": start_interp,
+                "end_interpolated": end_interp,
+            }
+        )
+
+    return segments
