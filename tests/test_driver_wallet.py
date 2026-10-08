@@ -229,7 +229,7 @@ async def test_two_drivers_have_separate_balances_and_transactions(
         ) as client:
             for user in [driver_user, other]:
                 actor = CurrentActor(user_id=user.id, roles=frozenset({"driver"}))
-                app.dependency_overrides[get_current_actor] = lambda: actor
+                app.dependency_overrides[get_current_actor] = lambda actor=actor: actor
                 balance = await client.get("/api/v1/driver/wallet")
                 ledger = await client.get("/api/v1/driver/wallet/transactions")
                 assert balance.status_code == ledger.status_code == 200
