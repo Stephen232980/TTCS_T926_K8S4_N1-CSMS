@@ -23,6 +23,7 @@ from src.modules.stations.charge_points_router import router as charge_points_ro
 from src.modules.stations.discovery_router import router as discovery_router
 from src.modules.stations.photo_router import router as station_photo_router
 from src.modules.stations.router import router as stations_router
+from src.modules.wallet.admin_router import router as admin_wallet_router
 from src.modules.wallet.driver_router import router as driver_wallet_router
 from src.platform.database.session import get_db_session
 
@@ -50,6 +51,7 @@ app.include_router(discovery_router)
 app.include_router(charging_router)
 app.include_router(driver_charging_router)
 app.include_router(driver_wallet_router)
+app.include_router(admin_wallet_router)
 app.include_router(control_router)
 app.include_router(health_router)
 app.include_router(
