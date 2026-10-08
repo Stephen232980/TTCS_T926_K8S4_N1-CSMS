@@ -7,9 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.identity.authorization import user_policy
 from src.modules.identity.dependencies import RequestScope, authorize_request
 from src.modules.identity.policy_routing import PolicyRoute
-from src.modules.pricing.bands import BandInput
+from src.modules.pricing.bands import TariffBandsError
 from src.modules.pricing.creation import tao_bieu_gia
-from src.modules.pricing.schemas import FlatTariffCreateRequest, TariffResponse
+from src.modules.pricing.schemas import TariffCreateRequest, TariffResponse
 from src.modules.pricing.service import (
     TariffDuplicateDateError,
     TariffEffectiveDateError,
@@ -39,9 +39,9 @@ Database = Annotated[AsyncSession, Depends(get_db_session)]
     },
 )
 @user_policy("owner.tariff.manage", "owned", "station_owner")
-async def create_flat_tariff(
+async def create_tariff(
     station_id: UUID,
-    request: FlatTariffCreateRequest,
+    request: TariffCreateRequest,
     scope: RequestScope,
     db: Database,
 ) -> TariffResponse:
@@ -53,7 +53,7 @@ async def create_flat_tariff(
             effective_from=request.effective_from,
             idle_rate_vnd_per_minute=request.idle_rate_vnd_per_minute,
             grace_minutes=request.grace_minutes,
-            bands=[BandInput(0, 1440, request.energy_rate_vnd_per_kwh, request.label)],
+            bands=request.band_inputs(),
         )
         await db.commit()
         return response
@@ -72,5 +72,20 @@ async def create_flat_tariff(
                     "msg": str(error),
                     "type": "value_error",
                 }
+            ],
+        ) from error
+    except TariffBandsError as error:
+        raise HTTPException(
+            422,
+            [
+                {
+                    "loc": ["body", "bands"],
+                    "type": issue.code,
+                    "msg": issue.message,
+                    "input_indices": list(issue.input_indices),
+                    "start_min": issue.start_min,
+                    "end_min": issue.end_min,
+                }
+                for issue in error.issues
             ],
         ) from error

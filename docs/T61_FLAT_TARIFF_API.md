@@ -1,5 +1,9 @@
 # S-28 / T-61 — API tạo biểu giá một khung
 
+T-66 mở rộng cùng endpoint để nhận nhiều khung; xem
+[contract nhiều khung](T66_MULTI_BAND_TARIFF_API.md). Request một khung dưới
+đây vẫn được hỗ trợ. T-66 không đổi quy tắc quyền hoặc ngày hiệu lực.
+
 `POST /api/v1/owner/stations/{station_id}/tariffs`
 
 Chỉ `station_owner`, quyền `owner.tariff.manage`, scope `owned`.
