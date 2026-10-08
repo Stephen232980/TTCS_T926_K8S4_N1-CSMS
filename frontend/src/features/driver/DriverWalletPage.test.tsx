@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { DriverWalletApi, DriverWallet, WalletLedgerList } from './api/driverWalletApi'
@@ -122,11 +122,54 @@ describe('DriverWalletPage (S-40 / T-100)', () => {
       expect(getTransactionsMock).toHaveBeenCalledWith({
         limit: 10,
         cursor: 1,
-      })
+      }, expect.any(AbortSignal))
     })
 
     expect(await screen.findByText('Nạp thử nghiệm tài khoản mới')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Tải thêm giao dịch cũ hơn' })).not.toBeInTheDocument()
+  })
+
+  it('does not invent wallet data after an initial failure and supports retry', async () => {
+    const api: DriverWalletApi = {
+      getWallet: vi.fn().mockRejectedValueOnce(new Error('Mất kết nối')).mockResolvedValue(mockWallet),
+      getTransactions: vi.fn().mockResolvedValue(mockLedgerPage1),
+    }
+    render(<DriverWalletPage walletApi={api} />)
+    expect(await screen.findByRole('alert')).toHaveTextContent('Mất kết nối')
+    for (const text of ['0 ₫', 'Tạm khóa', 'Hoạt động']) expect(screen.queryByText(text)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Chưa có giao dịch/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Số dư hiện tại thấp hơn/)).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Thử lại' }))
+    expect(await screen.findByText('250.000 ₫')).toBeInTheDocument()
+  })
+
+  it('locks refresh during pagination then replaces the list on refresh', async () => {
+    let resolvePage!: (page: WalletLedgerList) => void
+    const pending = new Promise<WalletLedgerList>(resolve => { resolvePage = resolve })
+    const getTransactions = vi.fn().mockResolvedValueOnce(mockLedgerPage1).mockReturnValueOnce(pending).mockResolvedValueOnce(mockLedgerPage1)
+    render(<DriverWalletPage walletApi={{ getWallet: vi.fn().mockResolvedValue(mockWallet), getTransactions }} />)
+    await userEvent.click(await screen.findByRole('button', { name: 'Tải thêm giao dịch cũ hơn' }))
+    const refresh = screen.getByRole('button', { name: 'Làm mới' })
+    expect(refresh).toBeDisabled()
+    await userEvent.click(refresh)
+    expect(getTransactions).toHaveBeenCalledTimes(2)
+    await act(async () => resolvePage(mockLedgerPage2))
+    expect(screen.getByText('Nạp thử nghiệm tài khoản mới')).toBeInTheDocument()
+    await userEvent.click(refresh)
+    await waitFor(() => expect(screen.queryByText('Nạp thử nghiệm tài khoản mới')).not.toBeInTheDocument())
+    expect(screen.getAllByText('Mã dòng #2')).toHaveLength(1)
+  })
+
+  it('opens the referenced session and explains unavailable topup details', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ id: 901, station_name: 'Trạm A', energy_kwh: 12 })))
+    try {
+      const page = { ...mockLedgerPage1, items: mockLedgerPage1.items.map(tx => tx.id === 2 ? { ...tx, reference_type: 'charging_session', reference_id: '901' } : tx) }
+      render(<DriverWalletPage walletApi={{ getWallet: vi.fn().mockResolvedValue(mockWallet), getTransactions: vi.fn().mockResolvedValue(page) }} />)
+      await userEvent.click(await screen.findByRole('button', { name: 'Xem phiên sạc #901' }))
+      expect(fetchMock).toHaveBeenCalledWith('/api/v1/driver/charging/sessions/901', { credentials: 'include', signal: expect.any(AbortSignal) })
+      expect(await screen.findByRole('region', { name: 'Chi tiết phiên sạc' })).toHaveTextContent('Trạm A · 12 kWh')
+      expect(screen.getByText(/Chi tiết lần nạp chưa khả dụng/)).toBeInTheDocument()
+    } finally { fetchMock.mockRestore() }
   })
 
   it('opens and closes the topup dialog modal', async () => {

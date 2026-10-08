@@ -63,25 +63,29 @@ async def operator_user(db_session):
 
 
 @pytest.mark.asyncio
-async def test_wallet_unauthorized_for_anonymous():
+@pytest.mark.parametrize(
+    "path", ["/api/v1/driver/wallet", "/api/v1/driver/wallet/transactions"]
+)
+async def test_wallet_unauthorized_for_anonymous(path):
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
-        res = await client.get("/api/v1/driver/wallet")
+        res = await client.get(path)
         assert res.status_code == 401
 
 
 @pytest.mark.asyncio
-async def test_wallet_forbidden_for_non_driver(operator_user):
-    actor = CurrentActor(
-        user_id=operator_user.id, roles=frozenset({"operator"})
-    )
+@pytest.mark.parametrize(
+    "path", ["/api/v1/driver/wallet", "/api/v1/driver/wallet/transactions"]
+)
+async def test_wallet_forbidden_for_non_driver(path):
+    actor = CurrentActor(user_id=uuid4(), roles=frozenset({"operator"}))
     app.dependency_overrides[get_current_actor] = lambda: actor
     try:
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
-            res = await client.get("/api/v1/driver/wallet")
+            res = await client.get(path)
             assert res.status_code == 403
     finally:
         app.dependency_overrides.pop(get_current_actor, None)
@@ -138,9 +142,7 @@ async def test_driver_wallet_get_and_cursor_pagination(db_session, driver_user):
             assert data["debt_amount_vnd"] == 0
 
             # 2. Get Ledger Transactions (limit=2)
-            res_tx = await client.get(
-                "/api/v1/driver/wallet/transactions?limit=2"
-            )
+            res_tx = await client.get("/api/v1/driver/wallet/transactions?limit=2")
             assert res_tx.status_code == 200
             tx_data = res_tx.json()
             assert len(tx_data["items"]) == 2
@@ -189,5 +191,51 @@ async def test_driver_wallet_negative_debt_warning(db_session, driver_user):
             assert data["is_negative"] is True
             assert data["debt_amount_vnd"] == 75000
             assert data["debt_amount"] == 75000
+    finally:
+        app.dependency_overrides.pop(get_current_actor, None)
+
+
+@pytest.mark.asyncio
+async def test_two_drivers_have_separate_balances_and_transactions(
+    db_session, driver_user
+):
+    other = User(
+        email=f"other-{uuid4().hex}@example.com",
+        password_hash=hash_password("Password123!"),
+        status="active",
+    )
+    db_session.add(other)
+    await db_session.flush()
+    role = await db_session.scalar(select(Role).where(Role.code == "driver"))
+    db_session.add(UserRole(user_id=other.id, role_id=role.id, is_default=True))
+    expected = {}
+    for user, amount in [(driver_user, 120000), (other, 90000)]:
+        wallet = await ensure_driver_wallet(db_session, user.id)
+        await db_session.commit()
+        reference = f"PAY-{uuid4().hex}"
+        await ghi_so_cai(
+            db_session,
+            wallet_id=wallet.id,
+            entry_type="gateway_topup",
+            amount_vnd=amount,
+            reference_type="payment",
+            reference_id=reference,
+        )
+        expected[user.id] = (amount, reference)
+    await db_session.commit()
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            for user in [driver_user, other]:
+                actor = CurrentActor(user_id=user.id, roles=frozenset({"driver"}))
+                app.dependency_overrides[get_current_actor] = lambda: actor
+                balance = await client.get("/api/v1/driver/wallet")
+                ledger = await client.get("/api/v1/driver/wallet/transactions")
+                assert balance.status_code == ledger.status_code == 200
+                assert balance.json()["balance_vnd"] == expected[user.id][0]
+                assert [item["reference_id"] for item in ledger.json()["items"]] == [
+                    expected[user.id][1]
+                ]
     finally:
         app.dependency_overrides.pop(get_current_actor, None)

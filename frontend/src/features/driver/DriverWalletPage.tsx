@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Icon } from '../../components/icons/Icon'
 import {
   HttpDriverWalletApi,
@@ -46,29 +46,43 @@ export function DriverWalletPage({
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState('')
+  const request = useRef<AbortController | null>(null)
+  const busy = useRef(false)
+  const detailRequest = useRef<AbortController | null>(null)
+  const [sessionDetail, setSessionDetail] = useState<{ id: number; station_name: string; energy_kwh: number | string } | null>(null)
+  const [detailError, setDetailError] = useState('')
   const [showTopupModal, setShowTopupModal] = useState(false)
 
   const loadInitialData = useCallback(async (signal?: AbortSignal) => {
+    if (busy.current) return
+    busy.current = true
+    const controller = new AbortController()
+    request.current = controller
+    signal?.addEventListener('abort', () => controller.abort(), { once: true })
     setLoading(true)
     setError('')
     try {
       const [walletData, txData] = await Promise.all([
-        walletApi.getWallet(signal),
-        walletApi.getTransactions({ limit: 10 }, signal),
+        walletApi.getWallet(controller.signal),
+        walletApi.getTransactions({ limit: 10 }, controller.signal),
       ])
+      if (controller.signal.aborted || request.current !== controller) return
       setWallet(walletData)
       setTransactions(txData.items)
       setNextCursor(txData.next_cursor)
       setHasMore(txData.has_more)
     } catch (err: unknown) {
-      if (err instanceof DOMException && err.name === 'AbortError') return
+      if (controller.signal.aborted || request.current !== controller) return
       setError(
         err instanceof Error
           ? err.message
           : 'Không thể tải thông tin ví. Vui lòng thử lại.',
       )
     } finally {
-      setLoading(false)
+      if (request.current === controller) {
+        busy.current = false
+        if (!controller.signal.aborted) setLoading(false)
+      }
     }
   }, [walletApi])
 
@@ -80,28 +94,41 @@ export function DriverWalletPage({
     return () => {
       window.clearTimeout(timer)
       controller.abort()
+      request.current?.abort()
+      detailRequest.current?.abort()
+      request.current = null
+      busy.current = false
     }
   }, [loadInitialData])
 
   const handleLoadMore = async () => {
-    if (!nextCursor || loadingMore) return
+    if (nextCursor === null || busy.current) return
+    busy.current = true
+    const controller = new AbortController()
+    request.current = controller
+    setError('')
     setLoadingMore(true)
     try {
       const txData = await walletApi.getTransactions({
         limit: 10,
         cursor: nextCursor,
-      })
+      }, controller.signal)
+      if (controller.signal.aborted || request.current !== controller) return
       setTransactions((prev) => [...prev, ...txData.items])
       setNextCursor(txData.next_cursor)
       setHasMore(txData.has_more)
     } catch (err: unknown) {
+      if (controller.signal.aborted || request.current !== controller) return
       setError(
         err instanceof Error
           ? err.message
           : 'Không thể tải thêm giao dịch. Vui lòng thử lại.',
       )
     } finally {
-      setLoadingMore(false)
+      if (request.current === controller) {
+        busy.current = false
+        if (!controller.signal.aborted) setLoadingMore(false)
+      }
     }
   }
 
@@ -117,7 +144,7 @@ export function DriverWalletPage({
         <button
           className="secondary-button driver-wallet-refresh-btn"
           onClick={() => loadInitialData()}
-          disabled={loading}
+          disabled={loading || loadingMore}
           title="Làm mới dữ liệu"
         >
           <Icon name="session" />
@@ -128,12 +155,14 @@ export function DriverWalletPage({
       {error && (
         <div className="driver-wallet-alert error" role="alert">
           <p>{error}</p>
-          <button className="text-button" onClick={() => loadInitialData()}>
+          <button className="text-button" disabled={loading || loadingMore} onClick={() => loadInitialData()}>
             Thử lại
           </button>
         </div>
       )}
 
+      {loading && !wallet && <p role="status">Đang tải thông tin ví…</p>}
+      {wallet && <>
       {/* Main Balance Card */}
       <div className={`driver-balance-card ${isNegative ? 'negative' : ''}`}>
         <div className="driver-balance-header">
@@ -194,7 +223,7 @@ export function DriverWalletPage({
       <div className="driver-tx-history-section">
         <div className="driver-tx-header">
           <h3>Lịch sử giao dịch</h3>
-          <span className="tx-count-hint">Phân trang theo mã dòng</span>
+
         </div>
 
         {loading && transactions.length === 0 ? (
@@ -266,7 +295,25 @@ export function DriverWalletPage({
                       <span className="tx-id-badge">Mã dòng #{tx.id}</span>
                       {tx.reference_id && (
                         <span className="tx-ref-badge">
-                          Ref: {tx.reference_id}
+                          {['charging_session', 'session'].includes(tx.reference_type ?? '') && /^\d+$/.test(tx.reference_id) ? (
+                            <button className="text-button" onClick={async () => {
+                              detailRequest.current?.abort()
+                              const controller = new AbortController()
+                              detailRequest.current = controller
+                              setSessionDetail(null)
+                              setDetailError('Đang tải phiên sạc…')
+                              try {
+                                const response = await fetch(`${import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''}/api/v1/driver/charging/sessions/${encodeURIComponent(tx.reference_id!)}`, { credentials: 'include', signal: controller.signal })
+                                if (!response.ok) throw new Error('Không thể mở phiên sạc. Vui lòng thử lại.')
+                                const data = await response.json()
+                                if (controller.signal.aborted) return
+                                setSessionDetail(data)
+                                setDetailError('')
+                              } catch (err) { if (controller.signal.aborted) return; setDetailError(err instanceof Error ? err.message : 'Không thể mở phiên sạc.') }
+                            }}>Xem phiên sạc #{tx.reference_id}</button>
+                          ) : (
+                            <>Mã tham chiếu: {tx.reference_id}{['payment', 'payment_gateway', 'manual_receipt'].includes(tx.reference_type ?? '') && <span> · Chi tiết lần nạp chưa khả dụng</span>}</>
+                          )}
                         </span>
                       )}
                     </div>
@@ -282,7 +329,7 @@ export function DriverWalletPage({
             <button
               className="secondary-button driver-load-more-btn"
               onClick={handleLoadMore}
-              disabled={loadingMore}
+              disabled={loading || loadingMore}
             >
               {loadingMore ? 'Đang tải thêm…' : 'Tải thêm giao dịch cũ hơn'}
             </button>
@@ -290,6 +337,13 @@ export function DriverWalletPage({
         )}
       </div>
 
+      </>}
+      {detailError && <p role="status">{detailError}</p>}
+      {sessionDetail && <section aria-label="Chi tiết phiên sạc">
+        <h3>Phiên sạc #{sessionDetail.id}</h3>
+        <p>{sessionDetail.station_name} · {sessionDetail.energy_kwh} kWh</p>
+        <button className="secondary-button" onClick={() => setSessionDetail(null)}>Đóng chi tiết</button>
+      </section>}
       {/* Topup Info Modal */}
       {showTopupModal && (
         <div

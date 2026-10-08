@@ -82,9 +82,7 @@ async def get_driver_wallet(
 async def get_driver_wallet_transactions(
     actor: CurrentActorDependency,
     db: Database,
-    cursor: int | None = Query(
-        None, description="Cursor for pagination (id < cursor)"
-    ),
+    cursor: int | None = Query(None, description="Cursor for pagination (id < cursor)"),
     limit: int = Query(10, ge=1, le=50, description="Page limit"),
 ) -> WalletLedgerListResponse:
     wallet = await ensure_driver_wallet(db, actor.user_id)
