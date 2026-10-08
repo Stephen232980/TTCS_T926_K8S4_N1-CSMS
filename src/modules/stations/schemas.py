@@ -3,8 +3,19 @@ from decimal import Decimal
 from typing import Literal, Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+    field_validator,
+    model_validator,
+)
 
+from src.modules.stations.connector_status import (
+    ConnectorStatusGroup,
+    connector_status_group,
+)
 from src.modules.stations.timezones import (
     DEFAULT_STATION_TIMEZONE,
     validate_station_timezone,
@@ -219,6 +230,11 @@ class ConnectorResponse(BaseModel):
     amperage: Decimal | None = None
     created_at: datetime
     updated_at: datetime
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def status_group(self) -> ConnectorStatusGroup:
+        return connector_status_group(self.status)
 
 
 class ChargePointResponse(BaseModel):
