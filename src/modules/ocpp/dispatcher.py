@@ -19,7 +19,7 @@ from src.modules.ocpp.models import OcppMessageReply
 from src.modules.ocpp.monitoring import (
     HeartbeatPayload,
     StatusPayload,
-    mark_seen,
+    lock_and_mark_seen,
     report_status,
 )
 from src.modules.stations.models import ChargePoint, Station
@@ -50,17 +50,20 @@ async def process_call(
 ) -> str:
     """Caller owns the transaction; the charger row serializes simultaneous repeats."""
     boot_was_accepted = connection.boot_accepted
-    charge_point = await session.scalar(
-        select(ChargePoint)
-        .where(ChargePoint.id == connection.charge_point_id)
-        .with_for_update()
-    )
+    if record_seen:
+        charge_point = await lock_and_mark_seen(session, connection.charge_point_id)
+    else:
+        charge_point = await session.scalar(
+            select(ChargePoint)
+            .where(ChargePoint.id == connection.charge_point_id)
+            .with_for_update()
+        )
     if charge_point is None or charge_point.archived_at is not None:
         return error_frame(
             frame.message_id, "SecurityError", "Charger registration is unavailable"
         )
-    if record_seen:
-        await mark_seen(session, charge_point.id, locked_charger=charge_point)
+    # Read the reply in a separate statement after the lock. A concurrent duplicate
+    # must see the first caller's committed reply even if it waited for that lock.
     # Admission belongs to this socket, even when the message has a durable reply.
     # Do not cache this denial: the same message may be replayed after a valid Boot.
     if frame.action != "BootNotification" and not connection.boot_accepted:

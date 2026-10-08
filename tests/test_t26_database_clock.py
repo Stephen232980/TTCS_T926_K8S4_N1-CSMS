@@ -122,3 +122,24 @@ async def test_locked_contact_reads_clock_in_single_update(db_session, monkeypat
     assert execute.await_count == 1
     await db_session.refresh(charger)
     assert charger.last_seen_at >= before
+
+
+@pytest.mark.asyncio
+async def test_combined_contact_preserves_expiry_and_rollback(db_session):
+    _, charger, connector, _ = await setup_charger(db_session)
+    now = await monitoring.database_time(db_session)
+    charger.last_seen_at = now - timedelta(seconds=121)
+    connector.status = "charging"
+    await db_session.flush()
+    original = charger.last_seen_at
+    nested = await db_session.begin_nested()
+    recorded = await monitoring.lock_and_mark_seen(db_session, charger.id)
+    assert recorded is charger
+    assert charger.last_seen_at >= now
+    await db_session.refresh(connector)
+    assert connector.status == "unknown"
+    await nested.rollback()
+    await db_session.refresh(charger)
+    await db_session.refresh(connector)
+    assert charger.last_seen_at == original
+    assert connector.status == "charging"

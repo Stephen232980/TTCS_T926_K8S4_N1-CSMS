@@ -74,6 +74,54 @@ def expired(now: datetime) -> ColumnElement[bool]:
     )
 
 
+async def lock_and_mark_seen(
+    session: AsyncSession, charger_id: UUID
+) -> ChargePoint | None:
+    """Lock and record contact in one round trip, using the clock after the lock."""
+    previous = (
+        select(
+            ChargePoint.id,
+            ChargePoint.last_seen_at.label("previous_seen_at"),
+            ChargePoint.heartbeat_interval_seconds.label("previous_interval"),
+        )
+        .where(ChargePoint.id == charger_id, ChargePoint.archived_at.is_(None))
+        .with_for_update()
+        .cte("locked_contact")
+    )
+    row = (
+        await session.execute(
+            update(ChargePoint)
+            .where(ChargePoint.id == previous.c.id)
+            .values(
+                last_seen_at=func.clock_timestamp(), updated_at=ChargePoint.updated_at
+            )
+            .returning(
+                ChargePoint, previous.c.previous_seen_at, previous.c.previous_interval
+            )
+            .execution_options(synchronize_session=False, populate_existing=True)
+        )
+    ).first()
+    if row is None:
+        return None
+    charger, last_seen, interval = row
+    if last_seen is None or charger.last_seen_at - last_seen > timedelta(
+        seconds=2 * interval
+    ):
+        await session.execute(
+            update(Connector)
+            .where(
+                Connector.charge_point_id == charger_id, Connector.archived_at.is_(None)
+            )
+            .values(
+                status="unknown",
+                raw_ocpp_status=None,
+                status_updated_at=charger.last_seen_at,
+                updated_at=Connector.updated_at,
+            )
+        )
+    return cast(ChargePoint, charger)
+
+
 async def mark_seen(
     session: AsyncSession,
     charger_id: UUID,
