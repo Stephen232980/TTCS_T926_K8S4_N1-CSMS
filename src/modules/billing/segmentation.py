@@ -79,8 +79,6 @@ def interpolate_meter_value(
     raise ValueError(f"Không thể nội suy cho {target_time}.")
 
 
-import zoneinfo
-from datetime import timedelta
 
 
 def chia_doan(
@@ -94,4 +92,4 @@ def chia_doan(
     Hàm chia đoạn (S-30). Đang trong quá trình triển khai.
     (Sẽ gọi hàm interpolate_meter_value cho các mốc chuyển giờ/đổi ngày).
     """
-    pass
+    return []
