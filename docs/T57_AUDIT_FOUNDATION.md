@@ -4,7 +4,8 @@ Nguồn yêu cầu: dòng T-57, sheet Tasks của Nền tảng vận hành trạ
 (CSMS).xlsx; S-27 trong Backlog CSMS; các quyết định tách A/B đã thống nhất.
 Phần A chỉ cung cấp nền tảng; không nối vào Reset, dừng từ xa, đóng tay, ví
 hay giao diện. AC hai lệnh tạo hai dòng audit và hiển thị kết quả qua join
-thuộc phần B, cần người nghiệm thu S-27 xác nhận.
+thuộc [phần B](T57_AUDIT_INTEGRATION.md); người phụ trách S-27 đã chốt
+cách diễn giải một audit cho mỗi yêu cầu, join kết quả ngày 08/10/2026.
 
 ## Hợp đồng ghi nhật ký
 
@@ -62,9 +63,9 @@ database thử hoặc có kế hoạch sao lưu phù hợp; dữ liệu audit th
 | Owner cũng không sửa/xoá/truncate | Trigger cấp câu lệnh | Ba mutations bị trigger chặn |
 | Một Alembic head, schema tiến/lùi | Revision sau head develop | Test head và downgrade/upgrade trên DB riêng |
 
-T-88 giữ nguyên worktree và phần audit chưa commit cho tới khi A được
-review/merge. Sau đó cập nhật T-88 lên develop, bỏ model/helper/migration
-audit riêng và dùng nền tảng này. Không merge cả hai migration tạo audit_logs.
+T-88 đã bỏ model/helper/migration audit riêng và dùng nền tảng này trong
+PR #82 đã merge vào develop. Không tạo thêm migration audit_logs cho các
+luồng nghiệp vụ. Phần B nối các chức năng Sprint 3 theo quyết định đã chốt.
 Jira và thông báo nhóm chưa được cập nhật trong phần triển khai local.
 
 ## Kiểm chứng local ngày 08 tháng 10 năm 2026
