@@ -477,6 +477,24 @@ S-16, S-23, S-27 thêm Reset, dừng phiên từ xa và nhật ký bất biến.
 S-22 và S-24 thêm phiên hiện tại theo tài khoản đăng nhập, cập nhật kWh/thời gian và bắt đầu bằng thẻ ảo qua RemoteStartTransaction. Accepted chờ StartTransaction thật; thiếu xác nhận sau 60 giây cho thử lại. Đầu nối bận/Reserved bị chặn; quyền sở hữu đặt chỗ thuộc phần đặt chỗ sau. Nâng migration c60318a4d962. Xem [AC, API và kiểm thử thủ công](DRIVER_CHARGING_DELIVERY.md). Bằng chứng local không thay Jira/CI.
 
 
+## Realtime phiên tài xế
+
+`GET /api/v1/driver/charging/current/events` dùng cookie `session`, quyền
+`driver.current`, scope `own`, role `driver`. Trả `text/event-stream` với
+`Cache-Control: no-store` và `X-Accel-Buffering: no`. 401/403 trước khi mở
+stream theo kiểm tra đăng nhập/quyền hiện hành.
+
+Message mặc định chứa `{session, start_request}` như API current. Mỗi lần
+kết nối/nối lại nhận full snapshot mới nhất. Backend đọc snapshot đã commit
+mỗi 0,5 giây, phát dữ liệu khi phiên, số đo hoặc yêu cầu bắt đầu thay đổi;
+các lượt khác gửi comment keepalive. `retry: 1000` hướng dẫn nối lại.
+`elapsed_seconds` là thời gian tại snapshot; trình duyệt tăng đồng hồ tại
+chỗ. Stream phản ánh trạng thái mới nhất, không phát lại mọi số đo theo
+Last-Event-ID. Thông tin phiên luôn tra theo tài khoản đăng nhập.
+
+Cookie, thời hạn, trạng thái tài khoản và role được kiểm tra lại mỗi chu kỳ.
+Mất quyền phát `event: access-denied` với `data: {}` rồi đóng stream.
+
 ## Bổ sung API phục vụ thiết kế chủ trạm
 
 Ảnh đại diện trạm, tên trụ và cấu hình danh định đầu nối được mô tả trong [OWNER_UI_API_DELIVERY.md](OWNER_UI_API_DELIVERY.md). Migration `a4d901ce8207` bổ sung ảnh trạm. Đây là mở rộng API cho thiết kế đã chốt, chưa triển khai giao diện và không thay các story biểu giá/phân bổ công suất/doanh thu/đổi trạng thái trạm.
