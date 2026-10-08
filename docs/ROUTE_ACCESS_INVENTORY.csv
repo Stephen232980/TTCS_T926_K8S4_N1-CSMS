@@ -23,6 +23,9 @@ GET,/api/v1/admin/stations/{station_id}/charge-points,user,admin.stations.list_c
 GET,/api/v1/admin/stations/{station_id}/photo,user,admin.photos.get_photo,all,admin,
 GET,/api/v1/admin/system-health,user,admin.health.read,all,admin,
 GET,/api/v1/admin/system-health/history,user,admin.health.read,all,admin,
+POST,/api/v1/admin/wallets/{wallet_id}/adjustments,user,admin.wallet.adjust,all,admin,
+POST,/api/v1/admin/wallets/{wallet_id}/repair-cache,user,admin.wallet.repair_cache,all,admin,
+POST,/api/v1/admin/wallets/{wallet_id}/unlock,user,admin.wallet.unlock,all,admin,
 PUT,/api/v1/auth/default-role,user,identity.default_role.choose,own,"accountant,admin,driver,operator,station_owner",
 POST,/api/v1/auth/login,public,,,,S-02 credentials checked by login service
 POST,/api/v1/auth/logout,public,,,,Idempotent cookie/session revocation
