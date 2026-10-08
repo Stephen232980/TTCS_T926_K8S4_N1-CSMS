@@ -110,3 +110,15 @@ async def test_contact_does_not_commit_callers_transaction(db_session):
     await nested.rollback()
     await db_session.refresh(charger)
     assert charger.last_seen_at == original
+
+
+@pytest.mark.asyncio
+async def test_locked_contact_reads_clock_in_single_update(db_session, monkeypatch):
+    _, charger, _, _ = await setup_charger(db_session)
+    before = await monitoring.database_time(db_session)
+    execute = AsyncMock(wraps=db_session.execute)
+    monkeypatch.setattr(db_session, "execute", execute)
+    await monitoring.mark_seen(db_session, charger.id, locked_charger=charger)
+    assert execute.await_count == 1
+    await db_session.refresh(charger)
+    assert charger.last_seen_at >= before

@@ -98,7 +98,22 @@ async def mark_seen(
             locked_charger.last_seen_at,
             locked_charger.heartbeat_interval_seconds,
         )
-    now = now if now is not None else await database_time(session)
+    # Evaluate the DB clock in the write after acquiring the charger lock.
+    # RETURNING shares the round trip and timestamp with the persisted contact.
+    clock_expression = "clock_timestamp()" if now is None else ":now"
+    recorded_at = (
+        await session.execute(
+            text(
+                "UPDATE charge_points SET last_seen_at = "
+                + clock_expression
+                + " WHERE id = :id AND archived_at IS NULL RETURNING last_seen_at"
+            ),
+            {"id": charger_id} if now is None else {"id": charger_id, "now": now},
+        )
+    ).scalar_one_or_none()
+    if recorded_at is None:
+        return
+    now = cast(datetime, recorded_at)
     if last_seen is None or now - last_seen > timedelta(seconds=2 * interval):
         await session.execute(
             update(Connector)
@@ -112,13 +127,6 @@ async def mark_seen(
                 updated_at=Connector.updated_at,
             )
         )
-    # Only this column changes on charge_points; no read/modify/write of the ORM record.
-    await session.execute(
-        text(
-            "UPDATE charge_points SET last_seen_at = :now WHERE id = :id AND archived_at IS NULL"
-        ),
-        {"now": now, "id": charger_id},
-    )
     if locked_charger is not None:
         set_committed_value(locked_charger, "last_seen_at", now)
 
