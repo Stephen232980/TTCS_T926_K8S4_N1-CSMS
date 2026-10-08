@@ -565,3 +565,17 @@ StatusNotification không hợp lệ tiếp tục nhận PropertyConstraintViola
 không ghi đè trạng thái hợp lệ. Log chẩn đoán chỉ ghi mã trụ nội bộ và mã
 sự kiện; không ghi payload hoặc giá trị trạng thái tuỳ ý. Không thêm bảng
 hay cột trạng thái tổng hợp.
+
+## Hợp đồng đơn vị số đo phiên sạc
+
+`GET /api/v1/charging/sessions/{transaction_id}/samples` trả số đo đã chuẩn
+hoá khi nhận OCPP. Với `measurand=Energy.Active.Import.Register`, `unit`
+là `Wh`; `value` là chỉ số công tơ tích luỹ dạng chuỗi Decimal, tối đa sáu
+chữ số thập phân Wh. Đầu vào 1 kWh và 1000 Wh đều trả value tương đương
+1000 Wh. Đơn vị gốc không còn là đơn vị của giá trị trả về.
+
+Đầu đọc tính tiền sử dụng giá trị Wh trực tiếp, lấy hiệu chỉ số và chỉ
+chia 1000 khi chuyển phần chênh lệch sang kWh; không nhân 1000 lần nữa.
+Chọn đúng measurand/phase/location. Power chuẩn hoá về W, Current về A,
+Voltage về V; không dùng các đại lượng này như chỉ số điện năng. Đơn vị
+không hỗ trợ hoặc giá trị không hợp lệ không được suy thành số đo 0.
