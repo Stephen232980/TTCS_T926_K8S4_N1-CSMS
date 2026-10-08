@@ -55,3 +55,25 @@ MeterValues 20 trụ tối đa 93 ms; WebSocket thật qua ba chu kỳ tối đa
 Ruff toàn repo, format 265 file, mypy 94 file và diff check đạt.
 Database PostgreSQL 16 thử rỗng upgrade đến head b150015a2026 đạt; không
 migration mới. CI và staging cần được xác nhận riêng.
+
+### CI latency follow-up
+
+CI measured 211.8 ms in the first socket cycle (limit: 200 ms).
+Before the fix, Linux/Python 3.12.15, SQLAlchemy 2.1.3 and PostgreSQL 16
+measured 80.2-86.8 ms; runner slowdown was not reproduced locally.
+The CALL path used separate queries to lock the charger and update contact.
+Combine them with SELECT FOR UPDATE in a CTE and UPDATE RETURNING,
+saving one round trip per CALL. Evaluate the DB clock after the lock;
+read the reply cache in the next statement so concurrent duplicates see
+committed replies. Preserve commit-before-reply and the 200 ms gate.
+
+After the fix: Linux functional suite: 858 passed, 1 skipped (Docker
+Compose unavailable in the test image), 2 deselected latency gates.
+The Compose test passed separately on Windows. Both latency gates passed:
+20 chargers: max 77 ms; real sockets: three runs of three cycles each,
+max 95.8 / 106.5 / 103.7 ms. Total: 861 distinct backend tests passed.
+73 focused Windows tests also passed. Ruff lint/format, mypy and diff
+checks passed. New coverage includes concurrent duplicates with contact
+recording and rollback of contact/expired connector state.
+SQLAlchemy/Starlette deprecation warnings remain; they are not the latency
+assertion failure. CI after push and staging remain separate checks.
