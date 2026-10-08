@@ -502,3 +502,38 @@ nếu ví khoá; 422 với tên trường `amount_vnd` nếu vượt giới hạ
 và lỗi schema cho các đầu vào sai khác. Gửi lại cùng phiếu, kể cả cùng ví và
 số tiền, trả 409. Mã phiếu duy nhất toàn hệ thống trong loại `manual_topup`;
 hai request cùng phiếu đồng thời chỉ một request thành công.
+
+## Quản trị đối chiếu ví
+
+Ba lệnh dưới đây dùng cookie `session`, scope `all`, chỉ admin hoạt động.
+Tất cả ghi audit cùng giao dịch nghiệp vụ. Ví không tồn tại trả 404;
+chưa đăng nhập trả 401, không đủ quyền trả 403. Chưa có giao diện.
+
+| Method/path | Quyền | Body | Kết quả |
+| --- | --- | --- | --- |
+| POST `/api/v1/admin/wallets/{wallet_id}/repair-cache` | admin.wallet.repair_cache | `{"reason":"Đã kiểm sổ cái"}` | 200: wallet_id, balance_vnd, status |
+| POST `/api/v1/admin/wallets/{wallet_id}/unlock` | admin.wallet.unlock | Không có | 200: wallet_id, balance_vnd, status |
+| POST `/api/v1/admin/wallets/{wallet_id}/adjustments` | admin.wallet.adjust | `{"amount_vnd":-5000,"reason":"Điều chỉnh đã duyệt","audit_id":"UUID-mới"}` | 201: ledger_id, wallet_id, audit_id, amount_vnd, balance_after_vnd |
+
+`reason` là chuỗi 1–500 ký tự sau trim. Điều chỉnh nhận số nguyên khác 0
+trong BIGINT, không nhận boolean, chuỗi hoặc số lẻ; từ chối trường thừa.
+`audit_id` là mã idempotency do người gọi tạo, đồng thời là `wallet_audits.id`
+và mã tham chiếu sổ cái. Gửi lại cùng mã, ví, người, số tiền và lý do trả
+dòng cũ; đổi một trong các dữ liệu đó trả 409 `adjustment_conflict`.
+
+Sửa cache kiểm các hoá đơn `debited` dưới khoá dòng ví rồi đặt số dư bằng
+tổng sổ cái, không thêm dòng tiền hoặc mở khoá. Điều chỉnh ghi được vào ví
+khoá nhưng yêu cầu cache khớp tổng sổ cái trước khi ghi; không tự mở khoá.
+Mở khoá kiểm lại cả số dư và các hoá đơn `debited` dưới khoá dòng ví.
+Nếu còn lỗi, trả 409 với detail
+`{"code":"wallet_checks_failed","checks":["invoice_debit_count"]}` và giữ khoá.
+
+Các mã kiểm tra: balance_mismatch, ledger_total_overflow, invoice_driver_mismatch,
+invoice_debit_count, invoice_debit_wallet, invoice_debit_type,
+invoice_debit_reference, invoice_debit_amount. Số tiền trừ phải bằng âm
+invoice.total_vnd; đúng một dòng charging_debit với reference_type
+charging_session và reference_id là mã phiên dạng chuỗi chuẩn.
+
+Sửa cache hoặc mở khoá đã đạt trạng thái mong muốn không tạo thêm audit.
+Adjustment không thay thế dòng trừ phí sai/thiếu, nên không làm các kiểm tra
+hoá đơn sai trở thành đạt chỉ vì số dư tổng đã khớp.
