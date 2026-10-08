@@ -18,6 +18,7 @@ from src.modules.identity.models import Role, User, UserRole
 from src.modules.ocpp import control
 from src.modules.ocpp.connection_registry import ocpp_connections
 from src.modules.ocpp.control_models import ControlRequest
+from src.modules.ocpp.monitoring import database_time
 from src.modules.stations.models import ChargePoint, Connector, Station
 from src.platform.database.session import SessionFactory
 
@@ -163,12 +164,13 @@ async def remote_start(
                 "Đầu nối đang bận, được đặt chỗ hoặc chưa sẵn sàng. Vui lòng chọn đầu nối khác.",
             )
         connection = await ocpp_connections.get(charger.code.strip().lower())
+        observed_at = await database_time(session)
         online = (
             connection is not None
             and connection.boot_accepted
             and charger.last_seen_at is not None
             and charger.last_seen_at
-            >= now - timedelta(seconds=charger.heartbeat_interval_seconds * 2)
+            >= observed_at - timedelta(seconds=charger.heartbeat_interval_seconds * 2)
         )
         status = "Pending" if online else "Offline"
         request = DriverStartRequest(

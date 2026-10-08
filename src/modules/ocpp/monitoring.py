@@ -2,11 +2,11 @@
 
 import logging
 from datetime import UTC, datetime, timedelta
-from typing import Annotated, Literal
+from typing import Annotated, Literal, cast
 from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
-from sqlalchemy import literal, select, text, update
+from sqlalchemy import func, literal, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import set_committed_value
 from sqlalchemy.sql.elements import ColumnElement
@@ -60,6 +60,13 @@ class StatusPayload(BaseModel):
     timestamp: AwareDatetime | None = None
 
 
+async def database_time(session: AsyncSession) -> datetime:
+    """Read wall-clock time, including after waiting for a charger row lock."""
+    return cast(
+        datetime, (await session.execute(select(func.clock_timestamp()))).scalar_one()
+    )
+
+
 def expired(now: datetime) -> ColumnElement[bool]:
     return (ChargePoint.last_seen_at.is_(None)) | (
         ChargePoint.last_seen_at
@@ -74,7 +81,6 @@ async def mark_seen(
     *,
     locked_charger: ChargePoint | None = None,
 ) -> None:
-    now = now or datetime.now(UTC)
     # Expired connector observations remain unknown after reconnection until reported anew.
     if locked_charger is None:
         row = (
@@ -92,6 +98,7 @@ async def mark_seen(
             locked_charger.last_seen_at,
             locked_charger.heartbeat_interval_seconds,
         )
+    now = now if now is not None else await database_time(session)
     if last_seen is None or now - last_seen > timedelta(seconds=2 * interval):
         await session.execute(
             update(Connector)
@@ -117,7 +124,7 @@ async def mark_seen(
 
 
 async def expire_chargers(session: AsyncSession, now: datetime | None = None) -> None:
-    now = now or datetime.now(UTC)
+    now = now if now is not None else await database_time(session)
     stale = list(
         await session.scalars(
             select(ChargePoint.id)
