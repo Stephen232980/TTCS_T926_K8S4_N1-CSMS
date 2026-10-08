@@ -23,7 +23,14 @@ class MeterValue:
 
 
 class TariffFrame:
-    def __init__(self, start_time: str, end_time: str, price_vnd_per_kwh: int, tariff_version: str, frame_label: str):
+    def __init__(
+        self,
+        start_time: str,
+        end_time: str,
+        price_vnd_per_kwh: int,
+        tariff_version: str,
+        frame_label: str,
+    ):
         # start_time, end_time định dạng "HH:MM:SS"
         self.start_time = start_time
         self.end_time = end_time
@@ -41,12 +48,12 @@ def chia_doan(
 ) -> List[Dict]:
     """
     Hàm thuần cắt phiên sạc thành các đoạn dựa trên ranh giới khung giờ biểu giá và ranh giới nửa đêm.
-    
+
     Quy tắc Nội suy (T-72):
     - Mốc trùng số đo: lấy đúng chỉ số gốc (Decimal).
     - Mốc nằm giữa: nội suy tuyến tính chính xác, làm tròn nửa lên (ROUND_HALF_UP) về Wh nguyên (Decimal không có phần lẻ), đánh cờ interpolated=True.
     - Mốc ngoài khoảng: báo lỗi.
-    
+
     Quy tắc Tính tiền (T-71):
     - Điện năng đoạn (Wh) × đơn giá (đồng/kWh) / 1000.
     - Làm tròn nửa lên (ROUND_HALF_UP) về đồng nguyên ở từng đoạn.
@@ -69,16 +76,16 @@ Hàm sẽ trả về một List các Dictionary (mỗi Dict đại diện cho m�
 ```python
 [
     {
-        "local_date": date,              # Ngày địa phương của trạm
-        "start_time": datetime,          # Bắt đầu đoạn
-        "end_time": datetime,            # Kết thúc đoạn
-        "energy_consumed_wh": Decimal,   # Điện năng tiêu thụ trong đoạn (Wh)
-        "price_vnd_per_kwh": int,        # Đơn giá áp dụng (đồng/kWh)
-        "amount_vnd": int,               # Thành tiền của đoạn (đã làm tròn)
-        "tariff_version": str,           # Mã phiên bản biểu giá
-        "frame_label": str,              # Nhãn khung giá
-        "start_interpolated": bool,      # Cờ báo hiệu điểm đầu là kết quả nội suy
-        "end_interpolated": bool,        # Cờ báo hiệu điểm cuối là kết quả nội suy
+        "local_date": date,  # Ngày địa phương của trạm
+        "start_time": datetime,  # Bắt đầu đoạn
+        "end_time": datetime,  # Kết thúc đoạn
+        "energy_consumed_wh": Decimal,  # Điện năng tiêu thụ trong đoạn (Wh)
+        "price_vnd_per_kwh": int,  # Đơn giá áp dụng (đồng/kWh)
+        "amount_vnd": int,  # Thành tiền của đoạn (đã làm tròn)
+        "tariff_version": str,  # Mã phiên bản biểu giá
+        "frame_label": str,  # Nhãn khung giá
+        "start_interpolated": bool,  # Cờ báo hiệu điểm đầu là kết quả nội suy
+        "end_interpolated": bool,  # Cờ báo hiệu điểm cuối là kết quả nội suy
     },
     ...,
 ]
