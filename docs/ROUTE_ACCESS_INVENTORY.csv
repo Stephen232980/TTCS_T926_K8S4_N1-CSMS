@@ -80,6 +80,7 @@ POST,/api/v1/owner/stations/{station_id}/charge-points,user,owner.stations.creat
 DELETE,/api/v1/owner/stations/{station_id}/photo,user,owner.photos.delete_photo,owned,station_owner,
 GET,/api/v1/owner/stations/{station_id}/photo,user,owner.photos.get_photo,owned,station_owner,
 PUT,/api/v1/owner/stations/{station_id}/photo,user,owner.photos.put_photo,owned,station_owner,
+POST,/api/v1/owner/stations/{station_id}/tariffs,user,owner.tariff.manage,owned,station_owner,
 GET,/api/v1/stations,user,owner.stations.list_stations,owned,station_owner,
 POST,/api/v1/stations,user,owner.stations.create_station,owned,station_owner,
 GET,/api/v1/stations/{station_id},user,owner.stations.get_station,owned,station_owner,
