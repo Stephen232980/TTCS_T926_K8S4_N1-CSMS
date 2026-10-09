@@ -21,7 +21,9 @@ Contract Python: `src/modules/payments/contracts.py`.
 ```python
 class PaymentGateway(Protocol):
     async def create_payment(self, request: PaymentRequest) -> PaymentRedirect: ...
-    def verify_webhook(self, raw_body: bytes, headers: Mapping[str, str]) -> GatewayEvent: ...
+    def verify_webhook(
+        self, raw_body: bytes, headers: Mapping[str, str]
+    ) -> GatewayEvent: ...
 ```
 
 ### Tạo thanh toán
@@ -79,11 +81,14 @@ import hmac
 import os
 
 body = b'{"gateway_transaction_id":"fake-tx-1","order_id":"topup-1","amount_vnd":100000,"status":"succeeded"}'
-signature = "sha256=" + hmac.new(
-    os.environ["PAYMENT_WEBHOOK_SECRET"].encode("utf-8"),
-    body,
-    hashlib.sha256,
-).hexdigest()
+signature = (
+    "sha256="
+    + hmac.new(
+        os.environ["PAYMENT_WEBHOOK_SECRET"].encode("utf-8"),
+        body,
+        hashlib.sha256,
+    ).hexdigest()
+)
 headers = {"Content-Type": "application/json", "X-Payment-Signature": signature}
 # Gửi chính body này, không truyền json=... rồi giữ chữ ký cũ.
 ```
