@@ -6,11 +6,12 @@ from typing import Annotated, Literal, cast
 from uuid import UUID
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
-from sqlalchemy import func, literal, select, text, update
+from sqlalchemy import func, literal, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import set_committed_value
 from sqlalchemy.sql.elements import ColumnElement
 
+from src.modules.charging.models import ChargingSession
 from src.modules.stations.models import ChargePoint, Connector, ConnectorError
 
 logger = logging.getLogger("csms.ocpp")
@@ -226,25 +227,52 @@ async def report_status(
             )
         )
         return
-    connector_id = await session.scalar(
-        update(Connector)
-        .where(
-            Connector.charge_point_id == charger.id,
-            Connector.connector_number == status.connectorId,
-            Connector.archived_at.is_(None),
-        )
-        .values(
-            status=status.status, raw_ocpp_status=status.status, status_updated_at=now
-        )
-        .returning(Connector.id)
+    statement = update(Connector).where(
+        Connector.charge_point_id == charger.id,
+        Connector.connector_number == status.connectorId,
+        Connector.archived_at.is_(None),
     )
+    statement = statement.values(
+        status=status.status, raw_ocpp_status=status.status, status_updated_at=now
+    )
+    if status.timestamp is not None:
+        # Source time orders notifications; server time remains the monitoring clock.
+        statement = statement.where(
+            or_(
+                Connector.last_status_notification_at.is_(None),
+                Connector.last_status_notification_at < status.timestamp,
+            )
+        ).values(last_status_notification_at=status.timestamp)
+    connector_id = await session.scalar(statement.returning(Connector.id))
     if connector_id is None:
-        logger.warning(
-            "ocpp_unknown_connector charger=%s connector=%s",
-            charger.id,
-            status.connectorId,
+        exists = await session.scalar(
+            select(Connector.id).where(
+                Connector.charge_point_id == charger.id,
+                Connector.connector_number == status.connectorId,
+                Connector.archived_at.is_(None),
+            )
         )
+        if exists is None:
+            logger.warning(
+                "ocpp_unknown_connector charger=%s connector=%s",
+                charger.id,
+                status.connectorId,
+            )
         return
+    # Without source time we cannot safely infer an idle interval or its ordering.
+    if status.timestamp is not None and status.status in {"SuspendedEV", "Charging"}:
+        idle_update = update(ChargingSession).where(
+            ChargingSession.connector_id == connector_id,
+            ChargingSession.ended_at.is_(None),
+            ChargingSession.started_at <= status.timestamp,
+        )
+        if status.status == "SuspendedEV":
+            idle_update = idle_update.where(
+                ChargingSession.idle_since.is_(None)
+            ).values(idle_since=status.timestamp)
+        else:
+            idle_update = idle_update.values(idle_since=None)
+        await session.execute(idle_update)
     if status.errorCode != "NoError":
         session.add(
             ConnectorError(
