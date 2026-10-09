@@ -33,10 +33,10 @@ db_session = control_database
 @pytest.mark.parametrize(
     ("balance_vnd", "price_vnd_per_kwh", "eligible"),
     [
-        (Decimal("15000"), Decimal("1000"), True),
-        (Decimal("14999"), Decimal("1000"), False),
-        (Decimal("16000"), Decimal("1200"), True),
-        (Decimal("15000"), Decimal("1200"), False),
+        (Decimal(15000), Decimal(1000), True),
+        (Decimal(14999), Decimal(1000), False),
+        (Decimal(16000), Decimal(1200), True),
+        (Decimal(15000), Decimal(1200), False),
     ],
 )
 def test_du_so_du_de_sac_uses_station_price(
@@ -49,7 +49,7 @@ def test_du_so_du_de_sac_uses_station_price(
 
 def test_du_so_du_de_sac_rejects_missing_balance_or_station_price() -> None:
     assert not charging_service.du_so_du_de_sac(None, Station(price_vnd_per_kwh=1000))
-    assert not charging_service.du_so_du_de_sac(Decimal("50000"), Station())
+    assert not charging_service.du_so_du_de_sac(Decimal(50000), Station())
 
 
 async def test_remote_start_rejects_insufficient_wallet_before_sending(
@@ -60,7 +60,7 @@ async def test_remote_start_rejects_insufficient_wallet_before_sending(
         select(DriverWallet).where(DriverWallet.driver_id == driver.id)
     )
     assert wallet is not None
-    wallet.balance_vnd = Decimal("14999")
+    wallet.balance_vnd = Decimal(14999)
     await db_session.commit()
 
     with pytest.raises(HTTPException) as error:

@@ -11,7 +11,9 @@ from src.platform.database.base import Base
 class DriverWallet(Base):
     __tablename__ = "driver_wallets"
     __table_args__ = (
-        CheckConstraint("balance_vnd >= 0", name="ck_driver_wallets_balance_nonnegative"),
+        CheckConstraint(
+            "balance_vnd >= 0", name="ck_driver_wallets_balance_nonnegative"
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
@@ -19,7 +21,7 @@ class DriverWallet(Base):
         ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, unique=True
     )
     balance_vnd: Mapped[Decimal] = mapped_column(
-        Numeric(14, 2), default=Decimal("0"), server_default="0", nullable=False
+        Numeric(14, 2), default=Decimal(0), server_default="0", nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

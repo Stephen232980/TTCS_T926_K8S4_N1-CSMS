@@ -60,7 +60,7 @@ async def test_start_replay_on_new_connection_keeps_exact_transaction(db_session
 
 async def setup(session):
     station, charger = await charger_fixture(session)
-    station.price_vnd_per_kwh = Decimal("1000")
+    station.price_vnd_per_kwh = Decimal(1000)
     connector = Connector(
         charge_point_id=charger.id, connector_number=1, status="Available"
     )
@@ -81,7 +81,7 @@ async def setup(session):
     # Unique per fixture; protocol and DB use the same exact tag (<=20 characters).
     tag = str(charger.id).replace("-", "")[:16] + "ABCD"
     card.tag_hash = tag_hash(tag)
-    wallet = DriverWallet(driver_id=driver.id, balance_vnd=Decimal("50000"))
+    wallet = DriverWallet(driver_id=driver.id, balance_vnd=Decimal(50000))
     session.add_all([card, wallet])
     await session.flush()
     conn = connection(charger.id, station.id)
@@ -159,7 +159,7 @@ async def test_authorize_states_and_masked_audit(
             select(DriverWallet).where(DriverWallet.driver_id == driver.id)
         )
         assert wallet is not None
-        wallet.balance_vnd = Decimal("14999")
+        wallet.balance_vnd = Decimal(14999)
     if scenario == "unknown":
         tag = "UNKNOWN-CARD-5678"
     await db_session.flush()
