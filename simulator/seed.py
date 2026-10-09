@@ -4,22 +4,38 @@ from __future__ import annotations
 
 import asyncio
 import os
-from decimal import Decimal
+from decimal import ROUND_CEILING, Decimal
 from typing import cast
+from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from simulator.config import SimulatorSettings, load_settings
+from src.config import settings as app_settings
 from src.modules.charging.models import ChargingCard
 from src.modules.charging.service import tag_hash
+from src.modules.identity.authorization import AuthorizationEvidence
 from src.modules.identity.models import Role, User
 from src.modules.identity.role_assignment import assign_user_roles
 from src.modules.identity.security import hash_password
 from src.modules.stations.models import ChargePoint, Connector, Station
+from src.modules.wallet.manual_topup import ManualTopupRequest, nap_tay
+from src.modules.wallet.models import Wallet
+from src.modules.wallet.provisioning import ensure_driver_wallet
 from src.platform.database.session import SessionFactory
 
 SIMULATOR_OPERATOR_EMAIL = "simulator.operator@example.com"
+SIMULATOR_ADMIN_EMAIL = "simulator.admin@example.com"
+SIMULATOR_PRICE_VND_PER_KWH = Decimal("1000.00")
+SIMULATOR_FUNDING_PERMISSION = "admin.wallet.manual_topup"
+
+
+def _minimum_wallet_balance() -> Decimal:
+    return (
+        app_settings.charging_minimum_kwh * SIMULATOR_PRICE_VND_PER_KWH
+        + app_settings.wallet_reserve_vnd
+    )
 
 
 async def seed_simulator_data(settings: SimulatorSettings) -> None:
@@ -30,12 +46,15 @@ async def seed_simulator_data(settings: SimulatorSettings) -> None:
     async with SessionFactory() as session, session.begin():
         operator_role = await _role(session, "operator")
         driver_role = await _role(session, "driver")
+        admin_role = await _role(session, "admin")
         operator = await _user(
             session,
             SIMULATOR_OPERATOR_EMAIL,
             password,
         )
+        administrator = await _user(session, SIMULATOR_ADMIN_EMAIL, password)
         await _assign_role(session, operator, operator_role)
+        await _assign_role(session, administrator, admin_role)
         station = await _station(session, operator, settings)
         for index in range(1, settings.count + 1):
             charger = await _charger(session, station, settings.code_for(index))
@@ -46,6 +65,7 @@ async def seed_simulator_data(settings: SimulatorSettings) -> None:
                 "simulator-driver-only",
             )
             await _assign_role(session, driver, driver_role)
+            await _wallet(session, driver, administrator, settings)
             await _card(session, driver, operator, settings.tag_for(index))
 
 
@@ -99,15 +119,46 @@ async def _station(
             address="Compose/CI virtual fleet",
             latitude=Decimal("10.000000"),
             longitude=Decimal("106.000000"),
+            price_vnd_per_kwh=SIMULATOR_PRICE_VND_PER_KWH,
             status="active",
         )
         session.add(station)
         await session.flush()
     else:
         station.owner_id = operator.id
+        station.price_vnd_per_kwh = SIMULATOR_PRICE_VND_PER_KWH
         station.status = "active"
         station.archived_at = None
     return station
+
+
+async def _wallet(
+    session: AsyncSession,
+    driver: User,
+    administrator: User,
+    simulator_settings: SimulatorSettings,
+) -> Wallet:
+    wallet = await ensure_driver_wallet(session, driver.id)
+    minimum_balance = int(
+        _minimum_wallet_balance().to_integral_value(rounding=ROUND_CEILING)
+    )
+    if wallet.balance_vnd < minimum_balance:
+        amount_vnd = minimum_balance - wallet.balance_vnd
+        await nap_tay(
+            session,
+            driver_id=driver.id,
+            actor_id=administrator.id,
+            request=ManualTopupRequest(
+                amount_vnd=amount_vnd,
+                receipt_code=(
+                    f"S26:{simulator_settings.code_prefix}:{driver.id}:{uuid4().hex}"
+                ),
+            ),
+            authorization=AuthorizationEvidence(
+                SIMULATOR_FUNDING_PERMISSION, ("admin",)
+            ),
+        )
+    return wallet
 
 
 async def _charger(session: AsyncSession, station: Station, code: str) -> ChargePoint:

@@ -3,7 +3,8 @@ import selectors
 
 from sqlalchemy import select
 
-from src.modules.identity.models import Role, User, UserRole
+from src.modules.identity.models import Role, User
+from src.modules.identity.role_assignment import assign_user_roles
 from src.modules.identity.security import hash_password
 from src.platform.database.session import SessionFactory
 
@@ -44,45 +45,26 @@ accounts = [
 async def main():
     async with SessionFactory() as session:
         for acc in accounts:
-            # Check/Create role
-            result = await session.execute(select(Role).where(Role.code == acc["role"]))
-            role_obj = result.scalar_one_or_none()
-            if not role_obj:
-                role_obj = Role(code=acc["role"])
-                session.add(role_obj)
-                await session.commit()
-                await session.refresh(role_obj)
-
-            # Check/Create user
-            email = acc["email"].lower()
-            result = await session.execute(select(User).where(User.email == email))
-            user = result.scalar_one_or_none()
-            if not user:
-                user = User(
-                    email=email,
-                    password_hash=hash_password(acc["password"]),
-                    status="active",
+            async with session.begin():
+                role_obj = await session.scalar(
+                    select(Role).where(Role.code == acc["role"])
                 )
-                session.add(user)
-                await session.commit()
-                await session.refresh(user)
-
-            # Assign role
-            result = await session.execute(
-                select(UserRole).where(
-                    UserRole.user_id == user.id, UserRole.role_id == role_obj.id
+                if role_obj is None:
+                    session.add(Role(code=acc["role"]))
+                    await session.flush()
+                user = await session.scalar(
+                    select(User).where(User.email == acc["email"].lower())
                 )
-            )
-            user_role = result.scalar_one_or_none()
-            if not user_role:
-                user_role = UserRole(
-                    user_id=user.id, role_id=role_obj.id, is_default=True
-                )
-                session.add(user_role)
-                await session.commit()
-                print(f"Created {acc['email']} with role {acc['role']}")
-            else:
-                print(f"User {acc['email']} already exists and has role {acc['role']}")
+                if user is None:
+                    user = User(
+                        email=acc["email"],
+                        password_hash=hash_password(acc["password"]),
+                        status="active",
+                    )
+                    session.add(user)
+                    await session.flush()
+                await assign_user_roles(session, user.id, [acc["role"]], replace=False)
+            print(f"Ready: {acc['email']} ({acc['role']})")
 
 
 if __name__ == "__main__":

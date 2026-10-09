@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql.elements import ColumnElement
 
+from src.modules.charging.models import ChargingSession
 from src.modules.identity.authorization import ActorScope
 from src.modules.stations.exceptions import (
     ChargePointCodeAlreadyExistsError,
@@ -19,6 +20,7 @@ from src.modules.stations.exceptions import (
     ConnectorConfigurationNotFoundError,
     StationIdempotencyConflictError,
     StationOwnershipDeniedError,
+    StationTimezoneLockedError,
 )
 from src.modules.stations.models import (
     ChargePoint,
@@ -27,6 +29,10 @@ from src.modules.stations.models import (
     StationCreateIdempotency,
 )
 from src.modules.stations.schemas import ConnectorConfiguration
+from src.modules.stations.timezones import (
+    DEFAULT_STATION_TIMEZONE,
+    validate_station_timezone,
+)
 
 _security_logger = logging.getLogger("csms.security")
 
@@ -139,6 +145,7 @@ class StationRepository:
         latitude: Decimal,
         longitude: Decimal,
         price_vnd_per_kwh: Decimal | None = None,
+        timezone: str = DEFAULT_STATION_TIMEZONE,
     ) -> Station:
         station = Station(
             owner_id=owner_id,
@@ -147,6 +154,7 @@ class StationRepository:
             latitude=latitude,
             longitude=longitude,
             price_vnd_per_kwh=price_vnd_per_kwh,
+            timezone=timezone,
         )
         self._db_session.add(station)
         await self._db_session.flush()
@@ -369,6 +377,7 @@ class StationRepository:
         latitude: Decimal,
         longitude: Decimal,
         price_vnd_per_kwh: Decimal | None = None,
+        timezone: str = DEFAULT_STATION_TIMEZONE,
     ) -> Station:
         await self._db_session.execute(
             select(
@@ -405,6 +414,7 @@ class StationRepository:
             latitude=latitude,
             longitude=longitude,
             price_vnd_per_kwh=price_vnd_per_kwh,
+            timezone=timezone,
         )
         self._db_session.add(
             StationCreateIdempotency(
@@ -421,11 +431,18 @@ class StationRepository:
         self,
         station_id: UUID,
         scope: ActorScope,
+        *,
+        for_update: bool = False,
     ) -> Station | None:
         statement = select(Station).where(Station.id == station_id)
 
         if scope.owner_id is not None:
             statement = statement.where(Station.owner_id == scope.owner_id)
+
+        if for_update:
+            statement = statement.with_for_update().execution_options(
+                populate_existing=True
+            )
 
         station = await self._db_session.scalar(statement)
 
@@ -455,10 +472,28 @@ class StationRepository:
         latitude: Decimal | None,
         longitude: Decimal | None,
         price_vnd_per_kwh: Decimal | None = None,
+        timezone: str | None = None,
     ) -> Station | None:
-        station = await self.get_station_by_id(station_id, scope)
+        if timezone is not None:
+            timezone = validate_station_timezone(timezone)
+        station = await self.get_station_by_id(
+            station_id, scope, for_update=timezone is not None
+        )
         if station is None:
             return None
+
+        if timezone is not None and timezone != station.timezone:
+            # StartTransaction takes this same station lock before inserting a
+            # session. Include ended/invalid sessions: the first session freezes it.
+            has_session = await self._db_session.scalar(
+                select(ChargingSession.id)
+                .join(ChargePoint, ChargePoint.id == ChargingSession.charge_point_id)
+                .where(ChargePoint.station_id == station_id)
+                .limit(1)
+            )
+            if has_session is not None:
+                raise StationTimezoneLockedError
+            station.timezone = timezone
 
         if name is not None:
             station.name = name

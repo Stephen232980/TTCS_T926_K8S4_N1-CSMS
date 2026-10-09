@@ -17,6 +17,7 @@ from src.modules.stations.exceptions import (
     ChargePointCodeAlreadyExistsError,
     StationIdempotencyConflictError,
     StationOwnershipDeniedError,
+    StationTimezoneLockedError,
 )
 from src.modules.stations.repository import StationRepository
 from src.modules.stations.schemas import (
@@ -31,6 +32,7 @@ from src.modules.stations.schemas import (
     StationResponse,
     StationUpdateRequest,
 )
+from src.modules.stations.timezones import DEFAULT_STATION_TIMEZONE
 from src.platform.database.session import get_db_session
 
 router = APIRouter(
@@ -47,8 +49,14 @@ IdempotencyKey = Annotated[UUID, Header(alias="Idempotency-Key")]
 
 
 def _station_create_request_hash(request: StationCreateRequest) -> str:
+    payload = request.model_dump(mode="json")
+    if request.price_vnd_per_kwh is None:
+        payload.pop("price_vnd_per_kwh")
+    # Preserve replay of create requests recorded before timezone was exposed.
+    if request.timezone == DEFAULT_STATION_TIMEZONE:
+        payload.pop("timezone")
     canonical_payload = json.dumps(
-        request.model_dump(mode="json"),
+        payload,
         ensure_ascii=False,
         separators=(",", ":"),
         sort_keys=True,
@@ -108,6 +116,7 @@ async def create_station(
             latitude=request.latitude,
             longitude=request.longitude,
             price_vnd_per_kwh=request.price_vnd_per_kwh,
+            timezone=request.timezone,
         )
     except StationIdempotencyConflictError as error:
         raise HTTPException(
@@ -289,7 +298,13 @@ async def update_station(
             latitude=request.latitude,
             longitude=request.longitude,
             price_vnd_per_kwh=request.price_vnd_per_kwh,
+            timezone=request.timezone,
         )
+    except StationTimezoneLockedError as error:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="station_timezone_locked",
+        ) from error
     except StationOwnershipDeniedError as error:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

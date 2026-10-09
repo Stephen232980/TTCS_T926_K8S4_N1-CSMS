@@ -4,12 +4,13 @@ import hashlib
 import logging
 from collections.abc import Sequence
 from datetime import UTC, datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
-from sqlalchemy import select, true
+from sqlalchemy import case, literal, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
+from src.modules.charging.meter_units import UNITS, numeric_sample
 from src.modules.charging.models import (
     AuthorizationAttempt,
     ChargingCard,
@@ -22,7 +23,6 @@ from src.modules.charging.payloads import (
     AuthorizePayload,
     MeterBlock,
     MeterPayload,
-    SamplePayload,
     StartPayload,
     StopPayload,
 )
@@ -30,12 +30,14 @@ from src.modules.identity.models import Role, User, UserRole
 from src.modules.ocpp.frames import Frame
 from src.modules.stations.models import ChargePoint, Connector, Station
 from src.modules.stations.repository import StationRepository
-from src.modules.wallet.models import DriverWallet
+from src.modules.wallet.models import Wallet
 
 logger = logging.getLogger("csms.ocpp")
 
 
-def du_so_du_de_sac(wallet_balance_vnd: Decimal | None, station: Station) -> bool:
+def du_so_du_de_sac(
+    wallet_balance_vnd: Decimal | int | None, station: Station
+) -> bool:
     price = station.price_vnd_per_kwh
     if wallet_balance_vnd is None or price is None or price <= 0:
         return False
@@ -88,9 +90,13 @@ async def authorize(
         result = "Blocked"
     if result == "Accepted" and card is not None and station is not None:
         wallet = await session.scalar(
-            select(DriverWallet).where(DriverWallet.driver_id == card.driver_id)
+            select(Wallet).where(Wallet.driver_id == card.driver_id)
         )
-        if wallet is None or not du_so_du_de_sac(wallet.balance_vnd, station):
+        if (
+            wallet is None
+            or wallet.status != "active"
+            or not du_so_du_de_sac(wallet.balance_vnd, station)
+        ):
             result = "Blocked"
     session.add(
         AuthorizationAttempt(
@@ -129,35 +135,6 @@ def pending(
     )
 
 
-UNITS: dict[str, tuple[str, dict[str, Decimal]]] = {
-    "Energy.Active.Import.Register": ("Wh", {"Wh": Decimal(1), "kWh": Decimal(1000)}),
-    "Power.Active.Import": ("W", {"W": Decimal(1), "kW": Decimal(1000)}),
-    "Power.Offered": ("W", {"W": Decimal(1), "kW": Decimal(1000)}),
-    "Current.Import": ("A", {"A": Decimal(1)}),
-    "Voltage": ("V", {"V": Decimal(1)}),
-    "SoC": ("Percent", {"Percent": Decimal(1)}),
-    "Frequency": ("Hertz", {"Hertz": Decimal(1)}),
-    "Temperature": ("Celsius", {"Celsius": Decimal(1), "Celcius": Decimal(1)}),
-}
-
-
-def numeric_sample(sample: SamplePayload) -> tuple[Decimal, str] | None:
-    supported = UNITS.get(sample.measurand)
-    if supported is None or sample.format != "Raw":
-        return None
-    unit, conversions = supported
-    factor = conversions.get(sample.unit or unit)
-    if factor is None:
-        return None
-    try:
-        value = Decimal(sample.value) * factor
-        if not value.is_finite() or abs(value) >= Decimal("1e18"):
-            return None
-        return value.quantize(Decimal("0.000001")), unit
-    except InvalidOperation:
-        return None
-
-
 async def store_samples(
     session: AsyncSession,
     transaction: ChargingSession,
@@ -165,9 +142,10 @@ async def store_samples(
     *,
     backfill: bool = False,
     latest: dict[tuple[str, str, str], tuple[datetime, Decimal]] | None = None,
+    history: dict[tuple[str, str, str], dict[datetime, Decimal]] | None = None,
 ) -> None:
     if backfill:
-        await store_recovery_samples(session, transaction, blocks)
+        await store_recovery_samples(session, transaction, blocks, history=history)
         return
     if latest is None:
         previous = (
@@ -245,19 +223,25 @@ async def store_samples(
 
 
 async def store_recovery_samples(
-    session: AsyncSession, transaction: ChargingSession, blocks: Sequence[MeterBlock]
+    session: AsyncSession,
+    transaction: ChargingSession,
+    blocks: Sequence[MeterBlock],
+    *,
+    history: dict[tuple[str, str, str], dict[datetime, Decimal]] | None = None,
 ) -> None:
     """Late buffered samples retain their timestamps, including gaps before newest data."""
-    values = (
-        await session.scalars(
-            select(MeterSample).where(MeterSample.session_id == transaction.id)
-        )
-    ).all()
-    series: dict[tuple[str, str, str], dict[datetime, Decimal]] = {}
-    for item in values:
-        series.setdefault((item.measurand, item.phase, item.location), {})[
-            item.timestamp
-        ] = item.value
+    if history is None:
+        values = (
+            await session.scalars(
+                select(MeterSample).where(MeterSample.session_id == transaction.id)
+            )
+        ).all()
+        history = {}
+        for item in values:
+            history.setdefault((item.measurand, item.phase, item.location), {})[
+                item.timestamp
+            ] = item.value
+    series = history
     for block in sorted(blocks, key=lambda item: item.timestamp):
         if block.timestamp < transaction.started_at or (
             transaction.ended_at is not None and block.timestamp > transaction.ended_at
@@ -306,6 +290,11 @@ async def store_recovery_samples(
 async def start_transaction(
     session: AsyncSession, charger: ChargePoint, frame: Frame, payload: StartPayload
 ) -> dict[str, object]:
+    # Serialize the first session with station-timezone changes. The dispatcher
+    # already locks the charger; keep charger -> station -> connector lock order.
+    await session.scalar(
+        select(Station.id).where(Station.id == charger.station_id).with_for_update()
+    )
     connector = await session.scalar(
         select(Connector)
         .where(
@@ -369,8 +358,13 @@ async def start_transaction(
 async def meter_values(
     session: AsyncSession, charger: ChargePoint, frame: Frame, payload: MeterPayload
 ) -> dict[str, object]:
-    # Read the session and its latest series in one round trip while keeping
-    # the same charger -> session lock order and durable replay transaction.
+    # Recovery needs every timestamp to validate buffered gaps; ordinary reports
+    # need only the newest point per series. Fetch either in the same locked read.
+    recovery_timestamp = (
+        case((ChargingSession.recovery_at.is_not(None), MeterSample.timestamp))
+        if payload.transactionId is not None
+        else case((literal(False), MeterSample.timestamp))
+    )
     latest_sample = (
         select(
             MeterSample.measurand,
@@ -380,11 +374,17 @@ async def meter_values(
             MeterSample.value,
         )
         .where(MeterSample.session_id == ChargingSession.id)
-        .distinct(MeterSample.measurand, MeterSample.phase, MeterSample.location)
+        .distinct(
+            MeterSample.measurand,
+            MeterSample.phase,
+            MeterSample.location,
+            recovery_timestamp,
+        )
         .order_by(
             MeterSample.measurand,
             MeterSample.phase,
             MeterSample.location,
+            recovery_timestamp,
             MeterSample.timestamp.desc(),
         )
         .lateral("latest_meter_sample")
@@ -404,9 +404,14 @@ async def meter_values(
         statement = statement.where(ChargingSession.ended_at.is_(None))
     rows = (await session.execute(statement.with_for_update(of=ChargingSession))).all()
     transaction = rows[0][0] if rows else None
-    latest = {
-        (row[1], row[2], row[3]): (row[4], row[5]) for row in rows if row[1] is not None
-    }
+    latest: dict[tuple[str, str, str], tuple[datetime, Decimal]] = {}
+    history: dict[tuple[str, str, str], dict[datetime, Decimal]] = {}
+    for row in rows:
+        if row[1] is not None:
+            key = (row[1], row[2], row[3])
+            history.setdefault(key, {})[row[4]] = row[5]
+            if key not in latest or row[4] > latest[key][0]:
+                latest[key] = (row[4], row[5])
     if (
         transaction is None
         or transaction.manual_closed_at is not None
@@ -419,6 +424,7 @@ async def meter_values(
             transaction,
             payload.meterValue,
             latest=latest,
+            history=history,
             backfill=payload.transactionId is not None
             and transaction.recovery_at is not None,
         )

@@ -18,8 +18,12 @@ sai lệch dữ liệu phiên sạc. Phụ thuộc S-21 đã được merge vào
 ## Thành phần
 
 `simulator-seed` chỉ tạo hoặc cập nhật dữ liệu có tiền tố simulator: user thử,
-trạm, trụ, connector và thẻ. Không thay đổi dữ liệu có mã khác tiền tố đã cấu
-hình.
+trạm, trụ, connector, thẻ và ví tài xế. Trạm simulator được đặt giá
+`1.000 VND/kWh`; mỗi ví có ít nhất `charging_minimum_kwh × giá + wallet_reserve_vnd`
+theo cấu hình ứng dụng. Chạy seed lại sẽ sửa giá trạm và bù ví chưa đủ ngưỡng,
+ghi khoản bù qua API nạp tay nội bộ để giữ sổ cái bất biến; số dư cao hơn yêu
+cầu không bị giảm. Seed dùng tài khoản quản trị local-only cho khoản nạp và
+không thay đổi dữ liệu có mã khác tiền tố đã cấu hình.
 
 `simulator` kết nối tới `ws://app:8000`, dùng subprotocol `ocpp1.6` và chỉ ghi
 báo cáo không có id tag vào `.local/simulator-reports`. Service chờ seed hoàn
