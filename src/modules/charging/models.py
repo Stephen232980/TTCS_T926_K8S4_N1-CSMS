@@ -85,6 +85,7 @@ class ChargingSession(Base):
     authorization_status: Mapped[str] = mapped_column(String(20))
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    idle_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     settlement_completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True)
     )

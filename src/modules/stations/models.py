@@ -255,6 +255,9 @@ class Connector(Base):
         nullable=False,
     )
     raw_ocpp_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    last_status_notification_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
     status_updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
