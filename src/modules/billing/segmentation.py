@@ -1,5 +1,6 @@
-from datetime import date, datetime, time, timedelta
-from decimal import ROUND_HALF_UP, Decimal
+from datetime import UTC, date, datetime, time, timedelta
+from decimal import Decimal
+from fractions import Fraction
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -63,21 +64,26 @@ def interpolate_meter_value(
             point_a = meter_values[i - 1]
             point_b = mv
 
-            t_target = Decimal(target_time.timestamp())
-            t_a = Decimal(point_a.timestamp.timestamp())
-            t_b = Decimal(point_b.timestamp.timestamp())
-
             e_a = point_a.energy_wh
             e_b = point_b.energy_wh
-
-            # Tính tỷ lệ nội suy
-            time_ratio = (t_target - t_a) / (t_b - t_a)
-            interpolated = e_a + (e_b - e_a) * time_ratio
-
-            # Làm tròn nửa lên (ROUND_HALF_UP) về số nguyên Wh
-            rounded = interpolated.quantize(Decimal(1), rounding=ROUND_HALF_UP)
-
-            return rounded, True
+            if e_b < e_a:
+                raise ValueError("Chỉ số công tơ giảm giữa hai số đo.")
+            elapsed = (
+                target_time.astimezone(UTC) - point_a.timestamp.astimezone(UTC)
+            ) // timedelta(microseconds=1)
+            duration = (
+                point_b.timestamp.astimezone(UTC) - point_a.timestamp.astimezone(UTC)
+            ) // timedelta(microseconds=1)
+            interpolated = Fraction(e_a) + (Fraction(e_b) - Fraction(e_a)) * Fraction(
+                elapsed, duration
+            )
+            whole, remainder = divmod(
+                abs(interpolated.numerator), interpolated.denominator
+            )
+            rounded = whole + int(2 * remainder >= interpolated.denominator)
+            value = Decimal(-rounded if interpolated < 0 else rounded)
+            # Rounding must not invent a reading outside the source interval.
+            return min(e_b, max(e_a, value)), True
 
     raise ValueError(f"Không thể nội suy cho {target_time}.")
 
@@ -196,6 +202,9 @@ def chia_doan(
         end_wh, end_interp = interpolate_meter_value(seg_end, meter_values)
 
         energy_consumed_wh = end_wh - start_wh
+
+        if energy_consumed_wh < 0:
+            raise ValueError("Chỉ số công tơ giảm trong đoạn sạc.")
 
         if energy_consumed_wh == Decimal(0):
             continue
