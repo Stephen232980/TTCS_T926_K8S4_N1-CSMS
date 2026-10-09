@@ -3,6 +3,8 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from src.modules.billing.money import tien_dong
+
 
 class MeterValue:
     """Lớp chứa dữ liệu điểm đo công tơ."""
@@ -195,14 +197,12 @@ def chia_doan(
 
         energy_consumed_wh = end_wh - start_wh
 
-        if energy_consumed_wh == Decimal("0"):
+        if energy_consumed_wh == Decimal(0):
             continue
 
         # Tính tiền T-71
         price = applied_tariff.price_vnd_per_kwh
-        amount = (energy_consumed_wh * price / Decimal(1000)).quantize(
-            Decimal(1), rounding=ROUND_HALF_UP
-        )
+        amount = tien_dong(energy_consumed_wh, price)
 
         segments.append(
             {
@@ -211,7 +211,7 @@ def chia_doan(
                 "end_time": seg_end,
                 "energy_consumed_wh": energy_consumed_wh,
                 "price_vnd_per_kwh": price,
-                "amount_vnd": int(amount),
+                "amount_vnd": amount,
                 "tariff_version": applied_tariff.tariff_version,
                 "frame_label": applied_tariff.frame_label,
                 "start_interpolated": start_interp,
