@@ -197,6 +197,9 @@ def chia_doan(
 
         energy_consumed_wh = end_wh - start_wh
 
+        if energy_consumed_wh == Decimal(0):
+            continue
+
         # Tính tiền T-71
         price = applied_tariff.price_vnd_per_kwh
         amount = tien_dong(energy_consumed_wh, price)
