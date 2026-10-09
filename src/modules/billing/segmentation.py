@@ -3,6 +3,8 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from src.modules.billing.money import tien_dong
+
 
 class MeterValue:
     """Lớp chứa dữ liệu điểm đo công tơ."""
@@ -200,9 +202,7 @@ def chia_doan(
 
         # Tính tiền T-71
         price = applied_tariff.price_vnd_per_kwh
-        amount = (energy_consumed_wh * price / Decimal(1000)).quantize(
-            Decimal(1), rounding=ROUND_HALF_UP
-        )
+        amount = tien_dong(energy_consumed_wh, price)
 
         segments.append(
             {
@@ -211,7 +211,7 @@ def chia_doan(
                 "end_time": seg_end,
                 "energy_consumed_wh": energy_consumed_wh,
                 "price_vnd_per_kwh": price,
-                "amount_vnd": int(amount),
+                "amount_vnd": amount,
                 "tariff_version": applied_tariff.tariff_version,
                 "frame_label": applied_tariff.frame_label,
                 "start_interpolated": start_interp,
@@ -220,3 +220,35 @@ def chia_doan(
         )
 
     return segments
+
+
+def tinh_tien_theo_ngay(
+    session_start: datetime,
+    session_end: datetime,
+    meter_values: list[MeterValue],
+    daily_tariffs: dict[date, list[TariffFrame]],
+    station_timezone: str,
+) -> dict[date, dict[str, Any]]:
+    """
+    Task T-75 (S-31): Tính tiền và gom nhóm các đoạn (segments) theo từng ngày.
+    Mỗi ngày sẽ là một nhóm riêng để tính hoá đơn theo ngày.
+    """
+    segments = chia_doan(
+        session_start, session_end, meter_values, daily_tariffs, station_timezone
+    )
+
+    result: dict[date, dict[str, Any]] = {}
+    for seg in segments:
+        d = seg["local_date"]
+        if d not in result:
+            result[d] = {
+                "date": d,
+                "segments": [],
+                "total_energy_wh": Decimal(0),
+                "total_amount_vnd": 0,
+            }
+        result[d]["segments"].append(seg)
+        result[d]["total_energy_wh"] += seg["energy_consumed_wh"]
+        result[d]["total_amount_vnd"] += seg["amount_vnd"]
+
+    return result

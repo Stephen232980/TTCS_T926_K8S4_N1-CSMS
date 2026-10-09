@@ -69,6 +69,10 @@ def chia_doan(
     pass
 ```
 
+Phần làm tròn tiền dùng chung là
+`src.modules.billing.money.tien_dong`; xem [T-71](T71_MONEY_ROUNDING.md).
+Hàm này không làm tròn lại Wh đầu vào.
+
 ### Cấu trúc Dữ liệu Đầu ra (Output)
 
 Hàm sẽ trả về một List các Dictionary (mỗi Dict đại diện cho một đoạn sạc):
