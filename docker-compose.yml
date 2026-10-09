@@ -69,7 +69,8 @@ services:
     depends_on:
       app:
         condition: service_healthy
-    command: ["python", "-m", "simulator.seed"]
+    # >>> ĐÃ SỬA CHỖ NÀY: Thêm sleep 3 giây để ổn định connection pool trước khi chạy seed <<<
+    command: ["sh", "-c", "sleep 3 && python -m simulator.seed"]
     restart: "no"
 
   # S-26: run the deterministic reconnect scenario and keep sockets online for verification.
@@ -130,7 +131,6 @@ services:
         condition: service_healthy
     command: ["python", "-m", "simulator.verify"]
     restart: "no"
-
 
 volumes:
   postgres_data:
