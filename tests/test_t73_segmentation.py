@@ -151,3 +151,27 @@ def test_case_6_segment_amount_rounding() -> None:
     assert segments[0]["amount_vnd"] == 3500
     assert segments[1]["amount_vnd"] == 3500
     assert segments[0]["amount_vnd"] + segments[1]["amount_vnd"] == 7000
+
+
+def test_case_7_skip_zero_wh_segments() -> None:
+    """T-73: Bỏ qua các đoạn có 0 Wh."""
+    tz = ZoneInfo("Asia/Ho_Chi_Minh")
+    start = datetime(2023, 10, 25, 21, 0, tzinfo=tz)
+    end = datetime(2023, 10, 25, 23, 0, tzinfo=tz)
+
+    mvs = [
+        MeterValue(start, Decimal(0)),
+        MeterValue(datetime(2023, 10, 25, 22, 0, tzinfo=tz), Decimal(1000)),
+        MeterValue(end, Decimal(1000)),
+    ]
+    tariffs = {
+        date(2023, 10, 25): [
+            TariffFrame("00:00:00", "22:00:00", 3000, "v1", "T1"),
+            TariffFrame("22:00:00", "24:00:00", 2000, "v1", "T2"),
+        ]
+    }
+
+    segments = chia_doan(start, end, mvs, tariffs, "Asia/Ho_Chi_Minh")
+    assert len(segments) == 1
+    assert segments[0]["energy_consumed_wh"] == Decimal(1000)
+    assert segments[0]["price_vnd_per_kwh"] == 3000
