@@ -197,7 +197,7 @@ def chia_doan(
 
         energy_consumed_wh = end_wh - start_wh
 
-        if energy_consumed_wh == Decimal("0"):
+        if energy_consumed_wh == Decimal(0):
             continue
 
         # Tính tiền T-71
