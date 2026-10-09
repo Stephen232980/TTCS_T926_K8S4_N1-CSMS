@@ -98,3 +98,65 @@ def test_t76_timezone_utc_and_partial_hour() -> None:
 
     assert result[date(2023, 10, 26)]["total_energy_wh"] == Decimal(10000)
     assert result[date(2023, 10, 26)]["total_amount_vnd"] == 25000
+
+
+def test_t75_30_hours_3_days_same_tariff() -> None:
+    """T-75: Phiên sạc 30 giờ qua 3 ngày, cùng biểu giá. Kiểm tra tổng Wh và tiền."""
+    tz = ZoneInfo("Asia/Ho_Chi_Minh")
+    # Từ 21:00 ngày 25 đến 03:00 ngày 27 (30 giờ, qua 3 ngày: 25, 26, 27)
+    start = datetime(2023, 10, 25, 21, 0, tzinfo=tz)
+    end = datetime(2023, 10, 27, 3, 0, tzinfo=tz)
+
+    mvs = [
+        MeterValue(start, Decimal(1000)),
+        MeterValue(end, Decimal(31000)),
+    ]
+
+    tariffs = {
+        d: [TariffFrame("00:00:00", "24:00:00", 2000, "v1", "AllDay")]
+        for d in [date(2023, 10, 25), date(2023, 10, 26), date(2023, 10, 27)]
+    }
+
+    result = tinh_tien_theo_ngay(start, end, mvs, tariffs, "Asia/Ho_Chi_Minh")
+
+    assert len(result) == 3
+    # Tổng của từng ngày
+    total_wh = sum(day["total_energy_wh"] for day in result.values())
+    total_amount = sum(day["total_amount_vnd"] for day in result.values())
+
+    assert total_wh == Decimal(30000)
+    assert total_amount == 60000
+
+
+def test_t76_utc_input_to_local_station() -> None:
+    """T-76: Đầu vào 17:30 UTC, trạm UTC+7 phải nhận 00:30 ngày hôm sau và áp khung 00:00-06:00."""
+
+    tz_utc = ZoneInfo("UTC")
+    # Start: 17:30 UTC ngày 25 -> 00:30 ngày 26 tại VN
+    # End: 18:30 UTC ngày 25 -> 01:30 ngày 26 tại VN
+    start = datetime(2023, 10, 25, 17, 30, tzinfo=tz_utc)
+    end = datetime(2023, 10, 25, 18, 30, tzinfo=tz_utc)
+
+    mvs = [
+        MeterValue(start, Decimal(0)),
+        MeterValue(end, Decimal(1000)),
+    ]
+
+    tariffs = {
+        date(2023, 10, 26): [
+            TariffFrame("00:00:00", "06:00:00", 2000, "v1", "T1"),
+            TariffFrame("06:00:00", "24:00:00", 3000, "v1", "T2"),
+        ]
+    }
+
+    result = tinh_tien_theo_ngay(start, end, mvs, tariffs, "Asia/Ho_Chi_Minh")
+
+    # Chỉ ghi nhận vào ngày 26
+    assert len(result) == 1
+    assert date(2023, 10, 26) in result
+    day26 = result[date(2023, 10, 26)]
+    assert day26["total_energy_wh"] == Decimal(1000)
+    assert day26["segments"][0]["frame_label"] == "T1"
+
+    # Đảm bảo nếu dùng UTC thì sẽ fail
+    assert len(tinh_tien_theo_ngay(start, end, mvs, tariffs, "UTC")) == 0

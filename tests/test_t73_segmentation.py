@@ -151,3 +151,35 @@ def test_case_6_segment_amount_rounding() -> None:
     assert segments[0]["amount_vnd"] == 3500
     assert segments[1]["amount_vnd"] == 3500
     assert segments[0]["amount_vnd"] + segments[1]["amount_vnd"] == 7000
+
+
+def test_case_7_skip_zero_wh_segments() -> None:
+    """Phiên cắt 2 ranh giới nhưng chỉ số đầu cuối không đổi (tiêu thụ 0 Wh).
+    Cần loại bỏ các đoạn có 0 Wh và tổng Wh các đoạn bằng hiệu chỉ số cuối và đầu.
+    """
+    tz = ZoneInfo("Asia/Ho_Chi_Minh")
+    start = datetime(2023, 10, 25, 21, 30, tzinfo=tz)
+    end = datetime(2023, 10, 26, 1, 30, tzinfo=tz)
+    
+    mvs = [
+        MeterValue(start, Decimal("1000.0")),
+        MeterValue(end, Decimal("1000.0")),
+    ]
+    tariffs = {
+        date(2023, 10, 25): [
+            TariffFrame("00:00:00", "22:00:00", 2000, "v1", "T1"),
+            TariffFrame("22:00:00", "24:00:00", 3000, "v1", "T2"),
+        ],
+        date(2023, 10, 26): [
+            TariffFrame("00:00:00", "06:00:00", 2000, "v1", "T3"),
+        ]
+    }
+
+    segments = chia_doan(start, end, mvs, tariffs, "Asia/Ho_Chi_Minh")
+    
+    # Không có đoạn nào được sinh ra do tất cả đều 0 Wh
+    assert len(segments) == 0
+    
+    # Tổng Wh các đoạn (0) bằng hiệu chỉ số
+    total_wh = sum(s["energy_consumed_wh"] for s in segments)
+    assert total_wh == mvs[-1].energy_wh - mvs[0].energy_wh
