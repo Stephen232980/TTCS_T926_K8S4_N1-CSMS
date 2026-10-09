@@ -557,3 +557,12 @@ Ba biến môi trường: `PAYMENT_GATEWAY` (mặc định `disabled`, chọn `f
 `PAYMENT_RETURN_URL` (local `http://localhost:5173/wallet/topup/return`).
 Không có khóa webhook mặc định. T-90 chưa cung cấp route hoặc adapter thanh toán.
 Xem [contract, ví dụ webhook HMAC và quy ước T-92/T-93/T-94/T-95](docs/T90_PAYMENT_GATEWAY.md).
+
+## S-35: tạo lệnh nạp ví (T-93)
+
+`POST /api/v1/driver/wallet/topups` kiểm quyền tài xế, lấy ví của chính tài xế,
+kiểm số tiền nguyên theo `WALLET_TOPUP_MIN_VND`/`WALLET_TOPUP_MAX_VND` (mặc định
+10.000–5.000.000 đồng), ghi lệnh pending và gọi PaymentGateway.
+`GET /api/v1/driver/wallet/topups/{order_id}` cung cấp trạng thái cho T-94.
+Chưa có adapter T-92 thì POST trả 503; tạo lệnh không cộng tiền vào ví.
+Xem [API, lỗi/timeout và điểm nối T-92/T-94](docs/T93_WALLET_TOPUP_API.md).

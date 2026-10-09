@@ -28,6 +28,7 @@ from src.modules.wallet.administration_router import (
     router as wallet_administration_router,
 )
 from src.modules.wallet.driver_router import router as driver_wallet_router
+from src.modules.wallet.topup_router import router as wallet_topup_router
 from src.platform.database.session import get_db_session
 
 app = FastAPI(
@@ -54,6 +55,7 @@ app.include_router(discovery_router)
 app.include_router(charging_router)
 app.include_router(driver_charging_router)
 app.include_router(driver_wallet_router)
+app.include_router(wallet_topup_router)
 app.include_router(admin_wallet_router)
 app.include_router(wallet_administration_router)
 app.include_router(control_router)

@@ -597,3 +597,10 @@ chia 1000 khi chuyển phần chênh lệch sang kWh; không nhân 1000 lần n�
 Chọn đúng measurand/phase/location. Power chuẩn hoá về W, Current về A,
 Voltage về V; không dùng các đại lượng này như chỉ số điện năng. Đơn vị
 không hỗ trợ hoặc giá trị không hợp lệ không được suy thành số đo 0.
+
+## S-35 / T-93 — Driver wallet topups
+
+- `POST /api/v1/driver/wallet/topups`: `driver.wallet.topup`, `own_wallet`, driver; body chỉ có amount_vnd nguyên. Ngưỡng mặc định 10.000–5.000.000 đồng, cấu hình bằng WALLET_TOPUP_MIN_VND/WALLET_TOPUP_MAX_VND. Body/query chỉ định wallet_id/driver_id trả 403.
+- `GET /api/v1/driver/wallet/topups/{order_id}`: `driver.wallet.topup.read`, `own_wallet`, driver; đọc status/reason của lệnh cùng driver_id. Lệnh lạ hoặc của người khác cùng trả 404.
+- Chưa có adapter: 503, không tạo lệnh. Timeout/lỗi sau khi gửi: 503 với detail.order_id, giữ pending đã commit để hỏi trạng thái; không tự retry POST và không cộng ví.
+- POST thành công trả 201 với order_id, amount_vnd, status, reason, created_at, redirect_url. GET trả cùng dữ liệu trừ redirect_url. Adapter T-92 chưa tích hợp; dùng gateway thử trong kiểm thử. Chi tiết ở [T93_WALLET_TOPUP_API.md](T93_WALLET_TOPUP_API.md).

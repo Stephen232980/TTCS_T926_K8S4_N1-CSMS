@@ -99,7 +99,7 @@ Thất bại/hủy dùng cùng cấu trúc với status `failed`/`cancelled` và
 
 ## Quy ước tích hợp cho các task tiếp theo
 
-Các endpoint dưới đây là quy ước để triển khai sau, **chưa có route hoạt động trong T-90**:
+T-90 chỉ chốt quy ước. T-93 đã triển khai POST/GET lệnh nạp theo [T93_WALLET_TOPUP_API.md](T93_WALLET_TOPUP_API.md); webhook T-95 vẫn là endpoint cần triển khai sau:
 
 - T-93: `POST /api/v1/driver/wallet/topups`, lấy tài xế từ phiên đăng nhập và trả order_id, trạng thái pending, redirect_url. Kiểm ngưỡng tiền 10.000–5.000.000 theo cấu hình T-93 trước khi gọi gateway.
 - T-94: `GET /api/v1/driver/wallet/topups/{order_id}` để hỏi trạng thái; backend kiểm đúng chủ ví, không cho đọc lệnh của người khác.

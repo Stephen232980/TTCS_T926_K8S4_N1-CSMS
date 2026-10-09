@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     database_url: str
     database_pool_size: int = Field(default=20, ge=1, le=100)
     wallet_manual_topup_max_vnd: int = Field(default=10_000_000, gt=0, le=2**63 - 1)
+    wallet_topup_min_vnd: int = Field(default=10_000, gt=0, le=2**63 - 1)
+    wallet_topup_max_vnd: int = Field(default=5_000_000, gt=0, le=2**63 - 1)
     wallet_reconciliation_interval_seconds: int = Field(default=300, gt=0)
 
     payment_gateway: Literal["disabled", "fake", "sandbox"] = "disabled"
@@ -36,6 +38,8 @@ class Settings(BaseSettings):
             or not self.payment_webhook_secret.get_secret_value().strip()
         ):
             raise ValueError("enabled payment gateway requires PAYMENT_WEBHOOK_SECRET")
+        if self.wallet_topup_min_vnd > self.wallet_topup_max_vnd:
+            raise ValueError("wallet topup minimum must not exceed maximum")
         return self
 
     auth_max_failed_attempts: int = Field(default=5, gt=0)
