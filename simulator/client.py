@@ -83,7 +83,7 @@ def job_nhat_phien_chua_thanh_toan() -> None:
         print(f"⚠️ Phát hiện Transaction {tx_id} đang nợ {tien_no:,.0f} VNĐ!")
         print(f"   -> Đang gửi yêu cầu trừ tiền lại cho Transaction {tx_id}...")
         DATABASE_PHIEN_SAC[tx_id]["trang_thai"] = "DA_THANH_TOAN"
-        print(f"   -> ✅ Thu hồi nợ thành công! Đã cập nhật trạng thái DA_THANH_TOAN.")
+        print("   -> ✅ Thu hồi nợ thành công! Đã cập nhật trạng thái DA_THANH_TOAN.")
     print("=" * 50 + "\n")
 
 
