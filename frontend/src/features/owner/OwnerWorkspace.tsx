@@ -18,6 +18,7 @@ import { Icon, type IconName } from '../../components/icons/Icon'
 import { StationWizard } from './StationWizard'
 import { ChargerWizard } from './ChargerWizard'
 import { OwnerCharging } from './OwnerCharging'
+import { TariffForm, type TariffValues } from './TariffForm'
 import { ChargerDrawing, ConnectionSymbol, ConnectorSymbol, StationPhoto } from './OwnerVisuals'
 import {
   clock,
@@ -274,6 +275,8 @@ export function OwnerWorkspace({
     null,
   )
   const [station, setStation] = useState<Station | null>(null)
+  const [previewTariffs, setPreviewTariffs] =
+  useState<Record<string, TariffValues>>({})
   const [chargers, setChargers] = useState<ChargePointPage | null>(null)
   const [connections, setConnections] = useState<Connection[]>([])
   const [connectionError, setConnectionError] = useState('')
@@ -790,6 +793,23 @@ export function OwnerWorkspace({
                     {connectionError}
                   </p>
                 )}
+<div>
+  <p className="owner-subtle">
+    Biểu giá xem trước - chưa lưu lên hệ thống.
+  </p>
+
+  <TariffForm
+    key={station.id}
+    currentTariff={previewTariffs[String(station.id)] ?? null}
+    onSave={async (values) => {
+      setPreviewTariffs((previous) => ({
+        ...previous,
+        [String(station.id)]: values,
+      }))
+    }}
+  />
+</div>
+
                 <div className="owner-detail-grid owner-grow">
                   <section className="owner-chargers">
                     <header>
