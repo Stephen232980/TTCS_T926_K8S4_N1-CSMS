@@ -30,6 +30,7 @@ def tinh_tien(start_wh: int, stop_wh: int, don_gia_kwh: float = 3500.0) -> float
     luong_dien_kwh = (stop_wh - start_wh) / 1000
     return luong_dien_kwh * don_gia_kwh
 
+
 def lap_hoa_don(start_wh: int, stop_wh: int) -> float:
     print("--- BẮT ĐẦU LẬP HÓA ĐƠN ---")
     print(f"Chỉ số bắt đầu: {start_wh} Wh")
@@ -46,59 +47,64 @@ def lap_hoa_don(start_wh: int, stop_wh: int) -> float:
 # ==========================================
 DATABASE_PHIEN_SAC = {}
 
-def chot_phien(transaction_id: int, start_wh: int, stop_wh: int, thanh_toan_thanh_cong: bool) -> None:
+
+def chot_phien(
+    transaction_id: int, start_wh: int, stop_wh: int, thanh_toan_thanh_cong: bool
+) -> None:
     print(f"\n⚡ BẮT ĐẦU CHỐT PHIÊN CHO TRANSACTION: {transaction_id}")
     tong_tien = lap_hoa_don(start_wh, stop_wh)
     trang_thai = "DA_THANH_TOAN" if thanh_toan_thanh_cong else "CHO_THANH_TOAN"
-    
+
     DATABASE_PHIEN_SAC[transaction_id] = {
         "transaction_id": transaction_id,
         "tong_tien": tong_tien,
-        "trang_thai": trang_thai
+        "trang_thai": trang_thai,
     }
     print(f"=> Trạng thái phiên {transaction_id} được lưu vào hệ thống: {trang_thai}")
 
+
 def job_nhat_phien_chua_thanh_toan() -> None:
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print("🔍 [BACKGROUND JOB] QUÉT PHIÊN CHƯA HOÀN TẤT THANH TOÁN...")
-    danh_sach_no = [phien for phien in DATABASE_PHIEN_SAC.values() if phien["trang_thai"] == "CHO_THANH_TOAN"]
-    
+    danh_sach_no = [
+        phien
+        for phien in DATABASE_PHIEN_SAC.values()
+        if phien["trang_thai"] == "CHO_THANH_TOAN"
+    ]
+
     if not danh_sach_no:
         print("✅ Không có khách hàng nào nợ tiền. Hệ thống sạch sẽ!")
-        print("="*50 + "\n")
+        print("=" * 50 + "\n")
         return
 
     for phien in danh_sach_no:
-        tx_id = phien['transaction_id']
-        tien_no = phien['tong_tien']
+        tx_id = phien["transaction_id"]
+        tien_no = phien["tong_tien"]
         print(f"⚠️ Phát hiện Transaction {tx_id} đang nợ {tien_no:,.0f} VNĐ!")
         print(f"   -> Đang gửi yêu cầu trừ tiền lại cho Transaction {tx_id}...")
         DATABASE_PHIEN_SAC[tx_id]["trang_thai"] = "DA_THANH_TOAN"
         print(f"   -> ✅ Thu hồi nợ thành công! Đã cập nhật trạng thái DA_THANH_TOAN.")
-    print("="*50 + "\n")
+    print("=" * 50 + "\n")
 
 
 # ==========================================
 # [T-104] NGƯỠNG TỐI THIỂU & KIỂM TRA SỐ DƯ
 # ==========================================
-DATABASE_VI_TIEN = {
-    "SIMTAG-1": 50000.0,
-    "SIMTAG-2": 15000.0,
-    "SIMTAG-3": 100000.0
-}
+DATABASE_VI_TIEN = {"SIMTAG-1": 50000.0, "SIMTAG-2": 15000.0, "SIMTAG-3": 100000.0}
 
 CAU_HINH_TRAM = {
-    1: 30000.0, 
+    1: 30000.0,
 }
+
 
 def du_so_du_de_sac(id_tag: str, connector_id: int) -> bool:
     print(f"\n💳 [T-104] KIỂM TRA SỐ DƯ THẺ: {id_tag} (CỔNG: {connector_id})")
     so_du = DATABASE_VI_TIEN.get(id_tag, 20000.0)
     nguong_toi_thieu = CAU_HINH_TRAM.get(connector_id, 30000.0)
-    
+
     print(f"   -> Số dư ví hiện tại: {so_du:,.0f} VNĐ")
     print(f"   -> Ngưỡng trạm yêu cầu: {nguong_toi_thieu:,.0f} VNĐ")
-    
+
     if so_du >= nguong_toi_thieu:
         print("   -> ✅ HỢP LỆ: Số dư đảm bảo. Cho phép bắt đầu sạc!")
         return True
@@ -117,6 +123,7 @@ async def run(settings: SimulatorSettings) -> None:
         await _run_online(settings, run_id)
     else:
         await _run_recovery(settings, run_id)
+
 
 async def _run_online(settings: SimulatorSettings, run_id: str) -> None:
     connections = await asyncio.gather(
@@ -142,6 +149,7 @@ async def _run_online(settings: SimulatorSettings, run_id: str) -> None:
     finally:
         await _close_all(sockets)
 
+
 async def _run_recovery(settings: SimulatorSettings, run_id: str) -> None:
     started_at = monotonic()
     results = await asyncio.gather(
@@ -159,10 +167,10 @@ async def _run_recovery(settings: SimulatorSettings, run_id: str) -> None:
             report_rows.append(row)
             sockets.append(socket)
     _write_report(settings, report_rows, run_id, started_at)
-    
+
     # [T-81] Quét nợ sau khi các trạm sạc chạy xong
     job_nhat_phien_chua_thanh_toan()
-    
+
     if len(sockets) != settings.count:
         await _close_all(sockets)
         raise RuntimeError("One or more virtual recovery scenarios failed")
@@ -170,6 +178,7 @@ async def _run_recovery(settings: SimulatorSettings, run_id: str) -> None:
         await _keep_connected(sockets, settings)
     finally:
         await _close_all(sockets)
+
 
 async def _recovery_charger(
     settings: SimulatorSettings, index: int
@@ -181,10 +190,10 @@ async def _recovery_charger(
         authorization = await _call(socket, "Authorize", {"idTag": tag})
         if _field(authorization, "idTagInfo", "status") != "Accepted":
             raise RuntimeError("Simulator authorization was not accepted")
-        
+
         timestamp = datetime.now(UTC) - timedelta(minutes=1)
         start_message_id = str(uuid4())
-        
+
         # ==========================================
         # [T-104] KIỂM TRA SỐ DƯ TRƯỚC KHI SẠC
         # ==========================================
@@ -205,10 +214,14 @@ async def _recovery_charger(
         )
         transaction_id = started.get("transactionId")
         if type(transaction_id) is not int:
-            raise RuntimeError("StartTransaction did not return an integer transactionId")
-        
+            raise RuntimeError(
+                "StartTransaction did not return an integer transactionId"
+            )
+
         await _status(socket, "Charging")
-        reconnects = random.Random(settings.seed + index).randint(1, settings.max_reconnects)
+        reconnects = random.Random(settings.seed + index).randint(
+            1, settings.max_reconnects
+        )
         for reconnect in range(1, reconnects + 1):
             await socket.close()
             socket, _ = await _connect_and_boot(settings, index)
@@ -225,7 +238,7 @@ async def _recovery_charger(
                 METER_START_WH + reconnect * 500,
             )
         await _meter(socket, transaction_id, timestamp + timedelta(seconds=40), 3000)
-        
+
         stop_message_id = str(uuid4())
         stop_payload = {
             "transactionId": transaction_id,
@@ -236,13 +249,13 @@ async def _recovery_charger(
         await _call(socket, "StopTransaction", stop_payload, stop_message_id)
         await _call(socket, "StopTransaction", stop_payload, stop_message_id)
         await _status(socket, "Available")
-        
+
         # ==========================================
         # [T-81] CHỐT PHIÊN KHI NGỪNG SẠC
         # ==========================================
-        thanh_toan_ok = random.random() > 0.3 
+        thanh_toan_ok = random.random() > 0.3
         chot_phien(transaction_id, METER_START_WH, METER_STOP_WH, thanh_toan_ok)
-        
+
         return (
             {
                 "code": code,
@@ -257,6 +270,7 @@ async def _recovery_charger(
         await socket.close()
         raise
 
+
 async def _connect_and_boot(
     settings: SimulatorSettings, index: int
 ) -> tuple[ClientConnection, int]:
@@ -265,7 +279,9 @@ async def _connect_and_boot(
     for _ in range(12):
         try:
             socket = await connect(
-                url, subprotocols=[Subprotocol("ocpp1.6")], open_timeout=5,
+                url,
+                subprotocols=[Subprotocol("ocpp1.6")],
+                open_timeout=5,
             )
         except (OSError, TimeoutError, WebSocketException) as error:
             last_error = error
@@ -288,10 +304,16 @@ async def _connect_and_boot(
             await socket.close()
             raise RuntimeError("BootNotification did not return a valid interval")
         return socket, interval
-    raise RuntimeError(f"Could not connect virtual charger {settings.code_for(index)}") from last_error
+    raise RuntimeError(
+        f"Could not connect virtual charger {settings.code_for(index)}"
+    ) from last_error
+
 
 async def _call(
-    socket: ClientConnection, action: str, payload: dict[str, Any], message_id: str | None = None,
+    socket: ClientConnection,
+    action: str,
+    payload: dict[str, Any],
+    message_id: str | None = None,
 ) -> dict[str, Any]:
     call_id = message_id or str(uuid4())
     await socket.send(json.dumps([2, call_id, action, payload], separators=(",", ":")))
@@ -307,10 +329,14 @@ async def _call(
         raise RuntimeError(f"{action} received an invalid OCPP response")
     return response[2]
 
+
 async def _status(socket: ClientConnection, status: str) -> None:
     await _call(
-        socket, "StatusNotification", {"connectorId": 1, "status": status, "errorCode": "NoError"},
+        socket,
+        "StatusNotification",
+        {"connectorId": 1, "status": status, "errorCode": "NoError"},
     )
+
 
 async def _meter(
     socket: ClientConnection, transaction_id: int, timestamp: datetime, value: int
@@ -330,23 +356,34 @@ async def _meter(
         },
     )
 
+
 async def _keep_connected(
     sockets: list[ClientConnection], settings: SimulatorSettings
 ) -> None:
-    deadline = None if settings.hold_seconds == 0 else monotonic() + settings.hold_seconds
+    deadline = (
+        None if settings.hold_seconds == 0 else monotonic() + settings.hold_seconds
+    )
     while deadline is None or monotonic() < deadline:
         await asyncio.gather(*(_call(socket, "Heartbeat", {}) for socket in sockets))
         await asyncio.sleep(settings.heartbeat_seconds)
 
+
 async def _close_all(sockets: list[ClientConnection]) -> None:
-    await asyncio.gather(*(socket.close() for socket in sockets), return_exceptions=True)
+    await asyncio.gather(
+        *(socket.close() for socket in sockets), return_exceptions=True
+    )
+
 
 def _field(value: dict[str, Any], parent: str, child: str) -> Any:
     nested = value.get(parent)
     return nested.get(child) if isinstance(nested, dict) else None
 
+
 def _write_report(
-    settings: SimulatorSettings, rows: list[dict[str, Any]], run_id: str, started_at: float | None = None,
+    settings: SimulatorSettings,
+    rows: list[dict[str, Any]],
+    run_id: str,
+    started_at: float | None = None,
 ) -> None:
     elapsed = None if started_at is None else round(monotonic() - started_at, 3)
     write_report(
@@ -360,12 +397,14 @@ def _write_report(
         },
     )
 
+
 def main() -> None:
     try:
         asyncio.run(run(load_settings()))
     except (OSError, RuntimeError, ValueError) as error:
         print(f"S-26 simulator failed: {error}", file=sys.stderr, flush=True)
         raise SystemExit(1) from error
+
 
 if __name__ == "__main__":
     main()
