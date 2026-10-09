@@ -185,3 +185,50 @@
   .driver-shell .station-map__canvas { height: 330px; }
   .driver-station-results { max-height: 384px; }
 }
+
+/* T-94: Giao diện nạp tiền vào ví */
+
+.driver-wallet-page {
+  width: 100%;
+  max-width: 560px;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 20px;
+}
+
+.driver-wallet-page form {
+  display: grid;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.driver-wallet-page input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 12px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+}
+
+.driver-wallet-presets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.driver-wallet-presets button {
+  min-width: 0;
+  padding: 12px 4px;
+  cursor: pointer;
+}
+
+.driver-wallet-error {
+  color: #dc2626;
+}
+
+@media (max-width: 480px) {
+  .driver-wallet-page {
+    padding: 12px;
+  }
+}
