@@ -546,3 +546,14 @@ S-16, S-23, S-27 thêm Reset, dừng phiên từ xa và nhật ký bất biến.
 ## Nhóm 6: tài xế theo dõi và bắt đầu sạc
 
 S-22 và S-24 thêm phiên hiện tại theo tài khoản đăng nhập, cập nhật kWh/thời gian và bắt đầu bằng thẻ ảo qua RemoteStartTransaction. Accepted chờ StartTransaction thật; thiếu xác nhận sau 60 giây cho thử lại. Đầu nối bận/Reserved bị chặn; quyền sở hữu đặt chỗ thuộc phần đặt chỗ sau. Nâng migration c60318a4d962. Xem [AC, API và kiểm thử thủ công](docs/DRIVER_CHARGING_DELIVERY.md). Bằng chứng local không thay Jira/CI.
+
+## S-35: contract cổng thanh toán (T-90)
+
+Luồng nạp ví dùng cổng giả lập cho local/test; cổng sandbox thật thuộc S-67.
+Contract `PaymentGateway` có hai hàm: `create_payment(PaymentRequest)` trả
+`PaymentRedirect`, và `verify_webhook(raw_body, headers)` trả `GatewayEvent`.
+Ba biến môi trường: `PAYMENT_GATEWAY` (mặc định `disabled`, chọn `fake` hoặc
+`sandbox`), `PAYMENT_WEBHOOK_SECRET` (bắt buộc khi bật cổng),
+`PAYMENT_RETURN_URL` (local `http://localhost:5173/wallet/topup/return`).
+Không có khóa webhook mặc định. T-90 chưa cung cấp route hoặc adapter thanh toán.
+Xem [contract, ví dụ webhook HMAC và quy ước T-92/T-93/T-94/T-95](docs/T90_PAYMENT_GATEWAY.md).
