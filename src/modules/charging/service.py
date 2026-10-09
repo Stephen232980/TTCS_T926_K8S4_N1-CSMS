@@ -35,9 +35,7 @@ from src.modules.wallet.models import Wallet
 logger = logging.getLogger("csms.ocpp")
 
 
-def du_so_du_de_sac(
-    wallet_balance_vnd: Decimal | int | None, station: Station
-) -> bool:
+def du_so_du_de_sac(wallet_balance_vnd: Decimal | int | None, station: Station) -> bool:
     price = station.price_vnd_per_kwh
     if wallet_balance_vnd is None or price is None or price <= 0:
         return False

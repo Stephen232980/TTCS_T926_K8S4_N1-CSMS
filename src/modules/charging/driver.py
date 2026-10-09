@@ -137,9 +137,7 @@ async def remote_start(
         ):
             raise HTTPException(409, "Trạm hoặc đầu nối hiện không khả dụng.")
         wallet = await session.scalar(
-            select(Wallet)
-            .where(Wallet.driver_id == driver_id)
-            .with_for_update()
+            select(Wallet).where(Wallet.driver_id == driver_id).with_for_update()
         )
         if (
             wallet is None

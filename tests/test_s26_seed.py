@@ -97,7 +97,9 @@ async def test_seed_creates_station_with_simulator_price() -> None:
 
 
 @pytest.mark.asyncio
-async def test_seed_tops_up_low_wallet_and_preserves_higher_balance(monkeypatch) -> None:
+async def test_seed_tops_up_low_wallet_and_preserves_higher_balance(
+    monkeypatch,
+) -> None:
     session = AsyncMock(spec=AsyncSession)
     driver = User(id=uuid4(), email="simulator-driver@example.com", password_hash="")
     administrator = User(

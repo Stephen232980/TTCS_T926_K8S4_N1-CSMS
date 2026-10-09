@@ -20,6 +20,7 @@ def upgrade() -> None:
         "price_vnd_per_kwh IS NULL OR price_vnd_per_kwh > 0",
     )
 
+
 def downgrade() -> None:
     op.drop_constraint(
         "ck_stations_price_vnd_per_kwh_positive", "stations", type_="check"
