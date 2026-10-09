@@ -2,7 +2,13 @@ from datetime import date, datetime
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
-from src.modules.billing.segmentation import MeterValue, TariffFrame, chia_doan, tinh_tien_theo_ngay
+from src.modules.billing.segmentation import (
+    MeterValue,
+    TariffFrame,
+    chia_doan,
+    tinh_tien_theo_ngay,
+)
+
 
 def test_case_8_30h_across_3_days() -> None:
     """T-75: Nhóm theo ngày - 30 giờ qua ba ngày, các ngày cùng biểu giá."""
