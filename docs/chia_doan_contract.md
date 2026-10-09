@@ -52,6 +52,10 @@ def chia_doan(
     Quy tắc Nội suy (T-72):
     - Mốc trùng số đo: lấy đúng chỉ số gốc (Decimal).
     - Mốc nằm giữa: nội suy tuyến tính chính xác, làm tròn nửa lên (ROUND_HALF_UP) về Wh nguyên (Decimal không có phần lẻ), đánh cờ interpolated=True.
+      Thời gian tính bằng khoảng microsecond nguyên, không chuyển qua float.
+      Nếu làm tròn vượt khỏi khoảng chỉ số nguồn, giới hạn về chỉ số nguồn gần nhất.
+      Khi đó kết quả có thể còn phần lẻ; số đo không tăng phải cho cùng chỉ số ở mọi ranh.
+      Giữ nguyên số đo gốc trùng mốc, không chuẩn hoá lại đầu/cuối phiên.
     - Mốc ngoài khoảng: báo lỗi.
 
     Quy tắc Tính tiền (T-71):
