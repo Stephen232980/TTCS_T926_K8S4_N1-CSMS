@@ -25,6 +25,7 @@ from src.modules.ocpp.dispatcher import dispatch_call, process_call
 from src.modules.ocpp.frames import Frame, decode_frame
 from src.modules.ocpp.transport import handle_message
 from src.modules.stations.models import ChargePoint, Connector, Station
+from src.modules.wallet.models import DriverWallet
 from src.platform.database.session import SessionFactory, get_db_session
 from tests.test_ocpp_foundation import charger_fixture, connection
 
@@ -59,6 +60,7 @@ async def test_start_replay_on_new_connection_keeps_exact_transaction(db_session
 
 async def setup(session):
     station, charger = await charger_fixture(session)
+    station.price_vnd_per_kwh = Decimal("1000")
     connector = Connector(
         charge_point_id=charger.id, connector_number=1, status="Available"
     )
@@ -79,7 +81,8 @@ async def setup(session):
     # Unique per fixture; protocol and DB use the same exact tag (<=20 characters).
     tag = str(charger.id).replace("-", "")[:16] + "ABCD"
     card.tag_hash = tag_hash(tag)
-    session.add(card)
+    wallet = DriverWallet(driver_id=driver.id, balance_vnd=Decimal("50000"))
+    session.add_all([card, wallet])
     await session.flush()
     conn = connection(charger.id, station.id)
     conn.boot_accepted = True
@@ -134,6 +137,7 @@ async def start(session, conn, tag, stamp=None, meter=1000, uid=None):
         ("suspended_station", "Blocked"),
         ("suspended_driver", "Blocked"),
         ("not_driver", "Blocked"),
+        ("wallet_low", "Blocked"),
     ],
 )
 async def test_authorize_states_and_masked_audit(
@@ -150,6 +154,12 @@ async def test_authorize_states_and_masked_audit(
         driver.status = "suspended"
     if scenario == "not_driver":
         await db_session.execute(delete(UserRole).where(UserRole.user_id == driver.id))
+    if scenario == "wallet_low":
+        wallet = await db_session.scalar(
+            select(DriverWallet).where(DriverWallet.driver_id == driver.id)
+        )
+        assert wallet is not None
+        wallet.balance_vnd = Decimal("14999")
     if scenario == "unknown":
         tag = "UNKNOWN-CARD-5678"
     await db_session.flush()

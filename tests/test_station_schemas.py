@@ -42,6 +42,15 @@ def test_station_create_request_normalizes_valid_payload() -> None:
     assert request.longitude == Decimal("106.7032")
 
 
+def test_station_price_is_optional_and_station_scoped() -> None:
+    payload = valid_create_payload()
+    payload["price_vnd_per_kwh"] = "1200.50"
+
+    request = StationCreateRequest.model_validate(payload)
+
+    assert request.price_vnd_per_kwh == Decimal("1200.50")
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [
@@ -51,6 +60,8 @@ def test_station_create_request_normalizes_valid_payload() -> None:
         ("latitude", 90.000001),
         ("longitude", -180.000001),
         ("longitude", 180.000001),
+        ("price_vnd_per_kwh", 0),
+        ("price_vnd_per_kwh", -1),
     ],
 )
 def test_station_create_request_rejects_invalid_fields(

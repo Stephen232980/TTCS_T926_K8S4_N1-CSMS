@@ -22,6 +22,9 @@ class StationCreateRequest(BaseModel):
         ge=Decimal(-180),
         le=Decimal(180),
     )
+    price_vnd_per_kwh: Decimal | None = Field(
+        default=None, gt=0, max_digits=12, decimal_places=2
+    )
 
 
 class StationUpdateRequest(BaseModel):
@@ -41,6 +44,9 @@ class StationUpdateRequest(BaseModel):
         default=None,
         ge=Decimal(-180),
         le=Decimal(180),
+    )
+    price_vnd_per_kwh: Decimal | None = Field(
+        default=None, gt=0, max_digits=12, decimal_places=2
     )
 
     @model_validator(mode="after")
@@ -78,6 +84,7 @@ class StationResponse(BaseModel):
     photo_url: str | None = None
     latitude: float
     longitude: float
+    price_vnd_per_kwh: Decimal | None = None
     status: str
     created_at: datetime
     updated_at: datetime

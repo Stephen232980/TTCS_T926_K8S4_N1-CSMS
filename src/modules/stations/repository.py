@@ -138,6 +138,7 @@ class StationRepository:
         address: str,
         latitude: Decimal,
         longitude: Decimal,
+        price_vnd_per_kwh: Decimal | None = None,
     ) -> Station:
         station = Station(
             owner_id=owner_id,
@@ -145,6 +146,7 @@ class StationRepository:
             address=address,
             latitude=latitude,
             longitude=longitude,
+            price_vnd_per_kwh=price_vnd_per_kwh,
         )
         self._db_session.add(station)
         await self._db_session.flush()
@@ -366,6 +368,7 @@ class StationRepository:
         address: str,
         latitude: Decimal,
         longitude: Decimal,
+        price_vnd_per_kwh: Decimal | None = None,
     ) -> Station:
         await self._db_session.execute(
             select(
@@ -401,6 +404,7 @@ class StationRepository:
             address=address,
             latitude=latitude,
             longitude=longitude,
+            price_vnd_per_kwh=price_vnd_per_kwh,
         )
         self._db_session.add(
             StationCreateIdempotency(
@@ -450,6 +454,7 @@ class StationRepository:
         address: str | None,
         latitude: Decimal | None,
         longitude: Decimal | None,
+        price_vnd_per_kwh: Decimal | None = None,
     ) -> Station | None:
         station = await self.get_station_by_id(station_id, scope)
         if station is None:
@@ -463,6 +468,8 @@ class StationRepository:
             station.latitude = latitude
         if longitude is not None:
             station.longitude = longitude
+        if price_vnd_per_kwh is not None:
+            station.price_vnd_per_kwh = price_vnd_per_kwh
 
         await self._db_session.flush()
         await self._db_session.refresh(station)

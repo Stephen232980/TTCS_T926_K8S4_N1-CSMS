@@ -13,13 +13,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.charging.driver_models import DriverStartRequest, DriverVirtualTag
 from src.modules.charging.models import ChargingCard, ChargingSession
-from src.modules.charging.service import tag_hash
+from src.modules.charging.service import du_so_du_de_sac, tag_hash
 from src.modules.identity.authorization import AuthorizationEvidence
 from src.modules.identity.models import Role, User, UserRole
 from src.modules.ocpp import control
 from src.modules.ocpp.connection_registry import ocpp_connections
 from src.modules.ocpp.control_models import ControlRequest
 from src.modules.stations.models import ChargePoint, Connector, Station
+from src.modules.wallet.models import DriverWallet
 from src.platform.database.session import SessionFactory
 
 START_CONFIRMATION_SECONDS = 60
@@ -147,6 +148,13 @@ async def remote_start(
             or station.status != "active"
         ):
             raise HTTPException(409, "Trạm hoặc đầu nối hiện không khả dụng.")
+        wallet = await session.scalar(
+            select(DriverWallet)
+            .where(DriverWallet.driver_id == driver_id)
+            .with_for_update()
+        )
+        if wallet is None or not du_so_du_de_sac(wallet.balance_vnd, station):
+            raise HTTPException(409, "Số dư ví không đủ để bắt đầu phiên sạc.")
         await expire_start_requests(session, now)
         lease = await session.scalar(
             select(DriverStartRequest.id).where(

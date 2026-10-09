@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 
 from src.entrypoints.http import app
 from src.modules.charging import driver as driver_service
+from src.modules.charging import service as charging_service
 from src.modules.charging.driver import expire_start_requests, remote_start, virtual_tag
 from src.modules.charging.driver_models import DriverStartRequest, DriverVirtualTag
 from src.modules.charging.models import ChargingCard, ChargingSession
@@ -20,11 +21,54 @@ from src.modules.ocpp import control
 from src.modules.ocpp.connection_registry import ocpp_connections
 from src.modules.ocpp.control_models import ControlRequest
 from src.modules.ocpp.frames import decode_frame
+from src.modules.stations.models import Station
+from src.modules.wallet.models import DriverWallet
 from tests.test_charging_sessions import call, meter_payload, setup, start
 from tests.test_ocpp_control import db_session as control_database
 from tests.test_ocpp_control import reply_with
 
 db_session = control_database
+
+
+@pytest.mark.parametrize(
+    ("balance_vnd", "price_vnd_per_kwh", "eligible"),
+    [
+        (Decimal("15000"), Decimal("1000"), True),
+        (Decimal("14999"), Decimal("1000"), False),
+        (Decimal("16000"), Decimal("1200"), True),
+        (Decimal("15000"), Decimal("1200"), False),
+    ],
+)
+def test_du_so_du_de_sac_uses_station_price(
+    balance_vnd: Decimal, price_vnd_per_kwh: Decimal, eligible: bool
+) -> None:
+    station = Station(price_vnd_per_kwh=price_vnd_per_kwh)
+
+    assert charging_service.du_so_du_de_sac(balance_vnd, station) is eligible
+
+
+def test_du_so_du_de_sac_rejects_missing_balance_or_station_price() -> None:
+    assert not charging_service.du_so_du_de_sac(None, Station(price_vnd_per_kwh=1000))
+    assert not charging_service.du_so_du_de_sac(Decimal("50000"), Station())
+
+
+async def test_remote_start_rejects_insufficient_wallet_before_sending(
+    db_session, fixture
+):
+    _, _, connector, driver, _, conn, _ = fixture
+    wallet = await db_session.scalar(
+        select(DriverWallet).where(DriverWallet.driver_id == driver.id)
+    )
+    assert wallet is not None
+    wallet.balance_vnd = Decimal("14999")
+    await db_session.commit()
+
+    with pytest.raises(HTTPException) as error:
+        await remote_start(driver.id, uuid4(), connector.id)
+
+    assert error.value.status_code == 409
+    assert "Số dư ví không đủ" in error.value.detail
+    conn.websocket.send_text.assert_not_awaited()
 
 
 @pytest_asyncio.fixture

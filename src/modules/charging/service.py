@@ -9,6 +9,7 @@ from decimal import Decimal, InvalidOperation
 from sqlalchemy import select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.config import settings
 from src.modules.charging.models import (
     AuthorizationAttempt,
     ChargingCard,
@@ -29,8 +30,19 @@ from src.modules.identity.models import Role, User, UserRole
 from src.modules.ocpp.frames import Frame
 from src.modules.stations.models import ChargePoint, Connector, Station
 from src.modules.stations.repository import StationRepository
+from src.modules.wallet.models import DriverWallet
 
 logger = logging.getLogger("csms.ocpp")
+
+
+def du_so_du_de_sac(wallet_balance_vnd: Decimal | None, station: Station) -> bool:
+    price = station.price_vnd_per_kwh
+    if wallet_balance_vnd is None or price is None or price <= 0:
+        return False
+    minimum_balance = (
+        settings.charging_minimum_kwh * price + settings.wallet_reserve_vnd
+    )
+    return wallet_balance_vnd >= minimum_balance
 
 
 def tag_hash(tag: str) -> str:
@@ -74,6 +86,12 @@ async def authorize(
             result = "Accepted"
     if station is None or station.archived_at is not None or station.status != "active":
         result = "Blocked"
+    if result == "Accepted" and card is not None and station is not None:
+        wallet = await session.scalar(
+            select(DriverWallet).where(DriverWallet.driver_id == card.driver_id)
+        )
+        if wallet is None or not du_so_du_de_sac(wallet.balance_vnd, station):
+            result = "Blocked"
     session.add(
         AuthorizationAttempt(
             charge_point_id=charger.id, tag_tail=tag[-4:], result=result

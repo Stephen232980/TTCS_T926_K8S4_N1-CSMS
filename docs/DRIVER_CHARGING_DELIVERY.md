@@ -17,7 +17,13 @@ CI remote hay nghiệm thu thiết bị thực.
 | S-24 | Accepted rồi StartTransaction mới hiện đang sạc | Request được lưu trước khi gửi; Accepted chỉ hiện chờ. StartTransaction thật gắn phiên với thẻ/tài xế, kể cả khi tin bắt đầu đến trước phản hồi lệnh. |
 | S-24 | Rejected hướng dẫn kiểm tra súng | Thông báo cụ thể và cho gửi yêu cầu mới; không tạo phiên giả. |
 | S-24 | Bận/Reserved chặn trước khi gửi | Khóa trụ, đầu nối và tài xế; kiểm tra phiên/yêu cầu đang chờ, trạng thái đầu nối và trạm. Chỉ Available/Preparing được gửi. |
+| T-104 | Ví đủ số dư tối thiểu theo giá trạm | `5 kWh × stations.price_vnd_per_kwh + WALLET_RESERVE_VND`; kiểm tra ở driver-start và OCPP Authorize. Thiếu ví/giá hoặc không đủ tiền đều bị từ chối. |
 | S-24 | Accepted thiếu StartTransaction sau 60 giây | Deadline tính từ phản hồi Accepted; job 1 giây giải phóng yêu cầu, thông báo kiểm tra súng và thử lại; GET vẫn phản ánh timeout khi job chưa chạy. |
+
+Ngưỡng dùng chung cấu hình qua `CHARGING_MINIMUM_KWH` (mặc định `5`) và
+`WALLET_RESERVE_VND` (mặc định `10000`, VND). Giá `price_vnd_per_kwh` thuộc từng
+station và được cập nhật qua API tạo/sửa station. T-104 chỉ kiểm tra điều kiện bắt đầu;
+chưa trừ số dư, tính hóa đơn hoặc đối soát phiên sạc.
 
 ## API
 
@@ -45,7 +51,7 @@ OCPP chứa thẻ vào log bên ngoài ứng dụng.
 - Chưa có mô hình đặt chỗ và xác minh người sở hữu reservation. Mọi đầu nối Reserved
   đều bị chặn an toàn, kể cả của chính người dùng; phân biệt chủ đặt chỗ thuộc phần đặt chỗ sau.
 - Thời gian/điện năng phản ánh tin thật từ trụ; khi mất mạng hiển thị cảnh báo dữ liệu cũ.
-  Không tính tiền, thanh toán hoặc đối soát tài chính trong nhóm 6.
+  T-104 chỉ kiểm tra số dư tối thiểu, không trừ tiền, tính hóa đơn hoặc đối soát tài chính.
 - Accepted không thay thế xác nhận cáp vật lý. Checkbox là xác nhận của tài xế;
   trụ quyết định Accepted/Rejected và gửi StartTransaction.
 - Tin bắt đầu đến muộn vẫn hiển thị phiên thật theo thẻ đã được xác thực. Không tạo

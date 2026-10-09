@@ -35,6 +35,10 @@ class Station(Base):
             name="ck_stations_longitude_range",
         ),
         CheckConstraint(
+            "price_vnd_per_kwh IS NULL OR price_vnd_per_kwh > 0",
+            name="ck_stations_price_vnd_per_kwh_positive",
+        ),
+        CheckConstraint(
             "status IN ('inactive', 'active', 'suspended', 'blocked')",
             name="ck_stations_status",
         ),
@@ -59,6 +63,7 @@ class Station(Base):
 
     latitude: Mapped[Decimal] = mapped_column(Numeric(9, 6), nullable=False)
     longitude: Mapped[Decimal] = mapped_column(Numeric(10, 6), nullable=False)
+    price_vnd_per_kwh: Mapped[Decimal | None] = mapped_column(Numeric(12, 2))
     status: Mapped[str] = mapped_column(
         String(20),
         default="inactive",

@@ -107,6 +107,7 @@ async def create_station(
             address=request.address,
             latitude=request.latitude,
             longitude=request.longitude,
+            price_vnd_per_kwh=request.price_vnd_per_kwh,
         )
     except StationIdempotencyConflictError as error:
         raise HTTPException(
@@ -287,6 +288,7 @@ async def update_station(
             address=request.address,
             latitude=request.latitude,
             longitude=request.longitude,
+            price_vnd_per_kwh=request.price_vnd_per_kwh,
         )
     except StationOwnershipDeniedError as error:
         raise HTTPException(
