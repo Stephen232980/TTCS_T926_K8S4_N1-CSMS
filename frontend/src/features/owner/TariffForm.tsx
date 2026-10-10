@@ -289,7 +289,10 @@ export function TariffForm({
             </span>
           )}
         </label>
-
+<p className="owner-subtle" aria-live="polite">
+  Ngày sẽ gửi lên hệ thống (năm-tháng-ngày):{' '}
+  <strong>{values.effectiveFrom || 'Chưa chọn ngày'}</strong>
+</p>
         {numberFields.map(({ key, label }) => {
           const clientError = validateNumber(key, values[key])
           const fieldError =

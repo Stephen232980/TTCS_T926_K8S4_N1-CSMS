@@ -1205,3 +1205,10 @@ dl.owner-review div {
   .owner-detail-failed .charging-chart { overflow: auto; }
 }
 @media (max-width: 1000px) { .owner-session-data .charging-chart svg { height: 240px; } }
+/* T-62: Cho phép cuộn form biểu giá trong bố cục Owner. */
+.owner-tariff-scroll {
+  min-height: 0;
+  max-height: 55dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}

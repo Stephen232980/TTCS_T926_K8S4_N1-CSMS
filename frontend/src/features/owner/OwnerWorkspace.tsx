@@ -792,11 +792,7 @@ export function OwnerWorkspace({
                     {connectionError}
                   </p>
                 )}
-<div>
-  <p className="owner-subtle">
-    Biểu giá xem trước - chưa lưu lên hệ thống.
-  </p>
-
+<div className="owner-tariff-scroll">
   <TariffForm
     key={station.id}
     stationTimezone={station.timezone}
