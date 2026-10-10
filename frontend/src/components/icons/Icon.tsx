@@ -19,6 +19,7 @@ export type IconName =
   | 'wallet'
 
 const paths: Record<IconName, ReactNode> = {
+  wallet: <path d="M21 7V5a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h15a2 2 0 0 0 2-2v-2M16 12h5v4h-5a2 2 0 0 1 0-4Z" />,
   bolt: <path d="m13 2-8 11h6l-1 9 8-12h-6l1-8Z" />,
   dashboard: <path d="M4 13h6V4H4v9Zm0 7h6v-3H4v3Zm10 0h6v-9h-6v9Zm0-13h6V4h-6v3Z" />,
   station: <path d="M5 21V6a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v15M3 21h15M8 8h5M8 12h5M19 8l2 2v7a2 2 0 0 1-2 2h-3" />,
@@ -33,7 +34,6 @@ const paths: Record<IconName, ReactNode> = {
   edit: <path d="M13.5 6.5 17.5 10.5M4 20h4l11-11a2.8 2.8 0 0 0-4-4L4 16v4Z" />,
   menu: <path d="M4 7h16M4 12h16M4 17h16" />,
   close: <path d="m6 6 12 12M18 6 6 18" />,
-  wallet: <path d="M20 7V5a2 2 0 0 0-2-2H5a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h15a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H5a3 3 0 0 1 0-6M16 14h6M18 14h.01" />,
   logout: <path d="M10 5V3H4v18h6v-2M14 8l4 4-4 4M8 12h10" />,
 }
 
