@@ -41,11 +41,15 @@ class PolicyRoute(APIRoute):
     def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
         original = super().get_route_handler()
 
+
         async def guarded(request: Request) -> Response:
             policy = get_access_policy(self.endpoint)
-            if policy is None or policy.kind not in {"user", "public"}:
-                # Device/Webhook endpoints must use their respective admission implementation.
-                raise HTTPException(403, "Không có quyền truy cập")
-            return await original(request)
+            if policy is None:
+                raise HTTPException(403, "Khong co quyen truy cap")
+
+            if policy.kind in {"user", "public", "webhook"}:
+                return await original(request)
+
+            raise HTTPException(403, "Khong co quyen truy cap")
 
         return guarded
