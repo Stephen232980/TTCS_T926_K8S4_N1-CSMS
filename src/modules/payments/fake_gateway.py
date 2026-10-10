@@ -4,10 +4,10 @@ import asyncio
 import hashlib
 import hmac
 import json
+import time
 from collections.abc import Mapping
 from typing import Any
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
-from uuid import uuid4
 
 import httpx
 from pydantic import HttpUrl, SecretStr
@@ -18,6 +18,7 @@ from src.modules.payments.contracts import (
     GatewayEvent,
     InvalidWebhookPayload,
     PaymentGateway,
+    PaymentGatewayUnavailable,
     PaymentRedirect,
     PaymentRequest,
     PaymentStatus,
@@ -60,13 +61,36 @@ class FakeGateway(PaymentGateway):
     async def create_payment(self, request: PaymentRequest) -> PaymentRedirect:
         """Create a redirect to the fake gateway payment page."""
         encoded_return_url = quote(str(request.return_url), safe="")
+        expires = int(time.time()) + 1800
+        token = self.payment_token(request, expires)
         pay_url = (
             f"{self.base_url}/api/v1/payments/fake/pay"
             f"?order_id={quote(request.order_id, safe='')}"
             f"&amount_vnd={request.amount_vnd}"
             f"&return_url={encoded_return_url}"
+            f"&expires={expires}&token={token}"
         )
         return PaymentRedirect(redirect_url=HttpUrl(pay_url))
+
+    def payment_token(self, request: PaymentRequest, expires: int) -> str:
+        """Bind the simulator to the server-issued order, amount and return URL."""
+        body = json.dumps(
+            [request.order_id, request.amount_vnd, str(request.return_url), expires],
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+        return hmac.new(
+            self._get_secret().get_secret_value().encode("utf-8"),
+            b"csms-fake-payment-link-v1:" + body,
+            hashlib.sha256,
+        ).hexdigest()
+
+    def verify_payment_token(
+        self, request: PaymentRequest, expires: int, token: str
+    ) -> bool:
+        return expires >= int(time.time()) and hmac.compare_digest(
+            token, self.payment_token(request, expires)
+        )
 
     def verify_webhook(
         self, raw_body: bytes, headers: Mapping[str, str]
@@ -96,15 +120,18 @@ class FakeGateway(PaymentGateway):
     ) -> dict[str, Any]:
         """Sign and dispatch webhook(s) to the backend webhook endpoint."""
         target_url = webhook_url or self.webhook_url
-        tx_id = gateway_transaction_id or f"fake-tx-{uuid4().hex[:16]}"
-        payload: dict[str, Any] = {
-            "gateway_transaction_id": tx_id,
-            "order_id": order_id,
-            "amount_vnd": amount_vnd,
-            "status": status,
-        }
-        if reason is not None:
-            payload["reason"] = reason
+        if not 1 <= repeat_count <= 10 or not 0 <= delay_seconds <= 60:
+            raise ValueError("invalid simulator repeat or delay")
+        tx_id = gateway_transaction_id or (
+            "fake-tx-" + hashlib.sha256(order_id.encode("utf-8")).hexdigest()[:32]
+        )
+        payload = GatewayEvent(
+            gateway_transaction_id=tx_id,
+            order_id=order_id,
+            amount_vnd=amount_vnd,
+            status=status,
+            reason=reason,
+        ).model_dump(exclude_none=True)
 
         raw_body = json.dumps(
             payload, separators=(",", ":"), ensure_ascii=False
@@ -122,19 +149,26 @@ class FakeGateway(PaymentGateway):
             await asyncio.sleep(delay_seconds)
 
         statuses: list[int] = []
-        if client is not None:
+
+        async def send(http_client: httpx.AsyncClient) -> None:
             for _ in range(repeat_count):
-                response = await client.post(
+                response = await http_client.post(
                     target_url, content=raw_body, headers=headers
                 )
                 statuses.append(response.status_code)
-        else:
-            async with httpx.AsyncClient(timeout=15.0) as http_client:
-                for _ in range(repeat_count):
-                    response = await http_client.post(
-                        target_url, content=raw_body, headers=headers
-                    )
-                    statuses.append(response.status_code)
+                if not response.is_success:
+                    raise PaymentGatewayUnavailable("webhook receiver rejected event")
+
+        try:
+            if client is not None:
+                await send(client)
+            else:
+                async with httpx.AsyncClient(
+                    timeout=15.0, follow_redirects=False
+                ) as http_client:
+                    await send(http_client)
+        except httpx.HTTPError as error:
+            raise PaymentGatewayUnavailable("webhook receiver unavailable") from error
 
         return {
             "gateway_transaction_id": tx_id,

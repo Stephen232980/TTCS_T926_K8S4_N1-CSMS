@@ -23,6 +23,24 @@ from src.modules.payments.fake_gateway import FakeGateway, build_return_url
 TEST_SECRET = SecretStr("t92-test-webhook-secret-key-123456")
 
 
+def payment_link(
+    order_id: str, amount_vnd: int, return_url: str | None = None
+) -> dict[str, str | int]:
+    payment = PaymentRequest(
+        order_id=order_id,
+        amount_vnd=amount_vnd,
+        return_url=HttpUrl(return_url or str(get_settings().payment_return_url)),
+    )
+    expires = int(time.time()) + 1800
+    return {
+        "order_id": order_id,
+        "amount_vnd": amount_vnd,
+        "return_url": str(payment.return_url),
+        "expires": expires,
+        "token": FakeGateway().payment_token(payment, expires),
+    }
+
+
 def test_build_return_url() -> None:
     # URL without query
     url1 = "http://localhost:5173/wallet/topup/return"
@@ -123,11 +141,11 @@ async def test_fake_payment_page_renders_html_with_all_elements(
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         res = await client.get(
             "/api/v1/payments/fake/pay",
-            params={
-                "order_id": "topup-ord-999",
-                "amount_vnd": 250_000,
-                "return_url": "http://localhost:5173/wallet/topup/return?source=test",
-            },
+            params=payment_link(
+                "topup-ord-999",
+                250_000,
+                "http://localhost:5173/wallet/topup/return?source=test",
+            ),
         )
         assert res.status_code == 200
         assert "text/html" in res.headers["content-type"]
@@ -281,10 +299,8 @@ async def test_dispatch_api_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
         res = await client.post(
             "/api/v1/payments/fake/dispatch",
             json={
-                "order_id": "topup-dispatch-api",
-                "amount_vnd": 300_000,
+                **payment_link("topup-dispatch-api", 300_000),
                 "status": "succeeded",
-                "webhook_url": "http://test/api/v1/payments/webhook",
             },
         )
         assert res.status_code == 200
@@ -292,6 +308,7 @@ async def test_dispatch_api_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
         assert data["status"] == "ok"
         assert "fake-tx-" in data["gateway_transaction_id"]
         assert data["repeat_count"] == 1
+        assert "signature" not in data
 
     get_settings.cache_clear()
 

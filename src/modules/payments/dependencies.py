@@ -10,8 +10,7 @@ def get_payment_gateway() -> PaymentGateway | None:
     settings = get_settings()
     if settings.payment_gateway == "fake":
         return FakeGateway(
-            base_url="http://localhost:8000",
-            webhook_url="http://localhost:8000/api/v1/payments/webhook",
+            base_url=str(settings.payment_fake_base_url),
             secret=settings.payment_webhook_secret,
         )
     return None

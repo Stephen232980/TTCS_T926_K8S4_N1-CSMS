@@ -18,13 +18,14 @@ class Settings(BaseSettings):
     payment_gateway: Literal["disabled", "fake", "sandbox"] = "disabled"
     payment_webhook_secret: SecretStr | None = Field(default=None, repr=False)
     payment_return_url: HttpUrl = HttpUrl("http://localhost:5173/wallet/topup/return")
+    payment_fake_base_url: HttpUrl = HttpUrl("http://localhost:8000")
 
     @field_validator("payment_webhook_secret", mode="before")
     @classmethod
     def empty_payment_secret(cls, value: object) -> object:
         return None if value == "" else value
 
-    @field_validator("payment_return_url")
+    @field_validator("payment_return_url", "payment_fake_base_url")
     @classmethod
     def validate_payment_return_url(cls, value: HttpUrl) -> HttpUrl:
         if value.username is not None or value.password is not None or value.fragment:

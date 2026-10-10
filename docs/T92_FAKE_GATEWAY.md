@@ -1,58 +1,36 @@
-# T-92 — Cổng thanh toán giả lập (FakeGateway) và Webhook Simulator
+# T-92 — Cổng thanh toán giả lập
 
-T-92 triển khai adapter `FakeGateway` cho `PaymentGateway` (S-35), trang thanh toán mô phỏng HTML và endpoint nhận thử webhook (T-95/S-39), phục vụ kiểm thử end-to-end quy trình nạp tiền ví tài xế mà không cần cổng thanh toán thật.
+## Phạm vi và giới hạn
 
-## 1. Cấu hình và điều kiện kích hoạt
+Adapter `FakeGateway`, trang thanh toán và bộ gửi webhook ký HMAC thuộc S-35/T-92. Năm nút gửi trạng thái thành công, thất bại, hủy, lặp năm lần và trễ mười giây đến route `/api/v1/payments/webhook` trên chính ứng dụng ASGI đang chạy.
 
-| Biến môi trường | Giá trị yêu cầu | Ý nghĩa |
-|---|---|---|
-| `PAYMENT_GATEWAY` | `fake` | Bật adapter và route mô phỏng. Khi khác `fake` (e.g. `disabled`, `sandbox`), tất cả route giả lập trả HTTP 404. |
-| `PAYMENT_WEBHOOK_SECRET` | Chuỗi secret | Khóa bí mật dùng để ký HMAC-SHA256 trên toàn bộ bytes body webhook. Không đưa khóa vào frontend hoặc log. |
-| `PAYMENT_RETURN_URL` | URL frontend | URL quay về sau khi hoàn tất thanh toán. Mặc định: `http://localhost:5173/wallet/topup/return`. |
+Endpoint nhận trong PR #106 hiện chỉ kiểm tra chữ ký/schema, chưa ghi `WalletTopup`, chưa cộng ví và chưa có idempotency trong database. T-95/T-96 phải hoàn thiện nghiệp vụ này; các ca T-98 hiện chỉ chứng minh tiếp nhận/xác thực. Không dùng kết quả HTTP 200 hoặc năm lần tiếp nhận làm bằng chứng ví đã được cộng đúng một lần.
 
-## 2. Các thành phần triển khai
+## Cấu hình
 
-### Adapter `FakeGateway` (`src/modules/payments/fake_gateway.py`)
-- Cài đặt giao diện `PaymentGateway`:
-  - `create_payment(request: PaymentRequest) -> PaymentRedirect`: Tạo đường dẫn chuyển hướng sang trang thanh toán giả lập `GET /api/v1/payments/fake/pay` kèm query parameters `order_id`, `amount_vnd`, `return_url`.
-  - `verify_webhook(raw_body: bytes, headers: Mapping[str, str]) -> GatewayEvent`: Xác thực chữ ký `X-Payment-Signature` (HMAC-SHA256) trên đúng raw body bytes trước khi parse JSON sang `GatewayEvent`. Nếu sai chữ ký ném `InvalidWebhookSignature` (HTTP 401); nếu payload sai schema ném `InvalidWebhookPayload` (HTTP 400).
-- Nối `FakeGateway` vào `src/modules/payments/dependencies.py:get_payment_gateway()`: Trả về `FakeGateway` khi `PAYMENT_GATEWAY=fake`, trả `None` khi `disabled` hoặc `sandbox`.
-- Helper `build_return_url(return_url, order_id)`: Nối query parameter `order_code=<order_id>` vào return URL trong khi giữ nguyên các query parameter có sẵn.
+- `PAYMENT_GATEWAY=fake` bật adapter và simulator. Khi `disabled` hoặc `sandbox`, hai route `/payments/fake/pay` và `/payments/fake/dispatch` trả 404.
+- `PAYMENT_WEBHOOK_SECRET` bắt buộc khi bật gateway; lấy từ môi trường, không xuất vào HTML/log. Webhook dùng HMAC-SHA256 trên chính bytes JSON UTF-8 gửi đi, header `X-Payment-Signature: sha256=<hex>`.
+- `PAYMENT_FAKE_BASE_URL`: địa chỉ backend mà trình duyệt truy cập được, mặc định `http://localhost:8000`. Ví dụ backend demo cổng 8003 thì đặt `http://localhost:8003`; cấu hình riêng từng máy, không đổi cổng chung của nhóm.
+- `PAYMENT_RETURN_URL`: URL frontend theo hợp đồng T-90/T-93. Bảo tồn query đã mã hóa và bổ sung `order_code`. Không giải mã URL lần thứ hai.
+- Không bật `fake` tại môi trường có dữ liệu thật. Simulator có khả năng tạo các trạng thái thanh toán tùy chọn và chỉ dành cho kiểm thử.
 
-### Trang thanh toán giả lập (`GET /api/v1/payments/fake/pay`)
-- Hiển thị thông tin đơn nạp: Mã đơn hàng (`order_id`), Số tiền nạp (`amount_vnd`).
-- Gồm đầy đủ 5 nút tương tác:
-  1. **Thành công** (`succeeded`): Gửi webhook trạng thái thành công.
-  2. **Thất bại** (`failed`): Gửi webhook trạng thái thất bại kèm lý do.
-  3. **Hủy** (`cancelled`): Gửi webhook trạng thái hủy giao dịch.
-  4. **Gửi lại webhook 5 lần** (`repeat_count=5`): Mô phỏng gửi lại cùng mã giao dịch `gateway_transaction_id` và cùng dữ liệu để kiểm thử tính idempotent (chống trùng).
-  5. **Trễ webhook 10 giây** (`delay_seconds=10`): Mô phỏng độ trễ mạng hoặc tình huống polling trạng thái pending.
-- Liên kết / Chuyển hướng quay về ứng dụng tài xế: `PAYMENT_RETURN_URL` với `order_code=<order_id>`.
+## Liên kết và gửi webhook
 
-### Endpoint kích hoạt Webhook (`POST /api/v1/payments/fake/dispatch`)
-- Nhận yêu cầu từ trang thanh toán, thực hiện ký HMAC-SHA256 phía server (bảo mật khóa bí mật) và gửi webhook tới endpoint backend.
+`create_payment` cấp URL gồm order/amount/return URL, hạn dùng 30 phút và token ràng buộc các trường này. Token ký bằng namespace riêng với khóa server, tách khỏi chữ ký webhook. GET pay và POST dispatch kiểm tra token/hạn dùng; thiếu, hết hạn hoặc sửa order/amount/return URL đều bị chặn. Phải tạo link qua adapter/API T-93, không tự gõ URL thiếu token.
 
-### Endpoint nhận Webhook thử nghiệm (`POST /api/v1/payments/webhook`)
-- Tiếp nhận webhook, kiểm tra chữ ký HMAC (`X-Payment-Signature`), xác thực payload `GatewayEvent`. Không tự cộng tiền vào ví (phần cập nhật ví và chống trùng thuộc T-95/T-96).
+Dispatch chỉ nhận thông tin đã được ký cùng status/reason/repeat/delay. Không nhận `webhook_url` hoặc mã giao dịch do trình duyệt chỉ định. Callback dùng ASGITransport nội bộ tới endpoint đã đăng ký, không phụ thuộc cổng mạng, Host header hoặc nhánh đặc biệt dành cho testserver. Không cần bật kết nối HTTP đến localhost của container.
 
-## 3. Kiểm thử (T-92 & T-98)
+Mã giao dịch giả lập ổn định theo order; gửi lại dùng cùng mã và cùng raw body. Mỗi lần gửi phải có HTTP 2xx; lỗi mạng hoặc endpoint trả 3xx/4xx/5xx tạo lỗi 502 từ dispatch, không báo gửi thành công và không tự retry. Không trả chữ ký webhook cho trình duyệt. Nút bị khóa trong khi gửi; trang hiển thị kết quả tiếp nhận và hướng dẫn kiểm tra trạng thái đơn nạp sau khi quay về, không khẳng định đã cộng tiền.
 
-- `tests/test_t92_fake_gateway.py` (10 test cases):
-  - Kiểm tra `build_return_url` bảo tồn query và nối `order_code`.
-  - Kiểm tra `FakeGateway.create_payment` tạo URL chuyển hướng hợp lệ.
-  - Kiểm tra `get_payment_gateway()` trả đúng instance theo cấu hình.
-  - Kiểm tra trả 404 cho mọi route giả lập khi `PAYMENT_GATEWAY != 'fake'`.
-  - Kiểm tra giao diện HTML trang thanh toán render đủ 5 nút, thông tin đơn và không lộ secret.
-  - Kiểm tra dispatch webhook gửi đúng chữ ký, lặp 5 lần cùng transaction ID, và cơ chế trễ.
-- `tests/test_t98_webhook_tests.py` (10 test cases):
-  - 9 ca kiểm thử chuẩn mực cho Webhook simulator:
-    1. Webhook thành công hợp lệ (`succeeded`).
-    2. Webhook sai chữ ký -> 401.
-    3. Webhook thiếu header chữ ký -> 401.
-    4. Webhook có nhiều hơn 1 header chữ ký trùng lặp -> 401.
-    5. Webhook sai payload schema -> 400.
-    6. Webhook thất bại hợp lệ kèm lý do (`failed`).
-    7. Webhook hủy hợp lệ kèm lý do (`cancelled`).
-    8. Trạng thái thất bại/hủy sau khi đã có giao dịch thành công.
-    9. Trạng thái thành công sau khi đã có giao dịch thất bại.
-  - Ca kiểm thử replay lặp lại 5 lần cùng giao dịch (Idempotency verification).
+Trang standalone dùng nền sáng, teal và typography của CSMS hiện có, hỗ trợ màn hình nhỏ, focus bàn phím và thông báo trạng thái đọc được bởi trình đọc màn hình. Liên kết không được cache, không gửi referrer chứa token.
+
+## Kiểm thử
+
+```powershell
+python -m pytest tests/test_t92_fake_gateway.py tests/test_t92_gateway_hardening.py tests/test_t98_webhook_tests.py tests/test_t90_payment_contract.py tests/test_endpoint_policy_inventory.py -q
+python -m ruff check .
+python -m ruff format --check .
+python -m mypy src
+```
+
+Các regression T-92 kiểm tra base URL khác cổng 8000, callback từ hostname thông thường, tamper/expiry, từ chối URL callback/mã giao dịch tùy ý, số tiền strict, HMAC đúng raw bytes có tiếng Việt, lặp cùng mã/body, delay 10 giây, lỗi HTTP/mạng và không lộ chữ ký. Kiểm thử ví/ledger thật và thứ tự trạng thái vẫn là acceptance của T-95/T-96/T-98.
