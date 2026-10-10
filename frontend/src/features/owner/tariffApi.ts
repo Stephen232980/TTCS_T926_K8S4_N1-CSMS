@@ -1,6 +1,8 @@
+import { clockMinute, validateBands, type BandValues } from './tariffBands'
 import { ownerRequest } from './ownerApi'
 
 export interface TariffCreateInput {
+  bands?: BandValues[]
   effectiveFrom: string
   pricePerKwh: string
   idleFeePerMinute: string
@@ -67,7 +69,27 @@ export async function createStationTariff(
     throw new Error('Ngày hiệu lực phải có dạng YYYY-MM-DD.')
   }
 
-  const price = jsonInteger(input.pricePerKwh, MAX_MONEY, 'Đơn giá điện')
+  if (input.bands && !validateBands(input.bands).valid)
+    throw new Error(
+      'Các khung giờ phải hợp lệ, không chồng lấn và phủ kín 24 giờ.',
+    )
+  const pricePart = input.bands
+    ? ',"bands":[' +
+      input.bands
+        .map(
+          (band) =>
+            '{"start_min":' +
+            clockMinute(band.start) +
+            ',"end_min":' +
+            clockMinute(band.end, true) +
+            ',"energy_rate_vnd_per_kwh":' +
+            jsonInteger(band.price, MAX_MONEY, 'Đơn giá điện') +
+            '}',
+        )
+        .join(',') +
+      ']'
+    : ',"energy_rate_vnd_per_kwh":' +
+      jsonInteger(input.pricePerKwh, MAX_MONEY, 'Đơn giá điện')
 
   const idleFee = jsonInteger(
     input.idleFeePerMinute,
@@ -82,8 +104,7 @@ export async function createStationTariff(
   const body = [
     '{"effective_from":',
     JSON.stringify(effectiveFrom),
-    ',"energy_rate_vnd_per_kwh":',
-    price,
+    pricePart,
     ',"idle_rate_vnd_per_minute":',
     idleFee,
     ',"grace_minutes":',

@@ -1222,3 +1222,22 @@ dl.owner-review div {
   overflow-y: auto;
   overscroll-behavior: contain;
 }
+.owner-tariff-bands { grid-column: 1 / -1; min-width: 0; border: 0; padding: 0; margin: 12px 0 24px; }
+.owner-tariff-bands legend { font-weight: 700; font-size: 18px; margin-bottom: 8px; }
+.owner-band-row { padding: 16px 0; border-bottom: 1px solid var(--field-border, #b9cdd6); }
+.owner-band-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 12px; align-items: end; margin-top: 8px; }
+.owner-band-fields .owner-field { margin: 0; min-width: 0; }
+.owner-band-fields input { width: 100%; min-width: 0; box-sizing: border-box; }
+.owner-band-fields button { margin-bottom: 4px; }
+.owner-band-row input[aria-invalid="true"] { border-color: #a3382c; }
+.owner-band-preview { margin-top: 24px; }
+.owner-band-preview svg { display: block; width: 100%; height: 36px; }
+.owner-band-covered { fill: #14795e; }
+.owner-band-gap { fill: #e7b947; }
+.owner-band-overlap { fill: #a3382c; }
+.owner-band-axis { display: flex; justify-content: space-between; font-size: 12px; font-variant-numeric: tabular-nums; margin-top: 4px; }
+@media (max-width: 600px) {
+  .owner-band-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .owner-band-fields .owner-field:nth-child(3) { grid-column: 1 / -1; }
+  .owner-band-fields button { justify-self: start; }
+}
