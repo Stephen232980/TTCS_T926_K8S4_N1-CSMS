@@ -39,7 +39,7 @@
 .driver-shell .driver-brand { color: #fff; display: flex; align-items: center; gap: 10px; text-decoration: none; font-size: 23px; }
 .driver-brand svg { color: #b9ebd9; width: 25px; height: 30px; }
 .driver-brand span { display: none; }
-.driver-navigation { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1000; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px 12px max(8px, env(safe-area-inset-bottom)); background: #173b47; }
+.driver-navigation { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1000; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 8px 10px max(8px, env(safe-area-inset-bottom)); background: #173b47; }
 .driver-shell .driver-navigation a { color: #d7e8ee; min-height: 52px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 10px; border-radius: 12px; text-decoration: none; font-size: 14px; font-weight: 650; }
 .driver-navigation a:hover, .driver-navigation a[aria-current] { background: #2c5664; color: #fff; }
 .driver-account { margin-left: auto; position: relative; }
@@ -185,3 +185,438 @@
   .driver-shell .station-map__canvas { height: 330px; }
   .driver-station-results { max-height: 384px; }
 }
+
+/* === S-40: Driver Wallet Styles === */
+.driver-wallet-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 760px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.driver-wallet-actions-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.driver-wallet-actions-bar h2 {
+  font-size: 20px;
+  margin: 0;
+  color: var(--ink);
+}
+
+.driver-wallet-refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  min-height: 36px;
+  font-size: 13px;
+}
+
+.driver-wallet-alert {
+  padding: 12px 16px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.driver-wallet-alert.error {
+  background: #fdf2f2;
+  border: 1px solid #f8b4b4;
+  color: #9b1c1c;
+}
+
+.driver-balance-card {
+  background: linear-gradient(135deg, #173b47 0%, #1f4f5f 100%);
+  color: #fff;
+  border-radius: 20px;
+  padding: 24px 20px;
+  box-shadow: 0 12px 30px rgba(23, 59, 71, 0.16);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.driver-balance-card.negative {
+  background: linear-gradient(135deg, #5c1818 0%, #872626 100%);
+  box-shadow: 0 12px 30px rgba(120, 28, 28, 0.2);
+}
+
+.driver-balance-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.driver-balance-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #d7e8ee;
+  font-weight: 500;
+}
+
+.driver-balance-title svg {
+  width: 20px;
+  height: 20px;
+  color: #38bdf8;
+}
+
+.wallet-status-badge {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 3px 8px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.15);
+  color: #e0f2fe;
+}
+
+.wallet-status-badge.active {
+  background: rgba(52, 211, 153, 0.25);
+  color: #a7f3d0;
+}
+
+.wallet-status-badge.locked {
+  background: rgba(248, 113, 113, 0.25);
+  color: #fecaca;
+}
+
+.driver-balance-amount {
+  font-size: clamp(28px, 6vw, 38px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+}
+
+.balance-placeholder {
+  font-size: 20px;
+  color: #94a3b8;
+}
+
+.wallet-debt-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(254, 202, 202, 0.4);
+  padding: 12px 14px;
+  border-radius: 12px;
+  color: #fff;
+}
+
+.wallet-debt-warning .warning-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.wallet-debt-warning strong {
+  display: block;
+  font-size: 14px;
+  color: #fecaca;
+  margin-bottom: 2px;
+}
+
+.wallet-debt-warning p {
+  margin: 0;
+  font-size: 12px;
+  color: #f1f5f9;
+  line-height: 1.4;
+}
+
+.wallet-low-warning {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(254, 240, 138, 0.15);
+  border: 1px solid rgba(253, 224, 71, 0.3);
+  padding: 10px 14px;
+  border-radius: 12px;
+  color: #fef08a;
+  font-size: 12px;
+}
+
+.wallet-low-warning p {
+  margin: 0;
+  color: #fef9c3;
+  line-height: 1.4;
+}
+
+.driver-balance-cta {
+  margin-top: 4px;
+}
+
+.topup-button {
+  background: #10b981 !important;
+  color: #fff !important;
+  font-weight: 600;
+  width: 100%;
+  border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+}
+
+.topup-button:hover {
+  background: #059669 !important;
+}
+
+.driver-tx-history-section {
+  background: #fff;
+  border-radius: 16px;
+  padding: 22px 18px;
+  box-shadow: 0 10px 28px rgba(25, 61, 75, 0.045);
+}
+
+.driver-tx-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 10px;
+}
+
+.driver-tx-header h3 {
+  font-size: 18px;
+  margin: 0;
+  color: var(--ink);
+}
+
+.tx-count-hint {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.driver-tx-empty {
+  text-align: center;
+  padding: 36px 16px;
+  color: var(--muted);
+}
+
+.driver-tx-empty svg {
+  width: 48px;
+  height: 48px;
+  color: #94a3b8;
+  margin-bottom: 12px;
+}
+
+.driver-tx-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.driver-tx-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 12px;
+  border-radius: 12px;
+  background: var(--canvas);
+  transition: background 0.15s ease;
+}
+
+.driver-tx-item:hover {
+  background: #e6eef1;
+}
+
+.tx-type-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+  font-weight: bold;
+}
+
+.tx-type-icon.topup {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.tx-type-icon.charge {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.tx-type-icon.refund {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.tx-type-icon.adjustment {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.tx-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tx-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tx-description {
+  font-size: 14px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.tx-amount {
+  font-weight: 700;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.tx-amount.plus {
+  color: #059669;
+}
+
+.tx-amount.minus {
+  color: #dc2626;
+}
+
+.tx-sub-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--muted);
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tx-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.tx-id-badge, .tx-ref-badge {
+  font-size: 11px;
+  background: #dbe7ec;
+  color: #244e60;
+  padding: 1px 6px;
+  border-radius: 6px;
+}
+
+.driver-load-more-container {
+  margin-top: 18px;
+  display: flex;
+  justify-content: center;
+}
+
+.driver-load-more-btn {
+  width: 100%;
+  max-width: 260px;
+}
+
+/* Modal */
+.driver-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.driver-modal-content {
+  background: #fff;
+  border-radius: 18px;
+  max-width: 440px;
+  width: 100%;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.driver-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.driver-modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--ink);
+}
+
+.close-button {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.driver-modal-body {
+  padding: 20px;
+  font-size: 14px;
+  color: var(--ink);
+  line-height: 1.5;
+}
+
+.topup-guide-card {
+  background: var(--canvas);
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin: 12px 0;
+  font-size: 13px;
+}
+
+.topup-guide-card ul {
+  margin: 8px 0 0 16px;
+  padding: 0;
+}
+
+.topup-guide-card li {
+  margin-bottom: 4px;
+  word-break: break-all;
+}
+
+.note-text {
+  font-size: 12px;
+  color: var(--muted);
+  font-style: italic;
+  margin: 0;
+}
+
+.driver-modal-footer {
+  padding: 14px 20px;
+  background: #f8fafc;
+  border-top: 1px solid var(--line);
+  display: flex;
+  justify-content: flex-end;
+}
+

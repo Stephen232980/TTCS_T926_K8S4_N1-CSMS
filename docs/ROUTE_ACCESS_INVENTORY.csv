@@ -13,6 +13,7 @@ GET,/api/v1/admin/charging/pending,user,admin.charging.pending_messages,all,admi
 GET,/api/v1/admin/charging/sessions,user,admin.charging.sessions,all,admin,
 GET,/api/v1/admin/charging/sessions/{transaction_id}/events,user,admin.charging.session_events,all,admin,
 GET,/api/v1/admin/charging/sessions/{transaction_id}/samples,user,admin.charging.samples,all,admin,
+POST,/api/v1/admin/drivers/{driver_id}/wallet/manual-topups,user,admin.wallet.manual_topup,all,admin,
 GET,/api/v1/admin/ocpp/connections,user,admin.monitor.read,all,admin,
 GET,/api/v1/admin/ocpp/connections/events,user,admin.monitor.read,all,admin,
 GET,/api/v1/admin/roles,user,admin.list_roles,all,admin,
@@ -22,6 +23,9 @@ GET,/api/v1/admin/stations/{station_id}/charge-points,user,admin.stations.list_c
 GET,/api/v1/admin/stations/{station_id}/photo,user,admin.photos.get_photo,all,admin,
 GET,/api/v1/admin/system-health,user,admin.health.read,all,admin,
 GET,/api/v1/admin/system-health/history,user,admin.health.read,all,admin,
+POST,/api/v1/admin/wallets/{wallet_id}/adjustments,user,admin.wallet.adjust,all,admin,
+POST,/api/v1/admin/wallets/{wallet_id}/repair-cache,user,admin.wallet.repair_cache,all,admin,
+POST,/api/v1/admin/wallets/{wallet_id}/unlock,user,admin.wallet.unlock,all,admin,
 PUT,/api/v1/auth/default-role,user,identity.default_role.choose,own,"accountant,admin,driver,operator,station_owner",
 POST,/api/v1/auth/login,public,,,,S-02 credentials checked by login service
 POST,/api/v1/auth/logout,public,,,,Idempotent cookie/session revocation
@@ -37,10 +41,15 @@ POST,/api/v1/charging/sessions/{transaction_id}/close,user,ops.sessions.close,al
 GET,/api/v1/charging/sessions/{transaction_id}/events,user,owner.charging.session_events,owned,station_owner,
 GET,/api/v1/charging/sessions/{transaction_id}/samples,user,owner.charging.samples,owned,station_owner,
 GET,/api/v1/driver/charging/current,user,driver.current,own,driver,
+GET,/api/v1/driver/charging/current/events,user,driver.current,own,driver,
 GET,/api/v1/driver/charging/sessions/{session_id},user,driver.detail,own,driver,
 POST,/api/v1/driver/charging/start,user,driver.start,own,driver,
 GET,/api/v1/driver/stations,user,driver.discover_stations,own,driver,
 GET,/api/v1/driver/stations/{station_id}/connectors,user,driver.connectors,own,driver,
+GET,/api/v1/driver/wallet,user,driver.wallet.read,own_wallet,driver,
+POST,/api/v1/driver/wallet/topups,user,driver.wallet.topup,own_wallet,driver,
+GET,/api/v1/driver/wallet/topups/{order_id},user,driver.wallet.topup.read,own_wallet,driver,
+GET,/api/v1/driver/wallet/transactions,user,driver.wallet.ledger,own_wallet,driver,
 POST,/api/v1/ocpp/charge-points/{charger_id}/reset,user,ops.connector.reset,all,operator,
 GET,/api/v1/ocpp/commands/{command_id},user,ops.commands.read,own,operator,
 GET,/api/v1/ocpp/connections,user,owner.monitor.read,owned,station_owner,
@@ -80,6 +89,11 @@ POST,/api/v1/owner/stations/{station_id}/charge-points,user,owner.stations.creat
 DELETE,/api/v1/owner/stations/{station_id}/photo,user,owner.photos.delete_photo,owned,station_owner,
 GET,/api/v1/owner/stations/{station_id}/photo,user,owner.photos.get_photo,owned,station_owner,
 PUT,/api/v1/owner/stations/{station_id}/photo,user,owner.photos.put_photo,owned,station_owner,
+POST,/api/v1/owner/stations/{station_id}/tariffs,user,owner.tariff.manage,owned,station_owner,
+GET,/api/v1/owner/stations/{station_id}/tariffs/context,user,owner.tariff.manage,owned,station_owner,
+POST,/api/v1/payments/fake/dispatch,public,,,,Fake payment webhook trigger endpoint
+GET,/api/v1/payments/fake/pay,public,,,,Fake payment gateway web page
+POST,/api/v1/payments/webhook,public,,,,T-95 payment webhook endpoint
 GET,/api/v1/stations,user,owner.stations.list_stations,owned,station_owner,
 POST,/api/v1/stations,user,owner.stations.create_station,owned,station_owner,
 GET,/api/v1/stations/{station_id},user,owner.stations.get_station,owned,station_owner,
