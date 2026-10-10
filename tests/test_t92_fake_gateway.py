@@ -4,13 +4,16 @@ import hashlib
 import hmac
 import time
 from urllib.parse import parse_qs, urlsplit
+from uuid import uuid4
 
 import httpx
 import pytest
+import pytest_asyncio
 from pydantic import HttpUrl, SecretStr
 
 from src.config import get_settings
 from src.entrypoints.http import app
+from src.modules.identity.models import User
 from src.modules.payments.contracts import (
     InvalidWebhookPayload,
     InvalidWebhookSignature,
@@ -19,8 +22,38 @@ from src.modules.payments.contracts import (
 )
 from src.modules.payments.dependencies import get_payment_gateway
 from src.modules.payments.fake_gateway import FakeGateway, build_return_url
+from src.modules.wallet.models import Wallet
+from src.modules.wallet.topup_models import WalletTopup
+from src.platform.database.session import SessionFactory
 
 TEST_SECRET = SecretStr("t92-test-webhook-secret-key-123456")
+
+
+ORDERS = {}
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def persisted_orders():
+    # Committed integration data stays in the isolated test DB: ledger is immutable.
+    async with SessionFactory() as db, db.begin():
+        user = User(email=f"t92-{uuid4()}@example.com", password_hash="unused")
+        db.add(user)
+        await db.flush()
+        db.add(Wallet(driver_id=user.id))
+        for order, amount in [
+            ("order-t92-1", 50000),
+            ("order-t92-2", 100000),
+            ("order-t92-3", 150000),
+            ("order-repeat-5", 200000),
+            ("order-delayed-1", 80000),
+            ("topup-dispatch-api", 300000),
+        ]:
+            ORDERS[order] = f"{order}-{uuid4()}"
+            db.add(
+                WalletTopup(
+                    driver_id=user.id, order_id=ORDERS[order], amount_vnd=amount
+                )
+            )
 
 
 def payment_link(
@@ -189,7 +222,7 @@ async def test_dispatch_webhook_and_webhook_endpoint_verification(
 
         # 1. Dispatch succeeded webhook
         res1 = await gateway.dispatch_webhook(
-            order_id="order-t92-1",
+            order_id=ORDERS["order-t92-1"],
             amount_vnd=50_000,
             status="succeeded",
             client=client,
@@ -197,11 +230,11 @@ async def test_dispatch_webhook_and_webhook_endpoint_verification(
         assert res1["repeat_count"] == 1
         assert res1["statuses"] == [200]
         assert res1["payload"]["status"] == "succeeded"
-        assert res1["payload"]["order_id"] == "order-t92-1"
+        assert res1["payload"]["order_id"] == ORDERS["order-t92-1"]
 
         # 2. Dispatch failed webhook with reason
         res2 = await gateway.dispatch_webhook(
-            order_id="order-t92-2",
+            order_id=ORDERS["order-t92-2"],
             amount_vnd=100_000,
             status="failed",
             reason="Không đủ số dư thẻ",
@@ -213,7 +246,7 @@ async def test_dispatch_webhook_and_webhook_endpoint_verification(
 
         # 3. Dispatch cancelled webhook
         res3 = await gateway.dispatch_webhook(
-            order_id="order-t92-3",
+            order_id=ORDERS["order-t92-3"],
             amount_vnd=150_000,
             status="cancelled",
             reason="Người dùng đóng trang",
@@ -242,7 +275,7 @@ async def test_repeat_button_dispatches_exactly_5_times_with_same_transaction_id
         )
 
         res = await gateway.dispatch_webhook(
-            order_id="order-repeat-5",
+            order_id=ORDERS["order-repeat-5"],
             amount_vnd=200_000,
             status="succeeded",
             repeat_count=5,
@@ -275,7 +308,7 @@ async def test_delayed_webhook_execution(
         start_time = time.perf_counter()
         # Use 0.1s in test to verify delay logic without slowing down test suite
         res = await gateway.dispatch_webhook(
-            order_id="order-delayed-1",
+            order_id=ORDERS["order-delayed-1"],
             amount_vnd=80_000,
             status="succeeded",
             delay_seconds=0.1,
@@ -299,7 +332,7 @@ async def test_dispatch_api_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
         res = await client.post(
             "/api/v1/payments/fake/dispatch",
             json={
-                **payment_link("topup-dispatch-api", 300_000),
+                **payment_link(ORDERS["topup-dispatch-api"], 300_000),
                 "status": "succeeded",
             },
         )
