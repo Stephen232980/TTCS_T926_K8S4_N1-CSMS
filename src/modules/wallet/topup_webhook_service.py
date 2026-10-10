@@ -1,4 +1,3 @@
-
 """Idempotent processing for verified payment gateway events."""
 
 from typing import Literal
