@@ -6,15 +6,17 @@ import type { AuthenticatedUser } from '../auth/model/auth'
 import { AdminAccounts } from './AdminAccounts'
 import { AdminAudit } from './AdminAudit'
 import { AdminHealth } from './AdminHealth'
+import { AdminManualTopup } from './AdminManualTopup'
 import './admin.css'
 
-type Area = 'accounts' | 'audit' | 'health'
+type Area = 'accounts' | 'audit' | 'health' | 'topup'
 const areas: {
   id: Area
   label: string
   icon: 'settings' | 'session' | 'report'
 }[] = [
   { id: 'accounts', label: 'Tài khoản & vai trò', icon: 'settings' },
+  { id: 'topup', label: 'Nạp tiền thủ công', icon: 'report' },
   { id: 'audit', label: 'Nhật ký thao tác', icon: 'session' },
   { id: 'health', label: 'Sức khỏe hệ thống', icon: 'report' },
 ]
@@ -85,6 +87,8 @@ export function AdminWorkspace({
       <main className="admin-page" key={area}>
         {area === 'accounts' ? (
           <AdminAccounts currentUser={currentUser} />
+        ) : area === 'topup' ? (
+          <AdminManualTopup />
         ) : area === 'audit' ? (
           <AdminAudit />
         ) : (

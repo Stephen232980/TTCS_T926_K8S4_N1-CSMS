@@ -1,9 +1,16 @@
-"""T-92/S-67 register concrete adapters here; never invent a payment redirect."""
+"""T-92/S-67 concrete payment gateway dependency registration."""
 
+from src.config import get_settings
 from src.modules.payments.contracts import PaymentGateway
+from src.modules.payments.fake_gateway import FakeGateway
 
 
 def get_payment_gateway() -> PaymentGateway | None:
-    # No adapter exists yet, including when configuration selects fake/sandbox.
-    # T-92 should select FakeGateway only for settings.payment_gateway == "fake".
+    """Return configured payment gateway adapter; FakeGateway for 'fake', None otherwise."""
+    settings = get_settings()
+    if settings.payment_gateway == "fake":
+        return FakeGateway(
+            base_url=str(settings.payment_fake_base_url),
+            secret=settings.payment_webhook_secret,
+        )
     return None

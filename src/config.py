@@ -6,23 +6,26 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    database_url: str
+    database_url: str = ""
     database_pool_size: int = Field(default=20, ge=1, le=100)
     wallet_manual_topup_max_vnd: int = Field(default=10_000_000, gt=0, le=2**63 - 1)
     wallet_topup_min_vnd: int = Field(default=10_000, gt=0, le=2**63 - 1)
     wallet_topup_max_vnd: int = Field(default=5_000_000, gt=0, le=2**63 - 1)
     wallet_reconciliation_interval_seconds: int = Field(default=300, gt=0)
+    charging_minimum_kwh: int = Field(default=5, gt=0)
+    wallet_reserve_vnd: int = Field(default=10_000, ge=0, le=2**63 - 1)
 
     payment_gateway: Literal["disabled", "fake", "sandbox"] = "disabled"
     payment_webhook_secret: SecretStr | None = Field(default=None, repr=False)
     payment_return_url: HttpUrl = HttpUrl("http://localhost:5173/wallet/topup/return")
+    payment_fake_base_url: HttpUrl = HttpUrl("http://localhost:8000")
 
     @field_validator("payment_webhook_secret", mode="before")
     @classmethod
     def empty_payment_secret(cls, value: object) -> object:
         return None if value == "" else value
 
-    @field_validator("payment_return_url")
+    @field_validator("payment_return_url", "payment_fake_base_url")
     @classmethod
     def validate_payment_return_url(cls, value: HttpUrl) -> HttpUrl:
         if value.username is not None or value.password is not None or value.fragment:

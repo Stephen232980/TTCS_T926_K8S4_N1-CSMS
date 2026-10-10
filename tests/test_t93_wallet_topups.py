@@ -1,5 +1,6 @@
 import asyncio
 from collections.abc import Mapping
+from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 
 import httpx
@@ -8,7 +9,7 @@ import pytest_asyncio
 from pydantic import ValidationError
 from sqlalchemy import delete, func, select
 
-from src.config import Settings, settings
+from src.config import Settings, get_settings, settings
 from src.entrypoints.http import app
 from src.modules.identity.authorization import CurrentActor
 from src.modules.identity.dependencies import get_current_actor
@@ -20,11 +21,65 @@ from src.modules.payments.contracts import (
     PaymentRequest,
 )
 from src.modules.payments.dependencies import get_payment_gateway
+from src.modules.payments.fake_gateway import FakeGateway
 from src.modules.wallet.models import Wallet, WalletLedger
 from src.modules.wallet.topup_models import WalletTopup
 from src.platform.database.session import SessionFactory
 
 PATH = "/api/v1/driver/wallet/topups"
+
+
+@pytest.mark.asyncio
+async def test_t92_real_adapter_from_topup_creation_through_signed_dispatch(
+    context, monkeypatch
+):
+    client, _, ids = context
+    monkeypatch.setenv("PAYMENT_GATEWAY", "fake")
+    monkeypatch.setenv("PAYMENT_WEBHOOK_SECRET", "t92-t93-integration-test-secret")
+    get_settings.cache_clear()
+    app.dependency_overrides[get_payment_gateway] = lambda: FakeGateway(
+        base_url="http://127.0.0.1:8012", secret=get_settings().payment_webhook_secret
+    )
+    try:
+        created = await client.post(PATH, json={"amount_vnd": 50000})
+        assert created.status_code == 201
+        data = created.json()
+        assert data["status"] == "pending"
+        payment_page = await client.get(data["redirect_url"])
+        assert payment_page.status_code == 200
+        query = {
+            key: values[0]
+            for key, values in parse_qs(urlsplit(data["redirect_url"]).query).items()
+        }
+        query["amount_vnd"] = int(query["amount_vnd"])
+        query["expires"] = int(query["expires"])
+        delivered = await client.post(
+            "/api/v1/payments/fake/dispatch", json={**query, "status": "succeeded"}
+        )
+        assert delivered.status_code == 200
+        assert delivered.json()["statuses"] == [200]
+        async with SessionFactory() as db:
+            topup = await db.scalar(
+                select(WalletTopup).where(WalletTopup.order_id == data["order_id"])
+            )
+            assert topup is not None and topup.status == "succeeded"
+            assert (
+                await db.scalar(
+                    select(Wallet.balance_vnd).where(Wallet.driver_id == ids[0])
+                )
+                == 50000
+            )
+            assert (
+                await db.scalar(
+                    select(func.count())
+                    .select_from(WalletLedger)
+                    .join(Wallet)
+                    .where(Wallet.driver_id == ids[0])
+                )
+                == 1
+            )
+    finally:
+        get_settings.cache_clear()
 
 
 class StubGateway:
@@ -104,11 +159,18 @@ async def context():
         app.dependency_overrides.pop(get_current_actor, None)
         app.dependency_overrides.pop(get_payment_gateway, None)
         async with SessionFactory() as db:
-            await db.execute(delete(WalletTopup).where(WalletTopup.driver_id.in_(ids)))
-            await db.execute(delete(Wallet).where(Wallet.driver_id.in_(ids)))
-            await db.execute(delete(UserRole).where(UserRole.user_id.in_(ids)))
-            await db.execute(delete(User).where(User.id.in_(ids)))
-            await db.commit()
+            # Preserve append-only credited fixtures; never disable ledger triggers.
+            credited = await db.scalar(
+                select(WalletLedger.id).join(Wallet).where(Wallet.driver_id.in_(ids))
+            )
+            if credited is None:
+                await db.execute(
+                    delete(WalletTopup).where(WalletTopup.driver_id.in_(ids))
+                )
+                await db.execute(delete(Wallet).where(Wallet.driver_id.in_(ids)))
+                await db.execute(delete(UserRole).where(UserRole.user_id.in_(ids)))
+                await db.execute(delete(User).where(User.id.in_(ids)))
+                await db.commit()
 
 
 async def counts(driver_id):
