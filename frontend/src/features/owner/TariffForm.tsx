@@ -1,113 +1,299 @@
 
 import { useRef, useState, type FormEvent } from 'react'
+import { OwnerApiError } from './ownerApi'
+import { stationToday } from './tariffDates'
 
 export interface TariffValues {
-  pricePerKwh: number
-  idleFeePerMinute: number
-  graceMinutes: number
+  effectiveFrom: string
+  pricePerKwh: string
+  idleFeePerMinute: string
+  graceMinutes: string
 }
 
 type Field = keyof TariffValues
+type NumberField = Exclude<Field, 'effectiveFrom'>
 
-const fields: { key: Field; label: string }[] = [
+interface CurrentTariff {
+  pricePerKwh: number | string
+  idleFeePerMinute: number | string
+  graceMinutes: number | string
+}
+
+interface TariffFormProps {
+  currentTariff: CurrentTariff | null
+  stationTimezone?: string
+  onSave: (values: TariffValues) => Promise<void>
+}
+
+const numberFields: { key: NumberField; label: string }[] = [
   { key: 'pricePerKwh', label: 'Đơn giá mỗi kWh (VNĐ)' },
   { key: 'idleFeePerMinute', label: 'Phí chiếm trụ mỗi phút (VNĐ)' },
   { key: 'graceMinutes', label: 'Thời gian ân hạn (phút)' },
 ]
 
-function validateNumber(value: string): string {
-  if (value.trim() === '') return 'Không được để trống.'
-  if (!/^\d+$/.test(value.trim())) {
+const MAX_MONEY = BigInt('9223372036854775807')
+const MAX_GRACE = BigInt('2147483647')
+
+function validateNumber(field: NumberField, raw: string): string {
+  const value = raw.trim()
+
+  if (!value) return 'Không được để trống.'
+  if (!/^\d+$/.test(value)) {
     return 'Chỉ được nhập số nguyên không âm.'
   }
-  if (!Number.isSafeInteger(Number(value))) {
+
+  const maximum = field === 'graceMinutes' ? MAX_GRACE : MAX_MONEY
+
+  // Giá trị hợp lệ tối đa có 19 chữ số.
+  if (value.replace(/^0+/, '').length > 19) {
     return 'Giá trị vượt phạm vi cho phép.'
   }
+
+  if (BigInt(value) > maximum) {
+    return 'Giá trị vượt phạm vi cho phép.'
+  }
+
   return ''
 }
 
-interface TariffFormProps {
-  currentTariff: TariffValues | null
-  onSave: (values: TariffValues) => Promise<void>
+function localToday(timeZone?: string): string {
+  if (!timeZone) return ''
+
+  try {
+    return stationToday(timeZone)
+  } catch {
+    return ''
+  }
+}
+
+function validateDate(value: string, today: string): string {
+  if (!today) return 'Không xác định được múi giờ của trạm.'
+  if (!value) return 'Vui lòng chọn ngày hiệu lực.'
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return 'Ngày hiệu lực không hợp lệ.'
+  }
+
+  const date = new Date(`${value}T00:00:00Z`)
+
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.toISOString().slice(0, 10) !== value
+  ) {
+    return 'Ngày hiệu lực không hợp lệ.'
+  }
+
+  if (value < today) {
+    return 'Ngày hiệu lực không được ở trong quá khứ.'
+  }
+
+  return ''
+}
+
+function moneyText(value: number | string): string {
+  try {
+    return BigInt(String(value)).toLocaleString('vi-VN')
+  } catch {
+    return '—'
+  }
+}
+
+function apiFieldErrors(detail: unknown): Partial<Record<Field, string>> {
+  const errors: Partial<Record<Field, string>> = {}
+
+  if (!Array.isArray(detail)) return errors
+
+  const mapping: Record<string, Field> = {
+    effective_from: 'effectiveFrom',
+    energy_rate_vnd_per_kwh: 'pricePerKwh',
+    idle_rate_vnd_per_minute: 'idleFeePerMinute',
+    grace_minutes: 'graceMinutes',
+  }
+
+  for (const issue of detail) {
+    if (!issue || typeof issue !== 'object') continue
+
+    const item = issue as { loc?: unknown; msg?: unknown }
+    if (!Array.isArray(item.loc)) continue
+
+    const apiName = String(item.loc[item.loc.length - 1])
+    const field = mapping[apiName]
+
+    if (field) {
+      errors[field] =
+        typeof item.msg === 'string'
+          ? item.msg
+          : 'Giá trị không hợp lệ.'
+    }
+  }
+
+  return errors
 }
 
 export function TariffForm({
   currentTariff,
+  stationTimezone,
   onSave,
 }: TariffFormProps) {
-  const [values, setValues] = useState({
+  const today = localToday(stationTimezone)
+
+  const [values, setValues] = useState<TariffValues>(() => ({
+    effectiveFrom: today,
     pricePerKwh: '',
     idleFeePerMinute: '',
     graceMinutes: '',
-  })
+  }))
 
-  const [touched, setTouched] = useState<
-    Partial<Record<Field, boolean>>
-  >({})
+  const [touched, setTouched] =
+    useState<Partial<Record<Field, boolean>>>({})
+
+  const [serverErrors, setServerErrors] =
+    useState<Partial<Record<Field, string>>>({})
 
   const [saving, setSaving] = useState(false)
   const sendingRef = useRef(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
 
-  const hasError = fields.some(
-    ({ key }) => validateNumber(values[key]) !== '',
-  )
+  const dateError = validateDate(values.effectiveFrom, today)
 
-  async function handleSubmit(
-    event: FormEvent<HTMLFormElement>,
-  ) {
+  const hasError =
+    Boolean(dateError) ||
+    numberFields.some(({ key }) =>
+      Boolean(validateNumber(key, values[key])),
+    )
+
+  function changeValue(field: Field, value: string) {
+    setValues((previous) => ({
+      ...previous,
+      [field]: value,
+    }))
+
+    setTouched((previous) => ({
+      ...previous,
+      [field]: true,
+    }))
+
+    setServerErrors((previous) => ({
+      ...previous,
+      [field]: '',
+    }))
+
+    setSuccess('')
+    setError('')
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-
     if (sendingRef.current || hasError) return
 
     sendingRef.current = true
     setSaving(true)
     setError('')
     setSuccess('')
+    setServerErrors({})
 
     try {
-      await onSave({
-        pricePerKwh: Number(values.pricePerKwh),
-        idleFeePerMinute: Number(values.idleFeePerMinute),
-        graceMinutes: Number(values.graceMinutes),
-      })
+      await onSave(values)
 
-     setSuccess('Đã cập nhật biểu giá xem trước (chưa lưu vào hệ thống).')
-    } catch {
-      setError('Không thể lưu biểu giá. Vui lòng thử lại.')
+      setSuccess(
+        `Đã lưu biểu giá vào hệ thống. Ngày hiệu lực: ${values.effectiveFrom}.`,
+      )
+    } catch (caught) {
+      if (caught instanceof OwnerApiError) {
+        if (caught.status === 409) {
+          setServerErrors({
+            effectiveFrom:
+              'Ngày hiệu lực này đã có biểu giá. Hãy chọn ngày khác.',
+          })
+        } else if (caught.status === 422) {
+          const fieldErrors = apiFieldErrors(caught.detail)
+
+          if (Object.keys(fieldErrors).length > 0) {
+            setServerErrors(fieldErrors)
+          } else {
+            setError(caught.message)
+          }
+        } else {
+          setError(caught.message)
+        }
+      } else {
+        setError(
+          caught instanceof Error
+            ? caught.message
+            : 'Không thể lưu biểu giá. Vui lòng thử lại.',
+        )
+      }
     } finally {
       sendingRef.current = false
       setSaving(false)
     }
   }
 
+  const displayedDateError =
+    serverErrors.effectiveFrom ||
+    (touched.effectiveFrom ? dateError : '')
+
   return (
     <section className="owner-panel">
       <h2>Biểu giá đang áp dụng</h2>
 
       {currentTariff ? (
-        <div>
-          <p>
-            Đơn giá: {currentTariff.pricePerKwh.toLocaleString('vi-VN')} VNĐ/kWh
-          </p>
-          <p>
-            Phí chiếm trụ: {currentTariff.idleFeePerMinute.toLocaleString('vi-VN')} VNĐ/phút
-          </p>
-          <p>
-            Ân hạn: {currentTariff.graceMinutes} phút
-          </p>
-        </div>
+        <dl className="owner-tariff-values">
+          <div>
+            <dt>Đơn giá mỗi kWh</dt>
+            <dd>{moneyText(currentTariff.pricePerKwh)} VNĐ/kWh</dd>
+          </div>
+          <div>
+            <dt>Phí chiếm trụ mỗi phút</dt>
+            <dd>{moneyText(currentTariff.idleFeePerMinute)} VNĐ/phút</dd>
+          </div>
+          <div>
+            <dt>Thời gian ân hạn</dt>
+            <dd>{currentTariff.graceMinutes} phút</dd>
+          </div>
+        </dl>
       ) : (
-        <p>Trạm chưa có biểu giá đang áp dụng.</p>
+        <p className="owner-subtle">
+          Chưa kết nối API đọc biểu giá hiện hành.
+          Không thể xác nhận biểu giá đang áp dụng của trạm.
+        </p>
       )}
 
       <h2>Khai báo biểu giá</h2>
 
+      <p className="owner-subtle">
+        Biểu giá đầu tiên có hiệu lực từ hôm nay theo giờ trạm.
+        Phiên bản tiếp theo phải có hiệu lực từ ngày mai trở đi.
+        Hệ thống sẽ kiểm tra quy tắc này khi lưu.
+      </p>
+
       <form onSubmit={handleSubmit} noValidate>
-        {fields.map(({ key, label }) => {
-          const fieldError = validateNumber(values[key])
-          const showError = touched[key] && fieldError
+        <label className="owner-field">
+          Ngày hiệu lực
+
+          <input
+            type="date"
+            value={values.effectiveFrom}
+            min={today || undefined}
+            disabled={saving || !today}
+            aria-invalid={Boolean(displayedDateError)}
+            onChange={(event) =>
+              changeValue('effectiveFrom', event.target.value)
+            }
+          />
+
+          {displayedDateError && (
+            <span className="owner-error" role="alert">
+              {displayedDateError}
+            </span>
+          )}
+        </label>
+
+        {numberFields.map(({ key, label }) => {
+          const clientError = validateNumber(key, values[key])
+          const fieldError =
+            serverErrors[key] || (touched[key] ? clientError : '')
 
           return (
             <label className="owner-field" key={key}>
@@ -118,33 +304,26 @@ export function TariffForm({
                 inputMode="numeric"
                 value={values[key]}
                 disabled={saving}
-                aria-invalid={Boolean(showError)}
-                style={
-                  showError
-                    ? { borderColor: '#b91c1c' }
-                    : undefined
+                aria-invalid={Boolean(fieldError)}
+                onChange={(event) =>
+                  changeValue(key, event.target.value)
                 }
-                onChange={(event) => {
-                  setValues((previous) => ({
-                    ...previous,
-                    [key]: event.target.value,
-                  }))
-                  setTouched((previous) => ({
-                    ...previous,
-                    [key]: true,
-                  }))
-                  setSuccess('')
-                }}
               />
 
-              {showError && (
-                <span role="alert" style={{ color: '#b91c1c' }}>
+              {fieldError && (
+                <span className="owner-error" role="alert">
                   {fieldError}
                 </span>
               )}
             </label>
           )
         })}
+
+        {!today && (
+          <p className="owner-error" role="alert">
+            Không đọc được múi giờ của trạm. Không thể lưu biểu giá.
+          </p>
+        )}
 
         {error && (
           <p className="owner-error" role="alert">
@@ -161,7 +340,7 @@ export function TariffForm({
         <button
           type="submit"
           className="primary-button"
-          disabled={saving || hasError}
+          disabled={saving || hasError || !today}
         >
           {saving ? 'Đang lưu...' : 'Lưu biểu giá'}
         </button>

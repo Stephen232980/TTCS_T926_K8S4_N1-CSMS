@@ -5,9 +5,10 @@ import userEvent from '@testing-library/user-event'
 import { TariffForm } from './TariffForm'
 
 describe('T-62 - Form khai báo biểu giá', () => {
-  it('hiển thị biểu giá hiện hành', () => {
+  it('hiển thị biểu giá hiện hành khi có dữ liệu', () => {
     render(
       <TariffForm
+        stationTimezone="Asia/Ho_Chi_Minh"
         currentTariff={{
           pricePerKwh: 3500,
           idleFeePerMinute: 500,
@@ -26,23 +27,25 @@ describe('T-62 - Form khai báo biểu giá', () => {
     const onSave = vi.fn()
 
     render(
-      <TariffForm currentTariff={null} onSave={onSave} />,
+      <TariffForm
+        stationTimezone="Asia/Ho_Chi_Minh"
+        currentTariff={null}
+        onSave={onSave}
+      />,
     )
 
-    const input = screen.getByLabelText(
-      'Đơn giá mỗi kWh (VNĐ)',
-    )
+    const input = screen.getByLabelText('Đơn giá mỗi kWh (VNĐ)')
 
     await user.type(input, '-100')
 
-    expect(
-      screen.getByRole('alert').textContent,
-    ).toContain('Chỉ được nhập số nguyên không âm.')
+    expect(screen.getByRole('alert').textContent).toContain(
+      'Chỉ được nhập số nguyên không âm.',
+    )
 
     expect(
-      screen.getByRole('button', {
-        name: 'Lưu biểu giá',
-      }).hasAttribute('disabled'),
+      screen
+        .getByRole('button', { name: 'Lưu biểu giá' })
+        .hasAttribute('disabled'),
     ).toBe(true)
   })
 
@@ -51,7 +54,11 @@ describe('T-62 - Form khai báo biểu giá', () => {
     const onSave = vi.fn(async () => {})
 
     render(
-      <TariffForm currentTariff={null} onSave={onSave} />,
+      <TariffForm
+        stationTimezone="Asia/Ho_Chi_Minh"
+        currentTariff={null}
+        onSave={onSave}
+      />,
     )
 
     await user.type(
@@ -70,15 +77,16 @@ describe('T-62 - Form khai báo biểu giá', () => {
     )
 
     await user.click(
-      screen.getByRole('button', {
-        name: 'Lưu biểu giá',
-      }),
+      screen.getByRole('button', { name: 'Lưu biểu giá' }),
     )
 
     expect(onSave).toHaveBeenCalledWith({
-      pricePerKwh: 3500,
-      idleFeePerMinute: 500,
-      graceMinutes: 5,
+      effectiveFrom: expect.stringMatching(
+        /^\d{4}-\d{2}-\d{2}$/,
+      ),
+      pricePerKwh: '3500',
+      idleFeePerMinute: '500',
+      graceMinutes: '5',
     })
   })
 })

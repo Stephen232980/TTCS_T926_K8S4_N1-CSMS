@@ -18,7 +18,8 @@ import { Icon, type IconName } from '../../components/icons/Icon'
 import { StationWizard } from './StationWizard'
 import { ChargerWizard } from './ChargerWizard'
 import { OwnerCharging } from './OwnerCharging'
-import { TariffForm, type TariffValues } from './TariffForm'
+import { TariffForm } from './TariffForm'
+import { createStationTariff } from './tariffApi'
 import { ChargerDrawing, ConnectionSymbol, ConnectorSymbol, StationPhoto } from './OwnerVisuals'
 import {
   clock,
@@ -275,8 +276,6 @@ export function OwnerWorkspace({
     null,
   )
   const [station, setStation] = useState<Station | null>(null)
-  const [previewTariffs, setPreviewTariffs] =
-  useState<Record<string, TariffValues>>({})
   const [chargers, setChargers] = useState<ChargePointPage | null>(null)
   const [connections, setConnections] = useState<Connection[]>([])
   const [connectionError, setConnectionError] = useState('')
@@ -800,12 +799,15 @@ export function OwnerWorkspace({
 
   <TariffForm
     key={station.id}
-    currentTariff={previewTariffs[String(station.id)] ?? null}
+    stationTimezone={station.timezone}
+    currentTariff={null}
     onSave={async (values) => {
-      setPreviewTariffs((previous) => ({
-        ...previous,
-        [String(station.id)]: values,
-      }))
+      await createStationTariff(String(station.id), {
+        effectiveFrom: values.effectiveFrom,
+        pricePerKwh: values.pricePerKwh,
+        idleFeePerMinute: values.idleFeePerMinute,
+        graceMinutes: values.graceMinutes,
+      })
     }}
   />
 </div>
