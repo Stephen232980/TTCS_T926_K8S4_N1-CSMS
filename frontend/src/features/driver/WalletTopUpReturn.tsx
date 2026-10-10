@@ -6,6 +6,7 @@ export type { TopUpStatus, TopUpResult } from './walletTopUpApi'
 interface WalletTopUpReturnProps {
   transactionId: string
   getStatus: (id: string, signal?: AbortSignal) => Promise<TopUpResult>
+  onResolved?: (result: TopUpResult) => void
   onSucceeded?: () => Promise<void> | void
   onBack?: () => void
 }
@@ -21,7 +22,7 @@ interface Snapshot {
   loadingWallet: boolean
 }
 
-export function WalletTopUpReturn({ transactionId, getStatus, onSucceeded, onBack }: WalletTopUpReturnProps) {
+export function WalletTopUpReturn({ transactionId, getStatus, onResolved, onSucceeded, onBack }: WalletTopUpReturnProps) {
   const [retry, setRetry] = useState(0)
   const [snapshot, setSnapshot] = useState<Snapshot>(() => ({
     id: transactionId, result: { status: 'pending' }, error: '', timedOut: false, loadingWallet: false,
@@ -51,6 +52,7 @@ export function WalletTopUpReturn({ transactionId, getStatus, onSucceeded, onBac
         update({ result: response, error: '' })
         if (response.status !== 'pending') {
           stop()
+          onResolved?.(response)
           if (response.status === 'succeeded' && onSucceeded) {
             update({ loadingWallet: true })
             try { await onSucceeded() }
@@ -79,7 +81,7 @@ export function WalletTopUpReturn({ transactionId, getStatus, onSucceeded, onBac
     }, TIMEOUT)
     void poll()
     return () => { active = false; stop(); controller.abort() }
-  }, [transactionId, getStatus, onSucceeded, retry])
+  }, [transactionId, getStatus, onSucceeded, onResolved, retry])
 
   const current: Snapshot = snapshot.id === transactionId ? snapshot : {
     id: transactionId, result: { status: 'pending' as const }, error: '', timedOut: false, loadingWallet: false,

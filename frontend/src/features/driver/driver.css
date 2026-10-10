@@ -690,3 +690,6 @@
   margin: 0 auto;
 }
 .driver-wallet-stack .driver-wallet-container { margin: 0; }
+
+.driver-shell .topup-button span { display: inline; }
+.driver-shell .topup-button { width: auto; max-width: 100%; }

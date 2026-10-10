@@ -18,11 +18,13 @@ const created = { order_id: 'order-001', redirect_url: 'http://gateway.test/pay/
 
 afterEach(() => {
   vi.clearAllMocks()
+  sessionStorage.clear()
   window.history.replaceState(null, '', '/')
 })
 
 describe('T-94 - DriverWorkspace end-to-end wiring', () => {
   it('nút ví POST API, sau đó chuyển đúng redirect_url', async () => {
+    vi.mocked(getWalletTopUp).mockResolvedValue({ status: 'pending' })
     vi.mocked(createWalletTopUp).mockResolvedValue(created)
     const redirect = vi.fn()
     const user = userEvent.setup()

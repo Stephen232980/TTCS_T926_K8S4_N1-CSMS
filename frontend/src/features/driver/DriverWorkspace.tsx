@@ -7,7 +7,7 @@ import { DriverMapPage } from './DriverMapPage'
 import { DriverWalletPage } from './DriverWalletPage'
 import { WalletTopUpPage } from './WalletTopUpPage'
 import { WalletTopUpReturn } from './WalletTopUpReturn'
-import { createWalletTopUp, getWalletTopUp, refreshDriverWallet } from './walletTopUpApi'
+import { createWalletTopUp, getWalletTopUp, refreshDriverWallet, type TopUpResult } from './walletTopUpApi'
 import { readTopUpReturn } from './walletTopUpReturnUrl'
 import './driver.css'
 
@@ -25,11 +25,32 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
   onExit?: () => void
   navigateToPayment?: (url: string) => void
 }) {
+  const storageKey = `csms:topup:${currentUser.id}`
+  const [trackedOrder, setTrackedOrder] = useState(() => readTopUpReturn(window.location).orderId || sessionStorage.getItem(storageKey) || '')
+  useEffect(() => {
+    const id = readTopUpReturn(window.location).orderId
+    if (id) sessionStorage.setItem(storageKey, id)
+  }, [storageKey])
+  const [walletRevision, setWalletRevision] = useState(0)
+  const rememberOrder = useCallback((id: string) => {
+    sessionStorage.setItem(storageKey, id)
+    setTrackedOrder(id)
+  }, [storageKey])
+  const resolved = useCallback((result: TopUpResult) => {
+    if (['succeeded', 'failed', 'cancelled'].includes(result.status)) {
+      sessionStorage.removeItem(storageKey)
+      setWalletRevision(value => value + 1)
+    }
+  }, [storageKey])
+  const refreshWallet = useCallback(async () => {
+    await refreshDriverWallet()
+    setWalletRevision(value => value + 1)
+  }, [])
   const [area, setArea] = useState<Area>(hashArea)
   const [returnLocation, setReturnLocation] = useState(() => readTopUpReturn(window.location))
   const [manualOrderId, setManualOrderId] = useState('')
   const showingReturn = returnLocation.isReturn || Boolean(manualOrderId)
-  const returnOrderId = manualOrderId || returnLocation.orderId
+  const returnOrderId = manualOrderId || returnLocation.orderId || trackedOrder
   const [mapOpened, setMapOpened] = useState(() => hashArea() === 'stations')
   const [station, setStation] = useState<MapStation>()
   const [showStart, setShowStart] = useState(false)
@@ -40,7 +61,9 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
     const change = () => {
       const next = hashArea()
       setArea(next)
-      setReturnLocation(readTopUpReturn(window.location))
+      const returned = readTopUpReturn(window.location)
+      setReturnLocation(returned)
+      if (returned.orderId) rememberOrder(returned.orderId)
       setManualOrderId('')
       if (next === 'stations') setMapOpened(true)
       setShowStart(false)
@@ -48,7 +71,7 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
     window.addEventListener('hashchange', change)
     window.addEventListener('popstate', change)
     return () => { window.removeEventListener('hashchange', change); window.removeEventListener('popstate', change) }
-  }, [])
+  }, [rememberOrder])
 
   const navigate = useCallback((next: Area) => {
     setArea(next)
@@ -61,11 +84,12 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
   }, [])
   const showStations = useCallback(() => navigate('stations'), [navigate])
   const checkTopUpOrder = useCallback((orderId: string) => {
+    rememberOrder(orderId)
     setArea('wallet')
     setManualOrderId(orderId)
     setReturnLocation({ isReturn: true, orderId })
     window.history.replaceState(null, '', `#driver-wallet-return?order_code=${encodeURIComponent(orderId)}`)
-  }, [])
+  }, [rememberOrder])
   const sessionStarted = useCallback(() => navigate('session'), [navigate])
 
   async function logout() {
@@ -113,25 +137,21 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
                 : 'Xem vị trí trạm và tìm nơi sạc phù hợp.'}
         </p>
       </header>
-      {area === 'wallet' ? (
-        showingReturn ? (
-          <WalletTopUpReturn
-            transactionId={returnOrderId}
-            getStatus={getWalletTopUp}
-            onSucceeded={refreshDriverWallet}
-            onBack={() => navigate('wallet')}
-          />
-        ) : (
-          <div className="driver-wallet-stack">
-            <DriverWalletPage />
-            <WalletTopUpPage
-              onTopUp={createWalletTopUp}
-              onCheckOrder={checkTopUpOrder}
-              onRedirect={navigateToPayment}
-            />
-          </div>
-        )
-      ) : (
+      <div hidden={area !== 'wallet'}>
+        {(showingReturn || trackedOrder) && <WalletTopUpReturn
+          transactionId={returnOrderId}
+          getStatus={getWalletTopUp}
+          onResolved={resolved}
+          onSucceeded={refreshWallet}
+          onBack={showingReturn ? () => navigate('wallet') : undefined}
+        />}
+        {area === 'wallet' && !showingReturn && <div className="driver-wallet-stack">
+          <DriverWalletPage key={`wallet-${walletRevision}`} onTopUp={() => document.getElementById('topup-amount')?.focus()} />
+          <WalletTopUpPage key={`topup-${walletRevision}`} storageKey={storageKey} onOrder={rememberOrder}
+            onTopUp={createWalletTopUp} onCheckOrder={checkTopUpOrder} onRedirect={navigateToPayment} />
+        </div>}
+      </div>
+      {area !== 'wallet' && (
         <>
           <div className="driver-return" hidden={!showStart || area !== 'stations'}><button className="secondary-button" onClick={() => setShowStart(false)}><Icon name="chevronLeft" />Quay lại bản đồ và danh sách</button></div>
           <DriverCharging stationId={station?.id} stationName={station?.name} showSession={area === 'session'} showConnectors={area === 'stations' && showStart} onFindStations={showStations} onSessionStarted={sessionStarted} />

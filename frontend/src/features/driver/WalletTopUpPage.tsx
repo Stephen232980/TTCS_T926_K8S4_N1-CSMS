@@ -6,18 +6,20 @@ const MAX_AMOUNT = 5000000
 const PRESETS = [50000, 100000, 200000, 500000]
 
 interface WalletTopUpPageProps {
+  storageKey?: string
+  onOrder?: (id: string) => void
   onTopUp: (amount: number) => Promise<TopUpCreated>
   onCheckOrder?: (id: string) => void
   onRedirect?: (url: string) => void
 }
 
-export function WalletTopUpPage({ onTopUp, onCheckOrder, onRedirect = url => window.location.assign(url) }: WalletTopUpPageProps) {
+export function WalletTopUpPage({ storageKey, onOrder, onTopUp, onCheckOrder, onRedirect = url => window.location.assign(url) }: WalletTopUpPageProps) {
   const [amount, setAmount] = useState('100000')
   const [loading, setLoading] = useState(false)
   const [redirecting, setRedirecting] = useState(false)
   const [error, setError] = useState('')
-  const [pendingOrder, setPendingOrder] = useState('')
-  const [uncertain, setUncertain] = useState(false)
+  const [pendingOrder, setPendingOrder] = useState(() => storageKey ? sessionStorage.getItem(storageKey) ?? '' : '')
+  const [uncertain, setUncertain] = useState(() => Boolean(storageKey && sessionStorage.getItem(storageKey) !== null))
   const submittingRef = useRef(false)
   const numericAmount = Number(amount)
   const valid = /^\d+$/.test(amount) && Number.isSafeInteger(numericAmount) &&
@@ -27,6 +29,9 @@ export function WalletTopUpPage({ onTopUp, onCheckOrder, onRedirect = url => win
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!valid || submittingRef.current || locked) return
+    if (storageKey && sessionStorage.getItem(storageKey) !== null) return
+    if (storageKey) sessionStorage.setItem(storageKey, '')
+    onOrder?.('')
     submittingRef.current = true
     setLoading(true)
     setError('')
@@ -34,6 +39,8 @@ export function WalletTopUpPage({ onTopUp, onCheckOrder, onRedirect = url => win
     try {
       const created = await onTopUp(numericAmount)
       createdOrder = created.order_id
+      if (storageKey) sessionStorage.setItem(storageKey, createdOrder)
+      onOrder?.(createdOrder)
       if (!created.redirect_url || !created.order_id) throw new WalletTopUpApiError(
         'uncertain', 'Backend không trả về đầy đủ thông tin thanh toán.', undefined, created.order_id,
       )
@@ -45,7 +52,12 @@ export function WalletTopUpPage({ onTopUp, onCheckOrder, onRedirect = url => win
       setRedirecting(false)
       if (cause instanceof WalletTopUpApiError) {
         setError(cause.message)
-        if (cause.orderId) setPendingOrder(cause.orderId)
+        if (cause.orderId) {
+          setPendingOrder(cause.orderId)
+          if (storageKey) sessionStorage.setItem(storageKey, cause.orderId)
+          onOrder?.(cause.orderId)
+        }
+        if (!cause.orderId && !['uncertain', 'gateway'].includes(cause.kind) && storageKey) sessionStorage.removeItem(storageKey)
         if (cause.orderId || cause.kind === 'uncertain' || cause.kind === 'gateway') setUncertain(true)
       } else {
         setError('Không chuyển được tới cổng thanh toán hoặc chưa rõ kết quả tạo lệnh. Không gửi lại trước khi kiểm tra.')
