@@ -7,7 +7,6 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.config import settings
 from src.modules.identity.authorization import AuthorizationEvidence
 from src.modules.identity.models import Role, User, UserRole
 from src.modules.wallet.exceptions import (
@@ -24,20 +23,6 @@ from src.platform.audit.service import ghi_nhat_ky
 EntryType = Literal["gateway_topup", "manual_topup", "charging_debit", "adjustment"]
 MIN_VND = -(2**63)
 MAX_VND = 2**63 - 1
-
-
-def du_so_du_de_sac(balance_vnd: int, price_vnd_per_kwh: int) -> bool:
-    if type(balance_vnd) is not int:
-        raise TypeError("balance_vnd must be int")
-    if type(price_vnd_per_kwh) is not int:
-        raise TypeError("price_vnd_per_kwh must be int")
-    if price_vnd_per_kwh < 0:
-        raise ValueError("price_vnd_per_kwh must be non-negative")
-
-    minimum_balance = (
-        settings.charging_minimum_kwh * price_vnd_per_kwh + settings.wallet_reserve_vnd
-    )
-    return balance_vnd >= minimum_balance
 
 
 def _integer_vnd(value: int) -> int:
