@@ -59,10 +59,11 @@ function jsonInteger(raw: string, maximum: bigint, field: string): string {
   return parsed.toString()
 }
 
-export async function createStationTariff(
+async function saveStationTariff<T>(
   stationId: string,
   input: TariffCreateInput,
-): Promise<TariffCreated> {
+  tariffId?: string,
+): Promise<T> {
   const effectiveFrom = input.effectiveFrom.trim()
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom)) {
@@ -84,6 +85,8 @@ export async function createStationTariff(
             clockMinute(band.end, true) +
             ',"energy_rate_vnd_per_kwh":' +
             jsonInteger(band.price, MAX_MONEY, 'Đơn giá điện') +
+            ',"label":' +
+            JSON.stringify(band.label ?? '') +
             '}',
         )
         .join(',') +
@@ -112,10 +115,10 @@ export async function createStationTariff(
     '}',
   ].join('')
 
-  return ownerRequest<TariffCreated>(
-    `/owner/stations/${encodeURIComponent(stationId)}/tariffs`,
+  return ownerRequest<T>(
+    `/owner/stations/${encodeURIComponent(stationId)}/tariffs${tariffId ? '/' + encodeURIComponent(tariffId) : ''}`,
     {
-      method: 'POST',
+      method: tariffId ? 'PATCH' : 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
@@ -123,3 +126,36 @@ export async function createStationTariff(
     },
   )
 }
+
+export const createStationTariff = (
+  stationId: string,
+  input: TariffCreateInput,
+) => saveStationTariff<TariffCreated>(stationId, input)
+export const updateStationTariff = (
+  stationId: string,
+  tariffId: string,
+  input: TariffCreateInput,
+) => saveStationTariff<TariffVersion>(stationId, input, tariffId)
+export interface TariffVersion extends TariffDisplay {
+  id: string
+  created_at: string
+  status: 'current' | 'upcoming' | 'historical'
+  editable: boolean
+}
+export interface TariffHistory {
+  today: string
+  timezone: string
+  items: TariffVersion[]
+  page: number
+  page_size: number
+  total: number
+}
+export const readTariffHistory = (
+  stationId: string,
+  page: number,
+  signal?: AbortSignal,
+) =>
+  ownerRequest<TariffHistory>(
+    `/owner/stations/${encodeURIComponent(stationId)}/tariffs?page=${page}&page_size=20`,
+    { signal },
+  )

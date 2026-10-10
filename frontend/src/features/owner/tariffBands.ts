@@ -1,4 +1,5 @@
 export interface BandValues {
+  label?: string
   start: string
   end: string
   price: string
@@ -79,7 +80,7 @@ export function normalizedBands(bands: BandValues[]) {
         end = clockMinute(band.end, true)!
       const common = {
         energy_rate_vnd_per_kwh: BigInt(band.price).toString(),
-        label: '',
+        label: band.label ?? '',
       }
       return start < end
         ? [{ ...common, start_min: start, end_min: end }]

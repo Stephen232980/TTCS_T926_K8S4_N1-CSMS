@@ -29,6 +29,8 @@ export interface CurrentTariff {
 }
 
 interface TariffFormProps {
+  initialValues?: TariffValues
+  editMode?: boolean
   currentTariff: CurrentTariff | null
   stationTimezone?: string
   hasVersions?: boolean
@@ -152,6 +154,8 @@ function apiFieldErrors(detail: unknown): Partial<Record<Field, string>> {
 
 export function TariffForm({
   currentTariff,
+  initialValues,
+  editMode = false,
   stationTimezone,
   hasVersions = currentTariff !== null,
   tariffToday,
@@ -160,12 +164,15 @@ export function TariffForm({
   const today = tariffToday ?? localToday(stationTimezone)
   const minimumDate = today ? (hasVersions ? nextTariffDay(today) : today) : ''
 
-  const [values, setValues] = useState<TariffValues>(() => ({
-    effectiveFrom: minimumDate,
-    pricePerKwh: '',
-    idleFeePerMinute: '',
-    graceMinutes: '',
-  }))
+  const [values, setValues] = useState<TariffValues>(
+    () =>
+      initialValues ?? {
+        effectiveFrom: minimumDate,
+        pricePerKwh: '',
+        idleFeePerMinute: '',
+        graceMinutes: '',
+      },
+  )
 
   const [touched, setTouched] = useState<Partial<Record<Field, boolean>>>({})
 
@@ -173,10 +180,10 @@ export function TariffForm({
     Partial<Record<Field, string>>
   >({})
 
-  const [multiBand, setMultiBand] = useState(false)
-  const [bands, setBands] = useState<BandValues[]>([
-    { start: '00:00', end: '24:00', price: '' },
-  ])
+  const [multiBand, setMultiBand] = useState(Boolean(initialValues?.bands))
+  const [bands, setBands] = useState<BandValues[]>(
+    initialValues?.bands ?? [{ start: '00:00', end: '24:00', price: '' }],
+  )
   const [bandServerErrors, setBandServerErrors] = useState<string[][]>([])
   const [saving, setSaving] = useState(false)
   const sendingRef = useRef(false)
@@ -233,7 +240,7 @@ export function TariffForm({
       )
       setValues((previous) => ({
         ...previous,
-        effectiveFrom: nextTariffDay(today),
+        effectiveFrom: editMode ? previous.effectiveFrom : nextTariffDay(today),
       }))
     } catch (caught) {
       if (caught instanceof OwnerApiError) {
@@ -292,50 +299,56 @@ export function TariffForm({
 
   return (
     <section className="owner-panel owner-tariff-panel">
-      <h2>Biểu giá đang áp dụng</h2>
-
-      {currentTariff ? (
+      {!editMode && (
         <>
-          {currentTariff.effectiveFrom && (
-            <p className="owner-subtle">
-              Áp dụng từ {currentTariff.effectiveFrom}
-            </p>
-          )}
-          <dl className="owner-tariff-values">
-            <div>
-              <dt>Đơn giá mỗi kWh</dt>
-              <dd>
-                {currentTariff.bands && currentTariff.bands.length > 1
-                  ? currentTariff.bands.map((band) => (
-                      <p key={band.start_min}>
-                        {String(Math.floor(band.start_min / 60)).padStart(
-                          2,
-                          '0',
-                        )}
-                        :{String(band.start_min % 60).padStart(2, '0')}–
-                        {String(Math.floor(band.end_min / 60)).padStart(2, '0')}
-                        :{String(band.end_min % 60).padStart(2, '0')}:{' '}
-                        {moneyText(band.energy_rate_vnd_per_kwh)} VNĐ/kWh
-                      </p>
-                    ))
-                  : `${moneyText(currentTariff.pricePerKwh)} VNĐ/kWh`}
-              </dd>
-            </div>
-            <div>
-              <dt>Phí chiếm trụ mỗi phút</dt>
-              <dd>{moneyText(currentTariff.idleFeePerMinute)} VNĐ/phút</dd>
-            </div>
-            <div>
-              <dt>Thời gian ân hạn</dt>
-              <dd>{currentTariff.graceMinutes} phút</dd>
-            </div>
-          </dl>
-        </>
-      ) : (
-        <p className="owner-subtle">Trạm chưa có biểu giá đang áp dụng.</p>
-      )}
+          <h2>Biểu giá đang áp dụng</h2>
 
-      <h2>Khai báo biểu giá</h2>
+          {currentTariff ? (
+            <>
+              {currentTariff.effectiveFrom && (
+                <p className="owner-subtle">
+                  Áp dụng từ {currentTariff.effectiveFrom}
+                </p>
+              )}
+              <dl className="owner-tariff-values">
+                <div>
+                  <dt>Đơn giá mỗi kWh</dt>
+                  <dd>
+                    {currentTariff.bands && currentTariff.bands.length > 1
+                      ? currentTariff.bands.map((band) => (
+                          <p key={band.start_min}>
+                            {String(Math.floor(band.start_min / 60)).padStart(
+                              2,
+                              '0',
+                            )}
+                            :{String(band.start_min % 60).padStart(2, '0')}–
+                            {String(Math.floor(band.end_min / 60)).padStart(
+                              2,
+                              '0',
+                            )}
+                            :{String(band.end_min % 60).padStart(2, '0')}:{' '}
+                            {moneyText(band.energy_rate_vnd_per_kwh)} VNĐ/kWh
+                          </p>
+                        ))
+                      : `${moneyText(currentTariff.pricePerKwh)} VNĐ/kWh`}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Phí chiếm trụ mỗi phút</dt>
+                  <dd>{moneyText(currentTariff.idleFeePerMinute)} VNĐ/phút</dd>
+                </div>
+                <div>
+                  <dt>Thời gian ân hạn</dt>
+                  <dd>{currentTariff.graceMinutes} phút</dd>
+                </div>
+              </dl>
+            </>
+          ) : (
+            <p className="owner-subtle">Trạm chưa có biểu giá đang áp dụng.</p>
+          )}
+        </>
+      )}
+      <h2>{editMode ? 'Sửa phiên bản biểu giá' : 'Khai báo biểu giá'}</h2>
 
       <p className="owner-subtle">
         Biểu giá đầu tiên có hiệu lực từ hôm nay theo giờ trạm. Phiên bản tiếp
@@ -446,7 +459,7 @@ export function TariffForm({
           className="primary-button"
           disabled={saving || hasError || !today}
         >
-          {saving ? 'Đang lưu...' : 'Lưu biểu giá'}
+          {saving ? 'Đang lưu...' : editMode ? 'Lưu thay đổi' : 'Lưu biểu giá'}
         </button>
       </form>
     </section>
