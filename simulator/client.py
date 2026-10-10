@@ -22,10 +22,78 @@ METER_START_WH = 1000
 METER_STOP_WH = 3500
 EXPECTED_ENERGY_KWH = "2.5"
 
+# ==========================================
+# [T-80] TÍNH TIỀN VÀ LẬP HÓA ĐƠN
+# ==========================================
+def tinh_tien(start_wh: int, stop_wh: int, don_gia_kwh: float = 3500.0) -> float:
+    luong_dien_kwh = (stop_wh - start_wh) / 1000
+    return luong_dien_kwh * don_gia_kwh
 
+
+def lap_hoa_don(start_wh: int, stop_wh: int) -> float:
+    print("--- BẮT ĐẦU LẬP HÓA ĐƠN ---")
+    print(f"Chỉ số bắt đầu: {start_wh} Wh")
+    print(f"Chỉ số kết thúc: {stop_wh} Wh")
+    
+    tong_tien = tinh_tien(start_wh, stop_wh)
+    
+    print(f"Điện năng tiêu thụ: {(stop_wh - start_wh) / 1000} kWh")
+    print(f"Tổng tiền thanh toán: {tong_tien:,.0f} VNĐ")
+    print("---------------------------\n")
+    
+    return tong_tien
+
+
+# ==========================================
+# [T-81] CHỐT PHIÊN VÀ JOB THU NỢ
+# ==========================================
+DATABASE_PHIEN_SAC = {}
+
+def chot_phien(transaction_id: int, start_wh: int, stop_wh: int, thanh_toan_thanh_cong: bool) -> None:
+    """Nghiệp vụ chốt phiên ngay sau khi nhận sự kiện StopTransaction từ trạm"""
+    print(f"\n⚡ BẮT ĐẦU CHỐT PHIÊN CHO TRANSACTION: {transaction_id}")
+    tong_tien = lap_hoa_don(start_wh, stop_wh)
+    trang_thai = "DA_THANH_TOAN" if thanh_toan_thanh_cong else "CHO_THANH_TOAN"
+    
+    DATABASE_PHIEN_SAC[transaction_id] = {
+        "transaction_id": transaction_id,
+        "tong_tien": tong_tien,
+        "trang_thai": trang_thai
+    }
+    print(f"=> Trạng thái phiên {transaction_id} được lưu vào hệ thống: {trang_thai}")
+
+
+def job_nhat_phien_chua_thanh_toan() -> None:
+    """Cronjob quét định kỳ để xử lý các phiên bị nợ"""
+    print("\n" + "="*50)
+    print("🔍 [BACKGROUND JOB] QUÉT PHIÊN CHƯA HOÀN TẤT THANH TOÁN...")
+    
+    danh_sach_no = [phien for phien in DATABASE_PHIEN_SAC.values() if phien["trang_thai"] == "CHO_THANH_TOAN"]
+    
+    if not danh_sach_no:
+        print("✅ Không có khách hàng nào nợ tiền. Hệ thống sạch sẽ!")
+        print("="*50 + "\n")
+        return
+
+    for phien in danh_sach_no:
+        tx_id = phien['transaction_id']
+        tien_no = phien['tong_tien']
+        print(f"⚠️ Phát hiện Transaction {tx_id} đang nợ {tien_no:,.0f} VNĐ!")
+        print(f"   -> Đang gửi yêu cầu trừ tiền lại cho Transaction {tx_id}...")
+        
+        DATABASE_PHIEN_SAC[tx_id]["trang_thai"] = "DA_THANH_TOAN"
+        print(f"   -> ✅ Thu hồi nợ thành công! Đã cập nhật trạng thái DA_THANH_TOAN.")
+    
+    print("="*50 + "\n")
+
+
+# ==========================================
+# MÔ PHỎNG OCPP CLIENT (CORE)
+# ==========================================
 async def run(settings: SimulatorSettings) -> None:
     """Run the configured S-26 scenario and persist its safe verification report."""
     run_id = begin_run(settings.report_path)
+    
     if settings.scenario == "online":
         await _run_online(settings, run_id)
     else:
@@ -74,6 +142,10 @@ async def _run_recovery(settings: SimulatorSettings, run_id: str) -> None:
             report_rows.append(row)
             sockets.append(socket)
     _write_report(settings, report_rows, run_id, started_at)
+    
+    # [T-81] Kích hoạt chạy Job nhặt phiên nợ sau khi các xe sạc xong
+    job_nhat_phien_chua_thanh_toan()
+    
     if len(sockets) != settings.count:
         await _close_all(sockets)
         raise RuntimeError("One or more virtual recovery scenarios failed")
@@ -139,6 +211,11 @@ async def _recovery_charger(
         await _call(socket, "StopTransaction", stop_payload, stop_message_id)
         await _call(socket, "StopTransaction", stop_payload, stop_message_id)
         await _status(socket, "Available")
+        
+        # [T-81] Gọi chốt phiên ngay khi trạm sạc rảnh.
+        thanh_toan_ok = random.random() > 0.3 
+        chot_phien(transaction_id, METER_START_WH, METER_STOP_WH, thanh_toan_ok)
+        
         return (
             {
                 "code": code,
