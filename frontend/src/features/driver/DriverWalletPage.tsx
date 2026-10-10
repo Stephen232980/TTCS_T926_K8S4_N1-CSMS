@@ -37,9 +37,11 @@ function formatDate(isoString: string): string {
 export function DriverWalletPage({
   walletApi = defaultWalletApi,
   onTopUp,
+  onOpenInvoice,
 }: {
   walletApi?: DriverWalletApi
   onTopUp?: () => void
+  onOpenInvoice?: (id: number) => void
 }) {
   const [wallet, setWallet] = useState<DriverWallet | null>(null)
   const [transactions, setTransactions] = useState<WalletLedgerItem[]>([])
@@ -344,6 +346,7 @@ export function DriverWalletPage({
       {detailError && <p role="status">{detailError}</p>}
       {sessionDetail && <section aria-label="Chi tiết phiên sạc">
         <h3>Phiên sạc #{sessionDetail.id}</h3>
+        {onOpenInvoice && <button className="secondary-button" onClick={() => onOpenInvoice(sessionDetail.id)}>Xem hóa đơn phiên này</button>}
         <p>{sessionDetail.station_name} · {sessionDetail.energy_kwh} kWh</p>
         <button className="secondary-button" onClick={() => setSessionDetail(null)}>Đóng chi tiết</button>
       </section>}

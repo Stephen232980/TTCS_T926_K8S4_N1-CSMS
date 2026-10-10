@@ -4,6 +4,7 @@ import type { MapStation } from '../../components/maps/StationMap'
 import type { AuthenticatedUser } from '../auth/model/auth'
 import { DriverCharging } from './DriverCharging'
 import { DriverMapPage } from './DriverMapPage'
+import { DriverInvoicePage } from './DriverInvoicePage'
 import { DriverWalletPage } from './DriverWalletPage'
 import { WalletTopUpPage } from './WalletTopUpPage'
 import { WalletTopUpReturn } from './WalletTopUpReturn'
@@ -14,6 +15,7 @@ import './driver.css'
 type Area = 'session' | 'stations' | 'wallet'
 const hashArea = (): Area => {
   if (readTopUpReturn(window.location).isReturn) return 'wallet'
+  if (window.location.hash.startsWith('#driver-invoice')) return 'wallet'
   if (window.location.hash === '#driver-wallet') return 'wallet'
   if (window.location.hash === '#driver-stations') return 'stations'
   return 'session'
@@ -25,6 +27,18 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
   onExit?: () => void
   navigateToPayment?: (url: string) => void
 }) {
+  const [area, setArea] = useState<Area>(hashArea)
+  const [invoiceView, setInvoiceView] = useState(() => window.location.hash.startsWith('#driver-invoice'))
+  const [invoiceSessionId, setInvoiceSessionId] = useState<number | undefined>(() => {
+    const match = /^#driver-invoice-(\d+)$/.exec(window.location.hash)
+    return match ? Number(match[1]) : undefined
+  })
+  const openInvoice = useCallback((id?: number) => {
+    setInvoiceView(true)
+    setInvoiceSessionId(id)
+    setArea('wallet')
+    window.history.replaceState(null, '', id === undefined ? '#driver-invoices' : `#driver-invoice-${id}`)
+  }, [])
   const storageKey = `csms:topup:${currentUser.id}`
   const [trackedOrder, setTrackedOrder] = useState(() => readTopUpReturn(window.location).orderId || sessionStorage.getItem(storageKey) || '')
   useEffect(() => {
@@ -46,7 +60,6 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
     await refreshDriverWallet()
     setWalletRevision(value => value + 1)
   }, [])
-  const [area, setArea] = useState<Area>(hashArea)
   const [returnLocation, setReturnLocation] = useState(() => readTopUpReturn(window.location))
   const [manualOrderId, setManualOrderId] = useState('')
   const showingReturn = returnLocation.isReturn || Boolean(manualOrderId)
@@ -61,6 +74,9 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
     const change = () => {
       const next = hashArea()
       setArea(next)
+      setInvoiceView(window.location.hash.startsWith('#driver-invoice'))
+      const invoiceMatch = /^#driver-invoice-(\d+)$/.exec(window.location.hash)
+      setInvoiceSessionId(invoiceMatch ? Number(invoiceMatch[1]) : undefined)
       const returned = readTopUpReturn(window.location)
       setReturnLocation(returned)
       if (returned.orderId) rememberOrder(returned.orderId)
@@ -75,6 +91,7 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
 
   const navigate = useCallback((next: Area) => {
     setArea(next)
+    setInvoiceView(false)
     setReturnLocation({ isReturn: false, orderId: '' })
     setManualOrderId('')
     setShowStart(false)
@@ -120,7 +137,7 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
           {area === 'session'
             ? 'Phiên sạc của bạn'
             : area === 'wallet'
-              ? showingReturn ? 'Trạng thái nạp tiền' : 'Ví tiền của bạn'
+              ? invoiceView ? 'Hóa đơn của bạn' : showingReturn ? 'Trạng thái nạp tiền' : 'Ví tiền của bạn'
               : showStart
                 ? 'Bắt đầu sạc'
                 : 'Tìm trạm sạc'}
@@ -129,7 +146,9 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
           {area === 'session'
             ? 'Theo dõi điện năng và thời gian từ trụ đang sạc.'
             : area === 'wallet'
-              ? showingReturn
+              ? invoiceView
+                ? 'Xem chi tiết tiền điện và phí chiếm trụ của từng phiên.'
+                : showingReturn
                 ? 'Theo dõi trạng thái giao dịch nạp tiền của bạn.'
                 : 'Theo dõi số dư, lịch sử giao dịch và nạp tiền vào ví.'
               : showStart
@@ -137,7 +156,8 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
                 : 'Xem vị trí trạm và tìm nơi sạc phù hợp.'}
         </p>
       </header>
-      <div hidden={area !== 'wallet'}>
+      {area === 'wallet' && invoiceView && <DriverInvoicePage sessionId={invoiceSessionId} onOpen={openInvoice} onBack={() => openInvoice()} />}
+      <div hidden={area !== 'wallet' || invoiceView}>
         {(showingReturn || trackedOrder) && <WalletTopUpReturn
           transactionId={returnOrderId}
           getStatus={getWalletTopUp}
@@ -145,8 +165,9 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
           onSucceeded={refreshWallet}
           onBack={showingReturn ? () => navigate('wallet') : undefined}
         />}
-        {area === 'wallet' && !showingReturn && <div className="driver-wallet-stack">
-          <DriverWalletPage key={`wallet-${walletRevision}`} onTopUp={() => document.getElementById('topup-amount')?.focus()} />
+        {area === 'wallet' && !showingReturn && !invoiceView && <div className="driver-wallet-stack">
+          <DriverWalletPage key={`wallet-${walletRevision}`} onTopUp={() => document.getElementById('topup-amount')?.focus()} onOpenInvoice={openInvoice} />
+          <button className="secondary-button" onClick={() => openInvoice()}>Xem hóa đơn phiên sạc</button>
           <WalletTopUpPage key={`topup-${walletRevision}`} storageKey={storageKey} onOrder={rememberOrder}
             onTopUp={createWalletTopUp} onCheckOrder={checkTopUpOrder} onRedirect={navigateToPayment} />
         </div>}

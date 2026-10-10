@@ -693,3 +693,14 @@
 
 .driver-shell .topup-button span { display: inline; }
 .driver-shell .topup-button { width: auto; max-width: 100%; }
+
+.driver-invoice { margin: 0 auto; }
+.driver-invoice > button { margin: 0 8px 16px 0; }
+.driver-invoice-list, .driver-invoice-lines { list-style: none; padding: 0; display: grid; gap: 16px; }
+.driver-invoice-list button { display: flex; flex-direction: column; align-items: flex-start; width: 100% !important; text-align: left; overflow-wrap: anywhere; }
+.driver-invoice-list button span { display: block; }
+.driver-invoice-lines li { border-bottom: 1px solid var(--line); padding-bottom: 16px; min-width: 0; }
+.driver-invoice dl { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+.driver-invoice dt { color: var(--muted); }
+.driver-invoice dd { margin: 0; text-align: right; overflow-wrap: anywhere; }
+.driver-shell .driver-invoice-total { color: var(--ink); font-size: 20px; }
