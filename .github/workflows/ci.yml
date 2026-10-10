@@ -239,3 +239,34 @@ jobs:
           scp -P "$SSH_PORT" ./scripts/deploy_frontend_staging.sh "$STAGING_USER@$STAGING_HOST":/tmp/deploy_frontend_staging.sh
           ssh -p "$SSH_PORT" "$STAGING_USER@$STAGING_HOST" \
             "chmod +x /tmp/deploy_frontend_staging.sh && GHCR_TOKEN='${GHCR_TOKEN}' GHCR_USER='${GHCR_USER}' /tmp/deploy_frontend_staging.sh '$IMAGE_TAG'"
+
+name: CSMS - T-78 CI Test Suite
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x]
+
+    steps:
+      - name: Checkout mã nguồn
+        uses: actions/checkout@v3
+
+      - name: Cài đặt Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Cài đặt Dependencies
+        run: npm ci || npm install
+
+      - name: Chạy bộ ca kiểm thử tính tiền (T-78)
+        run: npm test -- --coverage

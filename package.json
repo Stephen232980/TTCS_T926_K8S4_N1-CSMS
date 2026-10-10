@@ -1,0 +1,28 @@
+{
+  "name": "ttcs_t926_k8s4_n1-csms",
+  "version": "1.0.0",
+  "description": "CSMS là hệ thống quản lý trạm, trụ và phiên sạc. Repository này chứa backend FastAPI. Frontend và bảng phân công sẽ được nhóm chốt riêng.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "jest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Stephen232980/TTCS_T926_K8S4_N1-CSMS.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Stephen232980/TTCS_T926_K8S4_N1-CSMS/issues"
+  },
+  "homepage": "https://github.com/Stephen232980/TTCS_T926_K8S4_N1-CSMS#readme",
+  "devDependencies": {
+    "jest": "^30.5.2"
+  }
+}
