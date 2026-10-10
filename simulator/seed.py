@@ -68,10 +68,10 @@ async def _user(session: AsyncSession, email: str, password: str) -> User:
     )
     if user is None:
         user = User(
-            email=email, 
-            password_hash=hash_password(password), 
+            email=email,
+            password_hash=hash_password(password),
             status="active",
-            balance=1000000  # Đã thêm số dư để qua được lỗi Insufficient Balance
+            balance=1000000,  # Đã thêm số dư để qua được lỗi Insufficient Balance
         )
         session.add(user)
         await session.flush()
