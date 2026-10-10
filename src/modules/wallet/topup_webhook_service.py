@@ -1,4 +1,4 @@
-"""T-95 settlement for authenticated gateway events; caller owns the transaction."""
+"""T-95 settlement and T-96 database idempotency; caller owns the transaction."""
 
 import logging
 from dataclasses import dataclass
@@ -57,6 +57,12 @@ async def _review(session: AsyncSession, topup: WalletTopup, reason: str) -> Non
 async def process_topup_webhook(
     session: AsyncSession, event: GatewayEvent
 ) -> SettlementResult:
+    """Serialize callbacks on the order, then atomically record gateway and ledger IDs.
+
+    PostgreSQL locks survive until the caller commits/rolls back. Reload the order
+    after waiting for its lock, so a second request sees the first committed state.
+    The unique gateway ID also arbitrates races between different orders/wallets.
+    """
     topup = await session.scalar(
         select(WalletTopup)
         .where(WalletTopup.order_id == event.order_id)
@@ -76,6 +82,7 @@ async def process_topup_webhook(
         return SettlementResult(200, topup.status)
 
     next_status = TRANSITIONS[topup.status][event.status]
+    # A matching successful replay returns before any ledger/balance/order write.
     if topup.status != "pending":
         if next_status == "needs_review":
             await _review(
