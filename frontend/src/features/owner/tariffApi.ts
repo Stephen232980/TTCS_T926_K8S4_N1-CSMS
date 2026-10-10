@@ -1,4 +1,3 @@
-
 import { ownerRequest } from './ownerApi'
 
 export interface TariffCreateInput {
@@ -15,14 +14,34 @@ export interface TariffCreated {
   created_at: string
 }
 
+export interface TariffDisplay {
+  effective_from: string
+  idle_rate_vnd_per_minute: string
+  grace_minutes: number
+  bands: {
+    start_min: number
+    end_min: number
+    label: string
+    energy_rate_vnd_per_kwh: string
+  }[]
+}
+export interface TariffContext {
+  today: string
+  timezone: string
+  has_versions: boolean
+  current: TariffDisplay | null
+  upcoming: TariffDisplay | null
+}
+export const readTariffContext = (stationId: string, signal?: AbortSignal) =>
+  ownerRequest<TariffContext>(
+    `/owner/stations/${encodeURIComponent(stationId)}/tariffs/context`,
+    { signal },
+  )
+
 const MAX_MONEY = BigInt('9223372036854775807')
 const MAX_GRACE = BigInt('2147483647')
 
-function jsonInteger(
-  raw: string,
-  maximum: bigint,
-  field: string,
-): string {
+function jsonInteger(raw: string, maximum: bigint, field: string): string {
   const value = raw.trim()
 
   if (!/^\d+$/.test(value)) {
@@ -48,11 +67,7 @@ export async function createStationTariff(
     throw new Error('Ngày hiệu lực phải có dạng YYYY-MM-DD.')
   }
 
-  const price = jsonInteger(
-    input.pricePerKwh,
-    MAX_MONEY,
-    'Đơn giá điện',
-  )
+  const price = jsonInteger(input.pricePerKwh, MAX_MONEY, 'Đơn giá điện')
 
   const idleFee = jsonInteger(
     input.idleFeePerMinute,
@@ -60,11 +75,7 @@ export async function createStationTariff(
     'Phí chiếm trụ',
   )
 
-  const grace = jsonInteger(
-    input.graceMinutes,
-    MAX_GRACE,
-    'Thời gian ân hạn',
-  )
+  const grace = jsonInteger(input.graceMinutes, MAX_GRACE, 'Thời gian ân hạn')
 
   // Gửi các số nguyên dưới dạng JSON number chính xác,
   // không chuyển qua Number() của JavaScript.

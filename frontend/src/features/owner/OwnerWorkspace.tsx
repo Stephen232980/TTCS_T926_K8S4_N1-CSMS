@@ -18,8 +18,7 @@ import { Icon, type IconName } from '../../components/icons/Icon'
 import { StationWizard } from './StationWizard'
 import { ChargerWizard } from './ChargerWizard'
 import { OwnerCharging } from './OwnerCharging'
-import { TariffForm } from './TariffForm'
-import { createStationTariff } from './tariffApi'
+import { StationTariff } from './StationTariff'
 import { ChargerDrawing, ConnectionSymbol, ConnectorSymbol, StationPhoto } from './OwnerVisuals'
 import {
   clock,
@@ -792,21 +791,9 @@ export function OwnerWorkspace({
                     {connectionError}
                   </p>
                 )}
-<div className="owner-tariff-scroll">
-  <TariffForm
-    key={station.id}
-    stationTimezone={station.timezone}
-    currentTariff={null}
-    onSave={async (values) => {
-      await createStationTariff(String(station.id), {
-        effectiveFrom: values.effectiveFrom,
-        pricePerKwh: values.pricePerKwh,
-        idleFeePerMinute: values.idleFeePerMinute,
-        graceMinutes: values.graceMinutes,
-      })
-    }}
-  />
-</div>
+                <div className="owner-tariff-scroll">
+                  <StationTariff key={station.id} stationId={String(station.id)} />
+                </div>
 
                 <div className="owner-detail-grid owner-grow">
                   <section className="owner-chargers">
