@@ -2,6 +2,10 @@ class StationOwnershipDeniedError(Exception):
     pass
 
 
+class StationTimezoneLockedError(Exception):
+    pass
+
+
 class StationIdempotencyConflictError(Exception):
     pass
 
