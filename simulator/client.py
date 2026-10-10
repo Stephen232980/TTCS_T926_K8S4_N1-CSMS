@@ -23,9 +23,35 @@ METER_STOP_WH = 3500
 EXPECTED_ENERGY_KWH = "2.5"
 
 
+# Hàm tính tiền điện (đổi từ Wh sang kWh)
+def tinh_tien(start_wh: int, stop_wh: int, don_gia_kwh: float = 3500.0) -> float:
+    luong_dien_kwh = (stop_wh - start_wh) / 1000
+    return luong_dien_kwh * don_gia_kwh
+
+
+# Hàm lập hóa đơn đọc dữ liệu và gọi tính tiền
+def lap_hoa_don(start_wh: int, stop_wh: int) -> float:
+    print("--- BẮT ĐẦU LẬP HÓA ĐƠN ---")
+    print(f"Chỉ số bắt đầu: {start_wh} Wh")
+    print(f"Chỉ số kết thúc: {stop_wh} Wh")
+    
+    # Gọi hàm tính tiền
+    tong_tien = tinh_tien(start_wh, stop_wh)
+    
+    print(f"Điện năng tiêu thụ: {(stop_wh - start_wh) / 1000} kWh")
+    print(f"Tổng tiền thanh toán: {tong_tien:,.0f} VNĐ")
+    print("---------------------------\n")
+    
+    return tong_tien
+
+
 async def run(settings: SimulatorSettings) -> None:
     """Run the configured S-26 scenario and persist its safe verification report."""
     run_id = begin_run(settings.report_path)
+    
+    # Gọi hàm lập hóa đơn truyền vào 2 biến hằng số để in ra màn hình
+    lap_hoa_don(METER_START_WH, METER_STOP_WH)
+
     if settings.scenario == "online":
         await _run_online(settings, run_id)
     else:
