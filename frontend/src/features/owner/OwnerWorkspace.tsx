@@ -18,7 +18,7 @@ import { Icon, type IconName } from '../../components/icons/Icon'
 import { StationWizard } from './StationWizard'
 import { ChargerWizard } from './ChargerWizard'
 import { OwnerCharging } from './OwnerCharging'
-import { StationTariff } from './StationTariff'
+import { TariffHistoryPanel } from './TariffHistoryPanel'
 import { ChargerDrawing, ConnectionSymbol, ConnectorSymbol, StationPhoto } from './OwnerVisuals'
 import {
   clock,
@@ -792,7 +792,7 @@ export function OwnerWorkspace({
                   </p>
                 )}
                 <div className="owner-tariff-scroll">
-                  <StationTariff key={station.id} stationId={String(station.id)} />
+                  <TariffHistoryPanel key={station.id} stationId={String(station.id)} />
                 </div>
 
                 <div className="owner-detail-grid owner-grow">

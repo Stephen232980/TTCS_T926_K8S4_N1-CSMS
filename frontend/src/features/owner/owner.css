@@ -1241,3 +1241,12 @@ dl.owner-review div {
   .owner-band-fields .owner-field:nth-child(3) { grid-column: 1 / -1; }
   .owner-band-fields button { justify-self: start; }
 }
+.owner-tariff-history-list { list-style: none; padding: 0; margin: 16px 0; }
+.owner-tariff-history-list > li { padding: 16px 0; border-bottom: 1px solid #b9cdd6; }
+.owner-tariff-history-list > li:first-child { padding-top: 0; }
+.owner-tariff-version-title { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+.owner-tariff-version-title h3 { margin: 0; font-size: 17px; }
+.owner-tariff-version-title span { font-weight: 650; color: var(--accent); }
+.owner-tariff-history-list ul { padding-left: 20px; margin: 12px 0; }
+.owner-tariff-history-list p { overflow-wrap: anywhere; }
+.owner-tariff-history-pages { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }

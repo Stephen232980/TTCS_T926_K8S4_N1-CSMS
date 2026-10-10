@@ -20,7 +20,15 @@ function formTariff(tariff: TariffDisplay | null): CurrentTariff | null {
   )
 }
 
-export function StationTariff({ stationId }: { stationId: string }) {
+export function StationTariff({
+  stationId,
+  onSaved,
+  refreshKey = 0,
+}: {
+  stationId: string
+  onSaved?: () => void
+  refreshKey?: number
+}) {
   const [context, setContext] = useState<TariffContext | null>(null)
   const [error, setError] = useState('')
   const [retry, setRetry] = useState(0)
@@ -45,7 +53,7 @@ export function StationTariff({ stationId }: { stationId: string }) {
       mounted.current = false
       controller.abort()
     }
-  }, [stationId, retry])
+  }, [stationId, retry, refreshKey])
   return (
     <>
       {error && (
@@ -90,6 +98,7 @@ export function StationTariff({ stationId }: { stationId: string }) {
               hasVersions={context.has_versions}
               onSave={async (values) => {
                 await createStationTariff(stationId, values)
+                onSaved?.()
                 if (!mounted.current) return
                 const saved: TariffDisplay = {
                   effective_from: values.effectiveFrom,
