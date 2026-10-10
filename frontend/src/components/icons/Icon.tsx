@@ -16,6 +16,7 @@ export type IconName =
   | 'menu'
   | 'close'
   | 'logout'
+  | 'wallet'
 
 const paths: Record<IconName, ReactNode> = {
   bolt: <path d="m13 2-8 11h6l-1 9 8-12h-6l1-8Z" />,
@@ -32,6 +33,7 @@ const paths: Record<IconName, ReactNode> = {
   edit: <path d="M13.5 6.5 17.5 10.5M4 20h4l11-11a2.8 2.8 0 0 0-4-4L4 16v4Z" />,
   menu: <path d="M4 7h16M4 12h16M4 17h16" />,
   close: <path d="m6 6 12 12M18 6 6 18" />,
+  wallet: <path d="M20 7V5a2 2 0 0 0-2-2H5a3 3 0 0 0-3 3v12a3 3 0 0 0 3 3h15a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2H5a3 3 0 0 1 0-6M16 14h6M18 14h.01" />,
   logout: <path d="M10 5V3H4v18h6v-2M14 8l4 4-4 4M8 12h10" />,
 }
 

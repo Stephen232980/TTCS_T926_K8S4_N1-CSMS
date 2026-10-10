@@ -186,49 +186,59 @@
   .driver-station-results { max-height: 384px; }
 }
 
-/* T-94: Giao diện nạp tiền vào ví */
-
+/* T-94: Wallet pages reuse the existing T-48 driver design tokens. */
 .driver-wallet-page {
-  width: 100%;
-  max-width: 560px;
-  min-width: 0;
   box-sizing: border-box;
-  padding: 20px;
+  width: 100%;
+  max-width: 680px;
+  min-width: 0;
+  border-radius: 16px;
+  background: var(--surface);
+  padding: 28px;
+  box-shadow: 0 10px 28px rgba(25, 61, 75, .045);
 }
-
-.driver-wallet-page form {
-  display: grid;
-  gap: 16px;
-  margin-top: 20px;
-}
-
-.driver-wallet-page input {
+.driver-wallet-page h2 { margin: 0 0 10px; }
+.driver-wallet-page p { margin: 0 0 12px; overflow-wrap: anywhere; }
+.driver-wallet-page form { display: grid; gap: 12px; margin-top: 20px; }
+.driver-wallet-page label { font-size: 14px; font-weight: 650; }
+.driver-shell .driver-wallet-page input {
+  box-sizing: border-box;
   width: 100%;
   min-width: 0;
-  box-sizing: border-box;
-  padding: 12px;
-  border: 1px solid #ccc;
-  border-radius: 8px;
+  min-height: 44px;
+  border: 1px solid var(--field-border);
+  border-radius: 9px;
+  padding: 10px 12px;
+  background: var(--surface);
+  color: var(--ink);
 }
-
-.driver-wallet-presets {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.driver-wallet-presets button {
+.driver-wallet-page input[aria-invalid='true'] { border-color: #a3382c; }
+.driver-wallet-presets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.driver-shell .driver-wallet-preset {
   min-width: 0;
-  padding: 12px 4px;
-  cursor: pointer;
+  padding: 10px 8px;
+  border: 1px solid var(--field-border);
+  background: #eaf2f5;
+  color: var(--ink);
+  border-radius: 10px;
+  font: inherit;
+  font-weight: 650;
 }
-
-.driver-wallet-error {
-  color: #dc2626;
+.driver-shell .driver-wallet-preset[aria-pressed='true'] {
+  background: #e4f5eb;
+  color: #116443;
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
-
+.driver-shell .driver-wallet-error { margin: 0; padding: 10px 12px; border-radius: 9px; color: #a3382c; background: #fff0ec; }
+.driver-wallet-page .primary-button, .driver-wallet-page .secondary-button { width: fit-content; max-width: 100%; }
 @media (max-width: 480px) {
-  .driver-wallet-page {
-    padding: 12px;
-  }
+  .driver-wallet-page { padding: 18px 14px; }
+  .driver-wallet-page .primary-button, .driver-wallet-page .secondary-button { width: 100%; }
+}
+/* Three destinations fit in one row; the bottom navigation never covers wallet actions. */
+@media (max-width: 699px) {
+  .driver-navigation { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .driver-shell .driver-navigation a { flex-direction: column; gap: 4px; padding: 5px 2px; text-align: center; font-size: 11px; }
+  .driver-shell .driver-navigation a svg { width: 20px; height: 20px; }
 }

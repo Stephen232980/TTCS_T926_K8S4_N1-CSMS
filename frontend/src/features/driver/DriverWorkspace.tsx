@@ -5,10 +5,14 @@ import type { AuthenticatedUser } from '../auth/model/auth'
 import { DriverCharging } from './DriverCharging'
 import { DriverMapPage } from './DriverMapPage'
 import { WalletTopUpPage } from './WalletTopUpPage'
+import { WalletTopUpReturn } from './WalletTopUpReturn'
+import { createWalletTopUp, getWalletTopUp, refreshDriverWallet } from './walletTopUpApi'
+import { readTopUpReturn } from './walletTopUpReturnUrl'
 import './driver.css'
 
 type Area = 'session' | 'stations' | 'wallet'
 const hashArea = (): Area => {
+  if (readTopUpReturn(window.location).isReturn) return 'wallet'
   if (window.location.hash === '#driver-wallet') {
     return 'wallet'
   }
@@ -20,12 +24,17 @@ const hashArea = (): Area => {
   return 'session'
 }
 
-export function DriverWorkspace({ currentUser, onLogout, onExit }: {
+export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayment }: {
   currentUser: AuthenticatedUser
   onLogout: () => Promise<void>
   onExit?: () => void
+  navigateToPayment?: (url: string) => void
 }) {
   const [area, setArea] = useState<Area>(hashArea)
+  const [returnLocation, setReturnLocation] = useState(() => readTopUpReturn(window.location))
+  const [manualOrderId, setManualOrderId] = useState('')
+  const showingReturn = returnLocation.isReturn || Boolean(manualOrderId)
+  const returnOrderId = manualOrderId || returnLocation.orderId
   const [mapOpened, setMapOpened] = useState(() => hashArea() === 'stations')
   const [station, setStation] = useState<MapStation>()
   const [showStart, setShowStart] = useState(false)
@@ -35,19 +44,31 @@ export function DriverWorkspace({ currentUser, onLogout, onExit }: {
     const change = () => {
       const next = hashArea()
       setArea(next)
+      setReturnLocation(readTopUpReturn(window.location))
+      setManualOrderId('')
       if (next === 'stations') setMapOpened(true)
       setShowStart(false)
     }
     window.addEventListener('hashchange', change)
-    return () => window.removeEventListener('hashchange', change)
+    window.addEventListener('popstate', change)
+    return () => { window.removeEventListener('hashchange', change); window.removeEventListener('popstate', change) }
   }, [])
   const navigate = useCallback((next: Area) => {
     setArea(next)
+    setReturnLocation({ isReturn: false, orderId: '' })
+    setManualOrderId('')
     setShowStart(false)
     if (next === 'stations') setMapOpened(true)
-    window.history.replaceState(null, '', `#driver-${next}`)
+    const safePath = window.location.pathname.replace(/\/(?:driver\/)?wallet\/topup\/return\/?$/i, '/')
+    window.history.replaceState(null, '', `${safePath}#driver-${next}`)
   }, [])
   const showStations = useCallback(() => navigate('stations'), [navigate])
+  const checkTopUpOrder = useCallback((orderId: string) => {
+    setArea('wallet')
+    setManualOrderId(orderId)
+    setReturnLocation({ isReturn: true, orderId })
+    window.history.replaceState(null, '', `#driver-wallet-return?order_code=${encodeURIComponent(orderId)}`)
+  }, [])
   const sessionStarted = useCallback(() => navigate('session'), [navigate])
   async function logout() {
     setLoggingOut(true)
@@ -60,7 +81,7 @@ export function DriverWorkspace({ currentUser, onLogout, onExit }: {
     <aside className="driver-sidebar">
       <a className="driver-brand" href="#driver-session" onClick={event => { event.preventDefault(); navigate('session') }}><Icon name="station" /><strong>CSMS</strong><span>Tài xế</span></a>
       <nav className="driver-navigation" aria-label="Khu vực tài xế">
-        {([{ key: 'session', label: 'Phiên sạc của bạn', icon: 'session' }, { key: 'stations', label: 'Tìm trạm', icon: 'station' },{ key: 'wallet', label: 'Ví của tôi', icon: 'session' }] as const).map(item => <a key={item.key} href={`#driver-${item.key}`} aria-current={area === item.key ? 'page' : undefined} onClick={event => { event.preventDefault(); navigate(item.key) }}><Icon name={item.icon} /><span>{item.label}</span></a>)}
+        {([{ key: 'session', label: 'Phiên sạc của bạn', icon: 'session' }, { key: 'stations', label: 'Tìm trạm', icon: 'station' },{ key: 'wallet', label: 'Ví của tôi', icon: 'wallet' }] as const).map(item => <a key={item.key} href={`#driver-${item.key}`} aria-current={area === item.key ? 'page' : undefined} onClick={event => { event.preventDefault(); navigate(item.key) }}><Icon name={item.icon} /><span>{item.label}</span></a>)}
       </nav>
       <footer className="driver-account">
         <details><summary><Icon name="settings" /><span>Tài khoản</span></summary><div><strong>Tài xế</strong><span title={currentUser.email}>{currentUser.email}</span>{onExit && <button onClick={onExit}>Đổi khu vực</button>}{logoutError && <p role="alert">{logoutError}</p>}<button disabled={loggingOut} onClick={() => void logout()}><Icon name="logout" />{loggingOut ? 'Đang đăng xuất…' : 'Đăng xuất'}</button></div></details>
@@ -71,7 +92,7 @@ export function DriverWorkspace({ currentUser, onLogout, onExit }: {
 <header className="driver-heading">
   <h1>
     {area === 'wallet'
-      ? 'Ví của tôi'
+      ? showingReturn ? 'Trạng thái nạp tiền' : 'Ví của tôi'
       : area === 'session'
         ? 'Phiên sạc của bạn'
         : showStart
@@ -94,13 +115,16 @@ export function DriverWorkspace({ currentUser, onLogout, onExit }: {
       <DriverCharging stationId={station?.id} stationName={station?.name} showSession={area === 'session'} showConnectors={area === 'stations' && showStart} onFindStations={showStations} onSessionStarted={sessionStarted} />
       {mapOpened && <div className="driver-map-container" hidden={area !== 'stations' || showStart}><DriverMapPage selectedStationId={station?.id} onOpenStation={selected => { setStation(selected); setShowStart(true) }} /></div>}
 
-{area === 'wallet' && (
-  <WalletTopUpPage
-    onTopUp={async () => {
-      throw new Error('Chưa kết nối API nạp tiền')
-    }}
+{area === 'wallet' && (showingReturn ? (
+  <WalletTopUpReturn
+    transactionId={returnOrderId}
+    getStatus={getWalletTopUp}
+    onSucceeded={refreshDriverWallet}
+    onBack={() => navigate('wallet')}
   />
-)}
+) : (
+  <WalletTopUpPage onTopUp={createWalletTopUp} onCheckOrder={checkTopUpOrder} onRedirect={navigateToPayment} />
+))}
     </main>
   </div>
 }
