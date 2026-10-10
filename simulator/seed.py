@@ -67,12 +67,18 @@ async def _user(session: AsyncSession, email: str, password: str) -> User:
         await session.scalar(select(User).where(User.email == email)),
     )
     if user is None:
-        user = User(email=email, password_hash=hash_password(password), status="active")
+        user = User(
+            email=email, 
+            password_hash=hash_password(password), 
+            status="active",
+            balance=1000000  # Đã thêm số dư để qua được lỗi Insufficient Balance
+        )
         session.add(user)
         await session.flush()
     else:
         user.password_hash = hash_password(password)
         user.status = "active"
+        user.balance = 1000000  # Cập nhật số dư nếu tài khoản đã tồn tại từ trước
     return user
 
 
