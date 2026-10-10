@@ -1,3 +1,4 @@
+import { normalizedBands, clockText } from './tariffBands'
 import { useEffect, useRef, useState } from 'react'
 import { TariffForm, type CurrentTariff } from './TariffForm'
 import {
@@ -70,7 +71,7 @@ export function StationTariff({ stationId }: { stationId: string }) {
                 {context.upcoming.bands
                   .map(
                     (band) =>
-                      `${BigInt(band.energy_rate_vnd_per_kwh).toLocaleString('vi-VN')} VNĐ/kWh`,
+                      `${clockText(band.start_min)}–${clockText(band.end_min)}: ${BigInt(band.energy_rate_vnd_per_kwh).toLocaleString('vi-VN')} VNĐ/kWh`,
                   )
                   .join(' · ')}
                 . Phí chiếm trụ:{' '}
@@ -94,14 +95,16 @@ export function StationTariff({ stationId }: { stationId: string }) {
                   effective_from: values.effectiveFrom,
                   idle_rate_vnd_per_minute: values.idleFeePerMinute.trim(),
                   grace_minutes: Number(values.graceMinutes),
-                  bands: [
-                    {
-                      start_min: 0,
-                      end_min: 1440,
-                      label: 'Cả ngày',
-                      energy_rate_vnd_per_kwh: values.pricePerKwh.trim(),
-                    },
-                  ],
+                  bands: values.bands
+                    ? normalizedBands(values.bands)
+                    : [
+                        {
+                          start_min: 0,
+                          end_min: 1440,
+                          label: 'Cả ngày',
+                          energy_rate_vnd_per_kwh: values.pricePerKwh.trim(),
+                        },
+                      ],
                 }
                 setContext(
                   (previous) =>

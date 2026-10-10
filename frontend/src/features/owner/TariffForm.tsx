@@ -1,15 +1,18 @@
 import { useRef, useState, type FormEvent } from 'react'
 import { OwnerApiError } from './ownerApi'
 import { stationToday } from './tariffDates'
+import { TariffBandsEditor } from './TariffBandsEditor'
+import { validateBands, type BandValues } from './tariffBands'
 
 export interface TariffValues {
+  bands?: BandValues[]
   effectiveFrom: string
   pricePerKwh: string
   idleFeePerMinute: string
   graceMinutes: string
 }
 
-type Field = keyof TariffValues
+type Field = Exclude<keyof TariffValues, 'bands'>
 type NumberField = Exclude<Field, 'effectiveFrom'>
 
 export interface CurrentTariff {
@@ -170,6 +173,11 @@ export function TariffForm({
     Partial<Record<Field, string>>
   >({})
 
+  const [multiBand, setMultiBand] = useState(false)
+  const [bands, setBands] = useState<BandValues[]>([
+    { start: '00:00', end: '24:00', price: '' },
+  ])
+  const [bandServerErrors, setBandServerErrors] = useState<string[][]>([])
   const [saving, setSaving] = useState(false)
   const sendingRef = useRef(false)
   const [error, setError] = useState('')
@@ -179,7 +187,12 @@ export function TariffForm({
 
   const hasError =
     Boolean(dateError) ||
-    numberFields.some(({ key }) => Boolean(validateNumber(key, values[key])))
+    numberFields.some(
+      ({ key }) =>
+        (!multiBand || key !== 'pricePerKwh') &&
+        Boolean(validateNumber(key, values[key])),
+    ) ||
+    (multiBand && !validateBands(bands).valid)
 
   function changeValue(field: Field, value: string) {
     setValues((previous) => ({
@@ -210,9 +223,10 @@ export function TariffForm({
     setError('')
     setSuccess('')
     setServerErrors({})
+    setBandServerErrors([])
 
     try {
-      await onSave(values)
+      await onSave(multiBand ? { ...values, bands } : values)
 
       setSuccess(
         `Đã lưu biểu giá vào hệ thống. Ngày hiệu lực: ${values.effectiveFrom}.`,
@@ -230,6 +244,27 @@ export function TariffForm({
           })
         } else if (caught.status === 422) {
           const fieldErrors = apiFieldErrors(caught.detail)
+          if (multiBand && Array.isArray(caught.detail)) {
+            const issues = bands.map(() => [] as string[])
+            for (const issue of caught.detail) {
+              if (!issue || typeof issue !== 'object') continue
+              const item = issue as {
+                loc?: unknown[]
+                input_indices?: number[]
+                msg?: string
+              }
+              if (!item.loc?.includes('bands')) continue
+              const rows = item.input_indices?.length
+                ? item.input_indices
+                : typeof item.loc[2] === 'number'
+                  ? [item.loc[2]]
+                  : bands.map((_, i) => i)
+              for (const row of rows)
+                if (issues[row])
+                  issues[row].push(item.msg ?? 'Khung giờ không hợp lệ.')
+            }
+            setBandServerErrors(issues)
+          }
 
           if (Object.keys(fieldErrors).length > 0) {
             setServerErrors(fieldErrors)
@@ -328,32 +363,65 @@ export function TariffForm({
             </span>
           )}
         </label>
-        {numberFields.map(({ key, label }) => {
-          const clientError = validateNumber(key, values[key])
-          const fieldError =
-            serverErrors[key] || (touched[key] ? clientError : '')
+        <label className="owner-field">
+          Cách tính giá điện
+          <select
+            value={multiBand ? 'bands' : 'flat'}
+            disabled={saving}
+            onChange={(event) => {
+              setMultiBand(event.target.value === 'bands')
+              setBandServerErrors([])
+              setError('')
+              setSuccess('')
+              if (!multiBand && bands.length === 1 && !bands[0].price)
+                setBands([{ ...bands[0], price: values.pricePerKwh }])
+            }}
+          >
+            <option value="flat">Một giá cả ngày</option>
+            <option value="bands">Nhiều khung giờ</option>
+          </select>
+        </label>
+        {multiBand && (
+          <TariffBandsEditor
+            bands={bands}
+            disabled={saving}
+            serverErrors={bandServerErrors}
+            onChange={(next) => {
+              setBands(next)
+              setBandServerErrors([])
+              setError('')
+              setSuccess('')
+            }}
+          />
+        )}
+        {numberFields
+          .filter(({ key }) => !multiBand || key !== 'pricePerKwh')
+          .map(({ key, label }) => {
+            const clientError = validateNumber(key, values[key])
+            const fieldError =
+              serverErrors[key] || (touched[key] ? clientError : '')
 
-          return (
-            <label className="owner-field" key={key}>
-              {label}
+            return (
+              <label className="owner-field" key={key}>
+                {label}
 
-              <input
-                type="text"
-                inputMode="numeric"
-                value={values[key]}
-                disabled={saving}
-                aria-invalid={Boolean(fieldError)}
-                onChange={(event) => changeValue(key, event.target.value)}
-              />
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={values[key]}
+                  disabled={saving}
+                  aria-invalid={Boolean(fieldError)}
+                  onChange={(event) => changeValue(key, event.target.value)}
+                />
 
-              {fieldError && (
-                <span className="owner-error" role="alert">
-                  {fieldError}
-                </span>
-              )}
-            </label>
-          )
-        })}
+                {fieldError && (
+                  <span className="owner-error" role="alert">
+                    {fieldError}
+                  </span>
+                )}
+              </label>
+            )
+          })}
 
         {!today && (
           <p className="owner-error" role="alert">
