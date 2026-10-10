@@ -117,6 +117,67 @@ async def setup_station(factory, zone="Asia/Ho_Chi_Minh"):
         return station, CurrentActor(station.owner_id, frozenset({"station_owner"}))
 
 
+async def test_t62_context_empty_current_and_future_preserves_rates(
+    api_db, client_factory
+):
+    station, actor = await setup_station(api_db, "Pacific/Kiritimati")
+    path = f"/api/v1/owner/stations/{station.id}/tariffs/context"
+
+    async def read():
+        app.dependency_overrides[get_current_actor] = lambda: actor
+        try:
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as client:
+                return await client.get(path)
+        finally:
+            app.dependency_overrides.pop(get_current_actor, None)
+
+    empty = await read()
+    assert empty.status_code == 200
+    assert empty.headers["cache-control"] == "no-store"
+    today = datetime.now(ZoneInfo(station.timezone)).date()
+    assert empty.json()["today"] == today.isoformat()
+    assert empty.json()["has_versions"] is False
+    first = payload(today)
+    first["energy_rate_vnd_per_kwh"] = 2**63 - 1
+    assert (await client_factory(station.id, first, actor)).status_code == 201
+    assert (
+        await client_factory(station.id, payload(today + timedelta(days=1)), actor)
+    ).status_code == 201
+    result = (await read()).json()
+    assert result["has_versions"] is True
+    assert result["current"]["effective_from"] == today.isoformat()
+    assert result["current"]["bands"][0]["energy_rate_vnd_per_kwh"] == str(2**63 - 1)
+    assert (
+        result["upcoming"]["effective_from"] == (today + timedelta(days=1)).isoformat()
+    )
+
+
+@pytest.mark.parametrize(
+    "roles,expected",
+    [(set(), 401), ({"driver"}, 403), ({"admin"}, 403), ({"station_owner"}, 403)],
+)
+async def test_t62_context_rejects_anonymous_non_owner_and_cross_owner(
+    api_db, roles, expected
+):
+    station, _ = await setup_station(api_db)
+    if roles:
+        app.dependency_overrides[get_current_actor] = lambda: CurrentActor(
+            uuid4(), frozenset(roles)
+        )
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            result = await client.get(
+                f"/api/v1/owner/stations/{station.id}/tariffs/context"
+            )
+        assert result.status_code == expected
+    finally:
+        app.dependency_overrides.pop(get_current_actor, None)
+
+
 async def test_create_versions_and_reject_duplicate(api_db, client_factory):
     station, actor = await setup_station(api_db)
     today = datetime.now(ZoneInfo(station.timezone)).date()

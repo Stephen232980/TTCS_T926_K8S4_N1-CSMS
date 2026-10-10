@@ -1205,3 +1205,20 @@ dl.owner-review div {
   .owner-detail-failed .charging-chart { overflow: auto; }
 }
 @media (max-width: 1000px) { .owner-session-data .charging-chart svg { height: 240px; } }
+/* T-62: Cho phép cuộn form biểu giá trong bố cục Owner. */
+.owner-tariff-values { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 16px 0 24px; }
+.owner-tariff-values dt { color: var(--muted); font-size: 13px; }
+.owner-tariff-values dd { margin: 6px 0 0; font-weight: 650; overflow-wrap: anywhere; }
+.owner-tariff-panel form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; }
+.owner-tariff-panel form > p, .owner-tariff-panel form > button { grid-column: 1 / -1; }
+.owner-tariff-panel form > button { justify-self: start; }
+@media (max-width: 800px) {
+  .owner-tariff-values { grid-template-columns: 1fr; gap: 10px; }
+  .owner-tariff-panel form { grid-template-columns: 1fr; }
+}
+.owner-tariff-scroll {
+  min-height: 0;
+  max-height: 55dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
