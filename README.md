@@ -3,9 +3,6 @@
 CSMS là hệ thống quản lý trạm, trụ và phiên sạc. Repository này chứa backend
 FastAPI. Frontend và bảng phân công sẽ được nhóm chốt riêng.
 
-Tài liệu này dành cho người mới. Hãy làm đúng thứ tự và chỉ chuyển bước khi
-bước hiện tại thành công.
-
 ## 1. Công nghệ
 
 - Python 3.12+, FastAPI, Uvicorn
