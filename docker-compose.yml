@@ -22,6 +22,7 @@ services:
       PAYMENT_GATEWAY: ${PAYMENT_GATEWAY:-disabled}
       PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:-}
       PAYMENT_RETURN_URL: ${PAYMENT_RETURN_URL:-http://localhost:5173/wallet/topup/return}
+      PAYMENT_FAKE_BASE_URL: ${PAYMENT_FAKE_BASE_URL:-http://localhost:8000}
     ports:
       - "8001:8000"
     depends_on:
