@@ -62,13 +62,12 @@ async def test_t92_real_adapter_from_topup_creation_through_signed_dispatch(
             topup = await db.scalar(
                 select(WalletTopup).where(WalletTopup.order_id == data["order_id"])
             )
-            assert topup is not None and topup.status == "pending"
-            # Current T-95 receiver only verifies. Do not claim wallet-credit acceptance.
+            assert topup is not None and topup.status == "succeeded"
             assert (
                 await db.scalar(
                     select(Wallet.balance_vnd).where(Wallet.driver_id == ids[0])
                 )
-                == 0
+                == 50000
             )
             assert (
                 await db.scalar(
@@ -77,7 +76,7 @@ async def test_t92_real_adapter_from_topup_creation_through_signed_dispatch(
                     .join(Wallet)
                     .where(Wallet.driver_id == ids[0])
                 )
-                == 0
+                == 1
             )
     finally:
         get_settings.cache_clear()
@@ -160,11 +159,18 @@ async def context():
         app.dependency_overrides.pop(get_current_actor, None)
         app.dependency_overrides.pop(get_payment_gateway, None)
         async with SessionFactory() as db:
-            await db.execute(delete(WalletTopup).where(WalletTopup.driver_id.in_(ids)))
-            await db.execute(delete(Wallet).where(Wallet.driver_id.in_(ids)))
-            await db.execute(delete(UserRole).where(UserRole.user_id.in_(ids)))
-            await db.execute(delete(User).where(User.id.in_(ids)))
-            await db.commit()
+            # Preserve append-only credited fixtures; never disable ledger triggers.
+            credited = await db.scalar(
+                select(WalletLedger.id).join(Wallet).where(Wallet.driver_id.in_(ids))
+            )
+            if credited is None:
+                await db.execute(
+                    delete(WalletTopup).where(WalletTopup.driver_id.in_(ids))
+                )
+                await db.execute(delete(Wallet).where(Wallet.driver_id.in_(ids)))
+                await db.execute(delete(UserRole).where(UserRole.user_id.in_(ids)))
+                await db.execute(delete(User).where(User.id.in_(ids)))
+                await db.commit()
 
 
 async def counts(driver_id):

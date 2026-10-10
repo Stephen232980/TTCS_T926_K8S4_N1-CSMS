@@ -10,16 +10,73 @@ import hmac
 import json
 from collections.abc import Iterator
 from typing import Any
+from uuid import uuid4
 
 import httpx
 import pytest
+import pytest_asyncio
 from pydantic import SecretStr
+from sqlalchemy import func, select
 
 from src.config import get_settings
 from src.entrypoints.http import app
+from src.modules.identity.models import User
 from src.modules.payments.contracts import SIGNATURE_HEADER
+from src.modules.wallet.models import Wallet, WalletLedger
+from src.modules.wallet.topup_models import WalletTopup
+from src.platform.database.session import SessionFactory
 
 TEST_SECRET = SecretStr("t98-super-secret-webhook-key-999999")
+
+
+SUFFIX = ""
+WALLET_ID = None
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def persisted_orders():
+    global SUFFIX, WALLET_ID
+    SUFFIX = "-" + str(uuid4())
+    async with SessionFactory() as db, db.begin():
+        user = User(email=f"t98-{uuid4()}@example.com", password_hash="unused")
+        db.add(user)
+        await db.flush()
+        wallet = Wallet(driver_id=user.id)
+        db.add(wallet)
+        await db.flush()
+        WALLET_ID = wallet.id
+        for order, amount in [
+            ("ord-01", 200000),
+            ("ord-06", 500000),
+            ("ord-07", 350000),
+            ("ord-08-transition", 150000),
+            ("ord-09-retry-recovery", 200000),
+            ("ord-replay", 100000),
+        ]:
+            db.add(
+                WalletTopup(
+                    driver_id=user.id, order_id=order + SUFFIX, amount_vnd=amount
+                )
+            )
+
+
+async def assert_persisted(order, status, balance, count, reason=None):
+    async with SessionFactory() as db:
+        topup = await db.scalar(
+            select(WalletTopup).where(WalletTopup.order_id == order + SUFFIX)
+        )
+        wallet = await db.get(Wallet, WALLET_ID)
+        assert topup.status == status and wallet.balance_vnd == balance
+        assert (
+            await db.scalar(
+                select(func.count())
+                .select_from(WalletLedger)
+                .where(WalletLedger.wallet_id == WALLET_ID)
+            )
+            == count
+        )
+        if reason is not None:
+            assert topup.reason == reason
 
 
 def _sign(body: bytes, secret: SecretStr = TEST_SECRET) -> str:
@@ -35,8 +92,8 @@ def _make_body(
     gateway_transaction_id: str = "fake-tx-t98-100",
 ) -> bytes:
     payload: dict[str, Any] = {
-        "gateway_transaction_id": gateway_transaction_id,
-        "order_id": order_id,
+        "gateway_transaction_id": gateway_transaction_id + SUFFIX,
+        "order_id": order_id + SUFFIX,
         "amount_vnd": amount_vnd,
         "status": status,
     }
@@ -71,10 +128,8 @@ async def test_01_valid_succeeded_webhook() -> None:
         )
         assert res.status_code == 200
         data = res.json()
-        assert data["status"] == "ok"
-        assert data["payment_status"] == "succeeded"
-        assert data["order_id"] == "ord-01"
-        assert data["amount_vnd"] == 200_000
+        assert data["status"] == "succeeded"
+        await assert_persisted("ord-01", "succeeded", 200000, 1)
 
 
 @pytest.mark.asyncio
@@ -175,8 +230,8 @@ async def test_06_valid_failed_webhook_with_reason() -> None:
         )
         assert res.status_code == 200
         data = res.json()
-        assert data["payment_status"] == "failed"
-        assert data["reason"] == reason_msg
+        assert data["status"] == "failed"
+        await assert_persisted("ord-06", "failed", 0, 0, reason_msg)
 
 
 @pytest.mark.asyncio
@@ -200,8 +255,8 @@ async def test_07_valid_cancelled_webhook_with_reason() -> None:
         )
         assert res.status_code == 200
         data = res.json()
-        assert data["payment_status"] == "cancelled"
-        assert data["reason"] == reason_msg
+        assert data["status"] == "cancelled"
+        await assert_persisted("ord-07", "cancelled", 0, 0, reason_msg)
 
 
 @pytest.mark.asyncio
@@ -237,7 +292,7 @@ async def test_08_failed_or_cancelled_after_succeeded() -> None:
             headers={"Content-Type": "application/json", SIGNATURE_HEADER: sig_succ},
         )
         assert res1.status_code == 200
-        assert res1.json()["payment_status"] == "succeeded"
+        assert res1.json()["status"] == "succeeded"
 
         res2 = await client.post(
             "/api/v1/payments/webhook",
@@ -246,7 +301,8 @@ async def test_08_failed_or_cancelled_after_succeeded() -> None:
         )
         # Endpoint xác thực chữ ký và format hợp lệ
         assert res2.status_code == 200
-        assert res2.json()["payment_status"] == "failed"
+        assert res2.json()["status"] == "succeeded"
+        await assert_persisted(order_id, "succeeded", 150000, 1)
 
 
 @pytest.mark.asyncio
@@ -282,7 +338,7 @@ async def test_09_succeeded_after_failed() -> None:
             headers={"Content-Type": "application/json", SIGNATURE_HEADER: sig_fail},
         )
         assert res1.status_code == 200
-        assert res1.json()["payment_status"] == "failed"
+        assert res1.json()["status"] == "failed"
 
         res2 = await client.post(
             "/api/v1/payments/webhook",
@@ -290,7 +346,8 @@ async def test_09_succeeded_after_failed() -> None:
             headers={"Content-Type": "application/json", SIGNATURE_HEADER: sig_succ},
         )
         assert res2.status_code == 200
-        assert res2.json()["payment_status"] == "succeeded"
+        assert res2.json()["status"] == "needs_review"
+        await assert_persisted(order_id, "needs_review", 0, 0)
 
 
 @pytest.mark.asyncio
@@ -308,4 +365,5 @@ async def test_webhook_replay_idempotency_simulation() -> None:
                 headers={"Content-Type": "application/json", SIGNATURE_HEADER: sig},
             )
             assert res.status_code == 200
-            assert res.json()["gateway_transaction_id"] == "fake-tx-t98-100"
+            assert res.json()["status"] == "succeeded"
+        await assert_persisted("ord-replay", "succeeded", 100000, 1)

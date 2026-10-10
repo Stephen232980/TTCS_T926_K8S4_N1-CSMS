@@ -6,6 +6,7 @@ import json
 import time
 from collections.abc import Iterator
 from urllib.parse import parse_qs, urlsplit
+from uuid import uuid4
 
 import httpx
 import pytest
@@ -13,6 +14,7 @@ from pydantic import HttpUrl
 
 from src.config import get_settings
 from src.entrypoints.http import app
+from src.modules.identity.models import User
 from src.modules.payments import webhook_router
 from src.modules.payments.contracts import (
     InvalidWebhookSignature,
@@ -21,6 +23,9 @@ from src.modules.payments.contracts import (
 )
 from src.modules.payments.dependencies import get_payment_gateway
 from src.modules.payments.fake_gateway import FakeGateway
+from src.modules.wallet.models import Wallet
+from src.modules.wallet.topup_models import WalletTopup
+from src.platform.database.session import SessionFactory
 
 
 @pytest.fixture(autouse=True)
@@ -149,7 +154,16 @@ async def test_dispatch_works_on_real_host_and_stable_transaction_across_replays
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://localhost:8012"
     ) as client:
-        data = {**link(), "status": status, "repeat_count": 5}
+        order = str(uuid4())
+        async with SessionFactory() as db, db.begin():
+            user = User(
+                email=f"hardening-{uuid4()}@example.com", password_hash="unused"
+            )
+            db.add(user)
+            await db.flush()
+            db.add(Wallet(driver_id=user.id))
+            db.add(WalletTopup(driver_id=user.id, order_id=order, amount_vnd=50000))
+        data = {**link(order), "status": status, "repeat_count": 5}
         first = await client.post("/api/v1/payments/fake/dispatch", json=data)
         second = await client.post("/api/v1/payments/fake/dispatch", json=data)
         assert first.status_code == second.status_code == 200
