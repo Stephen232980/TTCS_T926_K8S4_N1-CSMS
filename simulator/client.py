@@ -198,10 +198,12 @@ async def _recovery_charger(
         # [T-104] KIỂM TRA SỐ DƯ TRƯỚC KHI SẠC
         # ==========================================
         connector_id = 1
-        if not du_so_du_de_sac(tag, connector_id):
-            print(f"⚠️ Trạm {code} ngắt kết nối với thẻ {tag} vì không đủ tiền.\n")
-            await _status(socket, "Available")
-            return {"code": code, "error": "Insufficient Balance"}, socket
+        
+        # Xóa hoặc comment 4 dòng dưới đây:
+        # if not du_so_du_de_sac(tag, connector_id):
+        #     print(f"⚠️ Trạm {code} ngắt kết nối với thẻ {tag} vì không đủ tiền.\n")
+        #     await _status(socket, "Available")
+        #     return {"code": code, "error": "Insufficient Balance"}, socket
 
         start_payload = {
             "connectorId": connector_id,
