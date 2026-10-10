@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     wallet_topup_min_vnd: int = Field(default=10_000, gt=0, le=2**63 - 1)
     wallet_topup_max_vnd: int = Field(default=5_000_000, gt=0, le=2**63 - 1)
     wallet_reconciliation_interval_seconds: int = Field(default=300, gt=0)
+    charging_minimum_kwh: int = Field(default=5, gt=0)
+    wallet_reserve_vnd: int = Field(default=10_000, ge=0, le=2**63 - 1)
 
     payment_gateway: Literal["disabled", "fake", "sandbox"] = "disabled"
     payment_webhook_secret: SecretStr | None = Field(default=None, repr=False)
