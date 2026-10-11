@@ -317,4 +317,5 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    main()#   T r i g g e r   C I   t o   c h e c k   R u f f   f o r m a t t i n g  
+ 
