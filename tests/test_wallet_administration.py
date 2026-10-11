@@ -111,12 +111,17 @@ async def test_missing_invoice_debit_blocks_repair_and_unlock(db_session):
     wallet, _ = await invoice_wallet(db_session)
     wallet.status = "locked"
     await db_session.flush()
+    # Committed webhook warnings may exist; rejected commands must add no audit.
+    audit_count = await db_session.scalar(select(func.count()).select_from(AuditLog))
     for command, kwargs in ((mo_khoa_vi, {}), (sua_so_du_cache, {"reason": "Checked"})):
         with pytest.raises(WalletReconciliationError) as error:
             await command(db_session, wallet_id=wallet.id, actor_id=admin.id, **kwargs)
         assert "invoice_debit_count" in error.value.checks
     assert wallet.status == "locked"
-    assert await db_session.scalar(select(func.count()).select_from(AuditLog)) == 0
+    assert (
+        await db_session.scalar(select(func.count()).select_from(AuditLog))
+        == audit_count
+    )
 
 
 async def test_adjustment_in_locked_wallet_replays_and_never_unlocks(api_db):

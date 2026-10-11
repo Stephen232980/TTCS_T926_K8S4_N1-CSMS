@@ -1,6 +1,8 @@
+import { clockMinute, validateBands, type BandValues } from './tariffBands'
 import { ownerRequest } from './ownerApi'
 
 export interface TariffCreateInput {
+  bands?: BandValues[]
   effectiveFrom: string
   pricePerKwh: string
   idleFeePerMinute: string
@@ -57,17 +59,40 @@ function jsonInteger(raw: string, maximum: bigint, field: string): string {
   return parsed.toString()
 }
 
-export async function createStationTariff(
+async function saveStationTariff<T>(
   stationId: string,
   input: TariffCreateInput,
-): Promise<TariffCreated> {
+  tariffId?: string,
+): Promise<T> {
   const effectiveFrom = input.effectiveFrom.trim()
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom)) {
     throw new Error('Ngày hiệu lực phải có dạng YYYY-MM-DD.')
   }
 
-  const price = jsonInteger(input.pricePerKwh, MAX_MONEY, 'Đơn giá điện')
+  if (input.bands && !validateBands(input.bands).valid)
+    throw new Error(
+      'Các khung giờ phải hợp lệ, không chồng lấn và phủ kín 24 giờ.',
+    )
+  const pricePart = input.bands
+    ? ',"bands":[' +
+      input.bands
+        .map(
+          (band) =>
+            '{"start_min":' +
+            clockMinute(band.start) +
+            ',"end_min":' +
+            clockMinute(band.end, true) +
+            ',"energy_rate_vnd_per_kwh":' +
+            jsonInteger(band.price, MAX_MONEY, 'Đơn giá điện') +
+            ',"label":' +
+            JSON.stringify(band.label ?? '') +
+            '}',
+        )
+        .join(',') +
+      ']'
+    : ',"energy_rate_vnd_per_kwh":' +
+      jsonInteger(input.pricePerKwh, MAX_MONEY, 'Đơn giá điện')
 
   const idleFee = jsonInteger(
     input.idleFeePerMinute,
@@ -82,8 +107,7 @@ export async function createStationTariff(
   const body = [
     '{"effective_from":',
     JSON.stringify(effectiveFrom),
-    ',"energy_rate_vnd_per_kwh":',
-    price,
+    pricePart,
     ',"idle_rate_vnd_per_minute":',
     idleFee,
     ',"grace_minutes":',
@@ -91,10 +115,10 @@ export async function createStationTariff(
     '}',
   ].join('')
 
-  return ownerRequest<TariffCreated>(
-    `/owner/stations/${encodeURIComponent(stationId)}/tariffs`,
+  return ownerRequest<T>(
+    `/owner/stations/${encodeURIComponent(stationId)}/tariffs${tariffId ? '/' + encodeURIComponent(tariffId) : ''}`,
     {
-      method: 'POST',
+      method: tariffId ? 'PATCH' : 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
@@ -102,3 +126,36 @@ export async function createStationTariff(
     },
   )
 }
+
+export const createStationTariff = (
+  stationId: string,
+  input: TariffCreateInput,
+) => saveStationTariff<TariffCreated>(stationId, input)
+export const updateStationTariff = (
+  stationId: string,
+  tariffId: string,
+  input: TariffCreateInput,
+) => saveStationTariff<TariffVersion>(stationId, input, tariffId)
+export interface TariffVersion extends TariffDisplay {
+  id: string
+  created_at: string
+  status: 'current' | 'upcoming' | 'historical'
+  editable: boolean
+}
+export interface TariffHistory {
+  today: string
+  timezone: string
+  items: TariffVersion[]
+  page: number
+  page_size: number
+  total: number
+}
+export const readTariffHistory = (
+  stationId: string,
+  page: number,
+  signal?: AbortSignal,
+) =>
+  ownerRequest<TariffHistory>(
+    `/owner/stations/${encodeURIComponent(stationId)}/tariffs?page=${page}&page_size=20`,
+    { signal },
+  )

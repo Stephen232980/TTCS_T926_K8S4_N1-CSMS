@@ -113,7 +113,7 @@ Dưới đây là 6 kịch bản cần được cover bởi Unit Test cho hàm n
     *   Chỉ số: Tại `10:00:00` là `100000 Wh`, tại `11:00:00` là `120000 Wh`.
     *   Biểu giá ngày `2023-10-25`: `08:00:00 - 12:00:00` giá `3000 đ/kWh`.
 *   **Output kỳ vọng**:
-    *   1 đoạn duy nhất: Tiêu thụ 20000 Wh, giá 3000 đ/kWh. 
+    *   1 đoạn duy nhất: Tiêu thụ 20000 Wh, giá 3000 đ/kWh.
     *   Thành tiền: `20000 * 3000 / 1000 = 60000` đ.
     *   `start_interpolated`: False, `end_interpolated`: False.
 

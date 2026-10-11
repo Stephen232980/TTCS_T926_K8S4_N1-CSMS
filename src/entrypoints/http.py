@@ -6,6 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.entrypoints.lifecycle import application_lifespan
+from src.modules.billing.driver_router import router as driver_invoice_router
 from src.modules.charging.driver_router import router as driver_charging_router
 from src.modules.charging.router import router as charging_router
 from src.modules.identity.admin_audit_router import router as admin_audit_router
@@ -57,6 +58,7 @@ app.include_router(discovery_router)
 app.include_router(charging_router)
 app.include_router(driver_charging_router)
 app.include_router(driver_wallet_router)
+app.include_router(driver_invoice_router)
 app.include_router(wallet_topup_router)
 app.include_router(admin_wallet_router)
 app.include_router(wallet_administration_router)
