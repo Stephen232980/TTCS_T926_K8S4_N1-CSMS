@@ -62,7 +62,7 @@ GET trả order_id, amount_vnd, status, reason và created_at; không trả redi
 
 ## Điểm nối cho TV9 / T-92
 
-`src/modules/payments/dependencies.py:get_payment_gateway()` là dependency của API. Hiện trả None vì chưa có adapter; API thật trả 503. TV9 bổ sung việc chọn FakeGateway khi PAYMENT_GATEWAY=fake, trả None khi disabled hoặc chưa có adapter sandbox. Không tự fallback sandbox sang fake.
+`src/modules/payments/dependencies.py:get_payment_gateway()` là dependency của API. Chọn FakeGateway khi PAYMENT_GATEWAY=fake; chọn VNPAY khi sandbox có merchant/Return đã cấu hình. Disabled hoặc sandbox thiếu cấu hình trả None/503. Xem [VNPAY](S35_VNPAY_SANDBOX.md). Không tự fallback sandbox sang fake.
 
 Adapter cần thực hiện async create_payment(PaymentRequest) → PaymentRedirect, giữ nguyên mã đơn; verify_webhook theo contract T-90. Kiểm thử T-93 dùng dependency override và gateway thử, không đưa gateway thử vào source sản phẩm.
 

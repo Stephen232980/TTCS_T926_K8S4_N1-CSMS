@@ -21,6 +21,7 @@ from src.modules.payments.contracts import (
     PaymentRequest,
 )
 from src.modules.payments.dependencies import get_payment_gateway
+from src.modules.payments.vnpay_gateway import VnpayGateway
 from src.modules.wallet.provisioning import (
     WalletDriverRequiredError,
     ensure_driver_wallet,
@@ -106,7 +107,8 @@ async def create_topup(
     topup = WalletTopup(
         driver_id=wallet.driver_id,
         amount_vnd=body.amount_vnd,
-        order_id="topup-" + uuid4().hex,
+        order_id=("topup-vnpay-" if isinstance(gateway, VnpayGateway) else "topup-")
+        + uuid4().hex,
         status="pending",
     )
     db.add(topup)
@@ -117,6 +119,7 @@ async def create_topup(
         order_id=topup.order_id,
         amount_vnd=topup.amount_vnd,
         return_url=settings.payment_return_url,
+        client_ip=request.client.host if request.client else "127.0.0.1",
     )
     try:
         async with asyncio.timeout(PAYMENT_CREATE_TIMEOUT_SECONDS):

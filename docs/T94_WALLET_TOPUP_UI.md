@@ -17,10 +17,16 @@
 - Five repeated success webhooks for a 10,000 VND order: final balance 60,000, exactly one additional ledger row.
 - Failed and cancelled orders of 10,000 VND each: reasons displayed; balance stayed 60,000 and ledger stayed at two credit rows.
 - Mobile 360x800: wallet, amount entry/validation, presets and cancelled return screen inspected. No horizontal overflow; submit remains reachable after scrolling. Wallet top-up CTA label restored on mobile.
-- These are local FakeGateway results, not real payment sandbox S-67 or staging acceptance.
+- These are local FakeGateway results, not VNPAY sandbox acceptance or staging acceptance.
 
 ## Windows local setup
 
 Use a dedicated PostgreSQL database, migrate to head and provision demo accounts with scripts.create_test_accounts. Configure PAYMENT_GATEWAY=fake, a local-only PAYMENT_WEBHOOK_SECRET, PAYMENT_FAKE_BASE_URL=http://127.0.0.1:8094 and PAYMENT_RETURN_URL=http://127.0.0.1:5194/wallet/topup/return. Set CSMS_DEV_API_TARGET=http://127.0.0.1:8094 for the frontend.
 
 For psycopg asynchronous connections on Windows, run Uvicorn with an asyncio SelectorEventLoop; the default Proactor loop can start HTTP successfully while database-dependent requests/background scans fail. Do not change the team's shared running containers just to test this UI.
+
+## VNPAY S-35
+
+The signed backend Return endpoint forwards order_code to this existing UI.
+Return never settles; polling and wallet refresh continue to depend on the
+committed IPN result. See [S-35 setup and SIT](S35_VNPAY_SANDBOX.md).

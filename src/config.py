@@ -21,6 +21,32 @@ class Settings(BaseSettings):
     payment_webhook_secret: SecretStr | None = Field(default=None, repr=False)
     payment_return_url: HttpUrl = HttpUrl("http://localhost:5173/wallet/topup/return")
     payment_fake_base_url: HttpUrl = HttpUrl("http://localhost:8000")
+    vnpay_tmn_code: str = ""
+    vnpay_return_url: HttpUrl | None = None
+    vnpay_payment_url: Literal["https://sandbox.vnpayment.vn/paymentv2/vpcpay.html"] = (
+        "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html"
+    )
+    vnpay_expiry_minutes: int = Field(default=15, ge=1, le=60)
+
+    @field_validator("vnpay_return_url")
+    @classmethod
+    def validate_vnpay_return(cls, value: HttpUrl | None) -> HttpUrl | None:
+        if value is not None and (
+            value.scheme != "https"
+            or value.username is not None
+            or value.password is not None
+            or value.fragment
+            or value.query
+        ):
+            raise ValueError("VNPAY return must be a plain HTTPS URL")
+        return value
+
+    @field_validator("vnpay_tmn_code")
+    @classmethod
+    def validate_vnpay_merchant(cls, value: str) -> str:
+        if value and (len(value) != 8 or not value.isascii() or not value.isalnum()):
+            raise ValueError("VNPAY merchant code must contain 8 ASCII letters/digits")
+        return value
 
     @field_validator("payment_webhook_secret", mode="before")
     @classmethod

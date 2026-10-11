@@ -19,6 +19,7 @@ class PaymentRequest(PaymentContractModel):
     order_id: Identifier
     amount_vnd: AmountVnd
     return_url: HttpUrl
+    client_ip: str = "127.0.0.1"
 
     @field_validator("order_id")
     @classmethod
