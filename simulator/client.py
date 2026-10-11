@@ -36,7 +36,6 @@ def lap_hoa_don(start_wh: int, stop_wh: int) -> float:
     print(f"Chỉ số bắt đầu: {start_wh} Wh")
     print(f"Chỉ số kết thúc: {stop_wh} Wh")
 
-    # Gọi hàm tính tiền
     tong_tien = tinh_tien(start_wh, stop_wh)
 
     print(f"Điện năng tiêu thụ: {(stop_wh - start_wh) / 1000} kWh")
@@ -171,7 +170,6 @@ async def _run_recovery(settings: SimulatorSettings, run_id: str) -> None:
             sockets.append(socket)
     _write_report(settings, report_rows, run_id, started_at)
 
-    # [T-81] Quét nợ sau khi các trạm sạc chạy xong
     job_nhat_phien_chua_thanh_toan()
 
     if len(sockets) != settings.count:
@@ -197,16 +195,7 @@ async def _recovery_charger(
         timestamp = datetime.now(UTC) - timedelta(minutes=1)
         start_message_id = str(uuid4())
 
-        # ==========================================
-        # [T-104] KIỂM TRA SỐ DƯ TRƯỚC KHI SẠC
-        # ==========================================
         connector_id = 1
-
-        # Xóa hoặc comment 4 dòng dưới đây:
-        # if not du_so_du_de_sac(tag, connector_id):
-        #     print(f"⚠️ Trạm {code} ngắt kết nối với thẻ {tag} vì không đủ tiền.\n")
-        #     await _status(socket, "Available")
-        #     return {"code": code, "error": "Insufficient Balance"}, socket
 
         start_payload = {
             "connectorId": connector_id,
@@ -255,9 +244,6 @@ async def _recovery_charger(
         await _call(socket, "StopTransaction", stop_payload, stop_message_id)
         await _status(socket, "Available")
 
-        # ==========================================
-        # [T-81] CHỐT PHIÊN KHI NGỪNG SẠC
-        # ==========================================
         thanh_toan_ok = random.random() > 0.3
         chot_phien(transaction_id, METER_START_WH, METER_STOP_WH, thanh_toan_ok)
 
