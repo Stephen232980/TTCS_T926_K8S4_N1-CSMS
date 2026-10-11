@@ -53,12 +53,14 @@ DNS và Caddy HTTPS đã được người dùng kiểm tra; không cần chuy�
 80, không đổi workflow/build/deploy. Caddy nằm cùng mạng Docker, /api/ chuyển
 thẳng đến csms-app:8000. Chứng chỉ lưu volume riêng, không xóa khi deploy app.
 
-Trên VM xác định tệp .env backend mà script deploy đang dùng (mặc định `.env`
-trong thư mục SSH). Không tạo tệp mới bỏ mất DATABASE_URL hiện có.
-Sau khi PR merge, lấy scripts/configure_vnpay_staging.py từ commit đã review:
+Đã kiểm tra read-only VM ngày 11/10/2026: tệp cấu hình tồn tại tại
+`/home/deploy/.env`, backend đang PAYMENT_GATEWAY=disabled và cookie Secure=false.
+Không tạo .env trong /home/azureadmin hoặc bỏ mất DATABASE_URL hiện có.
+Sau khi PR merge, lấy scripts/configure_vnpay_staging.py từ commit đã review
+vào /tmp/configure_vnpay_staging.py và chạy bằng deploy để giữ quyền sở hữu:
 
 ```bash
-python3 configure_vnpay_staging.py --env-file /duong/dan/.env
+sudo -u deploy python3 /tmp/configure_vnpay_staging.py --env-file /home/deploy/.env
 ```
 
 Script hỏi TmnCode và HashSecret tại terminal, ẩn khóa khi nhập. Nó lưu backup
