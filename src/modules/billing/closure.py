@@ -5,6 +5,7 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,23 +13,75 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.config import settings
 from src.modules.billing.invoicing import InvoiceResult, lap_hoa_don
 from src.modules.charging.models import ChargingSession
+from src.modules.wallet.service import tru_vi
 from src.platform.database.session import SessionFactory
 
 logger = logging.getLogger("csms.billing")
 
 
+async def _chot_phien_in_session(
+    db: AsyncSession, session_id: int, *, settle: bool = True
+) -> InvoiceResult:
+    """Execute lap_hoa_don, and when settle=True, tru_vi and mark settlement.
+
+    Lock the session row (with_for_update) to prevent concurrent settlement races.
+    If already settled, return idempotent success.
+    If lap_hoa_don yields needs_review or pending, return without debiting wallet.
+    When ready and settle=True, debit wallet via tru_vi and record settlement fields atomically.
+    """
+    charging = await db.scalar(
+        select(ChargingSession)
+        .where(ChargingSession.id == session_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if charging is None:
+        return await lap_hoa_don(db, session_id)
+
+    if charging.settlement_completed_at is not None:
+        return await lap_hoa_don(db, session_id)
+
+    outcome = await lap_hoa_don(db, session_id)
+    if outcome.status != "ready" or outcome.invoice is None:
+        return outcome
+
+    if not settle:
+        return outcome
+
+    invoice = outcome.invoice
+    await tru_vi(db, invoice=invoice)
+
+    now = datetime.now(UTC)
+    charging.settlement_completed_at = now
+    charging.settlement_reason = (
+        "zero_invoice" if invoice.total_vnd == 0 else "debited"
+    )
+    await db.flush()
+    logger.info(
+        "charging_session_settled session=%s reason=%s total_vnd=%s",
+        session_id,
+        charging.settlement_reason,
+        invoice.total_vnd,
+    )
+    return outcome
+
+
 async def chot_phien(
-    session_id: int, *, db: AsyncSession | None = None
+    session_id: int, *, db: AsyncSession | None = None, settle: bool = True
 ) -> InvoiceResult:
     """Own one transaction, or join the supplied caller transaction.
 
-    Commit review reasons as well as invoices. No wallet debit or settlement
-    completion is performed until T-102 implements that step.
+    In a single transaction:
+    1. Lock session row with FOR UPDATE.
+    2. Generate/fetch invoice via lap_hoa_don.
+    3. If settle=True (default, T-102): debit wallet via tru_vi and mark settlement.
+    4. Set settlement_completed_at and settlement_reason ('debited' or 'zero_invoice').
+    Any failure rolls back all changes atomically; the recovery scan will retry later.
     """
     if db is not None:
-        return await lap_hoa_don(db, session_id)
+        return await _chot_phien_in_session(db, session_id, settle=settle)
     async with SessionFactory() as session, session.begin():
-        return await lap_hoa_don(session, session_id)
+        return await _chot_phien_in_session(session, session_id, settle=settle)
 
 
 @dataclass
