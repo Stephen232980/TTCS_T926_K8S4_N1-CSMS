@@ -1,16 +1,16 @@
 # T-90 — Contract cổng thanh toán
 
-T-90 cung cấp contract để T-92 (cổng giả lập), T-93 (tạo lệnh nạp), T-95 (webhook) và T-94 (trang quay về) dùng chung. Hiện luồng dự kiến dùng **cổng giả lập**; cổng thanh toán sandbox thật thuộc **S-67**. T-90 chưa triển khai adapter, route thanh toán hay cộng ví.
+T-90 cung cấp contract để T-92 (cổng giả lập), T-93 (tạo lệnh nạp), T-95 (webhook) và T-94 (trang quay về) dùng chung. Luồng fake dùng cho local/CI. Theo quyết định ngày 11/10/2026, adapter VNPAY sandbox được bổ sung ngay trong **S-35**; xem [hướng dẫn](S35_VNPAY_SANDBOX.md). T-90 chưa triển khai adapter, route thanh toán hay cộng ví.
 
 ## Ba biến môi trường
 
 | Biến | Giá trị / quy tắc |
 |---|---|
-| `PAYMENT_GATEWAY` | `disabled` (mặc định), `fake` (local/test), `sandbox` (adapter S-67). Không có adapter tương ứng thì báo không khả dụng, không tự rơi về fake. |
+| `PAYMENT_GATEWAY` | `disabled` (mặc định), `fake` (local/test), `sandbox` (VNPAY PAY 2.1.0, cần cấu hình merchant). Không có adapter tương ứng thì báo không khả dụng, không tự rơi về fake. |
 | `PAYMENT_WEBHOOK_SECRET` | Khóa bí mật từ môi trường. Bắt buộc khi chọn fake/sandbox; không có khóa mặc định. Không commit khóa thật và không ghi khóa vào log. |
 | `PAYMENT_RETURN_URL` | URL frontend cấu hình ở backend. Local: `http://localhost:5173/wallet/topup/return`. Chỉ HTTP/HTTPS, không chứa username/password hoặc fragment. |
 
-`Settings` và Compose app đã nhận ba biến. `.env.example` để cổng disabled và khóa trống để ứng dụng hiện có vẫn khởi động. Bật fake chỉ trên môi trường thử; môi trường dùng dữ liệu thật phải tắt fake. T-92 chỉ đăng ký route giả lập khi chọn fake; những chế độ khác trả 404 cho route giả lập. Việc chọn sandbox chưa có nghĩa là adapter thật đã được triển khai.
+`Settings` và Compose app đã nhận ba biến. `.env.example` để cổng disabled và khóa trống để ứng dụng hiện có vẫn khởi động. Bật fake chỉ trên môi trường thử; môi trường dùng dữ liệu thật phải tắt fake. T-92 chỉ đăng ký route giả lập khi chọn fake; những chế độ khác trả 404 cho route giả lập. Chọn sandbox cần thêm VNPAY_TMN_CODE và VNPAY_RETURN_URL; thiếu cấu hình không tự fallback fake.
 
 Tạo khóa riêng cho local bằng `python -c "import secrets; print(secrets.token_hex(32))"`, lưu vào `.env` đã được bỏ qua bởi Git. Khi chia sẻ lỗi cấu hình, không ghi giá trị biến hoặc nội dung input của ValidationError vào log.
 
@@ -95,7 +95,7 @@ headers = {"Content-Type": "application/json", "X-Payment-Signature": signature}
 
 Thất bại/hủy dùng cùng cấu trúc với status `failed`/`cancelled` và reason. Gửi lại webhook giữ nguyên mã giao dịch, mã đơn, số tiền và kết quả. HMAC chứng minh nguồn gửi; không tự chống replay. T-96 đảm nhiệm chống trùng ở database.
 
-Đây là quy tắc chữ ký của **fake**. Adapter sandbox S-67 xác thực theo tài liệu cổng thật rồi chuẩn hóa về cùng GatewayEvent; không mặc định cổng thật cũng dùng chữ ký này.
+Đây là quy tắc chữ ký của **fake**. Adapter VNPAY sandbox S-35 xác thực theo tài liệu cổng thật rồi chuẩn hóa về cùng GatewayEvent; không mặc định cổng thật cũng dùng chữ ký này.
 
 ## Quy ước tích hợp cho các task tiếp theo
 
