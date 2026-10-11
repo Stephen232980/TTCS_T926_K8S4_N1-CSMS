@@ -6,16 +6,18 @@ from datetime import timedelta
 from unittest.mock import AsyncMock
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.modules.billing import closure
 from src.modules.billing.models import Invoice, InvoiceLine
 from src.modules.charging.models import ChargingSession
 from src.modules.ocpp import dispatcher, transport
+from src.modules.ocpp.frames import Frame, decode_frame
 from src.modules.wallet.models import WalletLedger
 from tests.test_effective_tariffs import committed_tariff_db as isolated_closure_db
 from tests.test_ocpp_foundation import connection
+from tests.test_s28_occupation_lifecycle import notify
 from tests.test_t80_invoicing import STAMP, seed
 
 committed_tariff_db = isolated_closure_db
@@ -53,6 +55,83 @@ async def test_closure_commits_once_and_does_not_settle(factory):
         charging = await db.get(ChargingSession, session_id)
         assert charging.settlement_completed_at is None
         assert charging.settlement_reason is None
+
+
+async def test_recovery_scan_waits_for_release_then_creates_one_final_invoice(factory):
+    async with factory() as db, db.begin():
+        charging, *_ = await seed(db)
+        charging.billing_lifecycle_version = 1
+        charging.release_detection = "available"
+        session_id = charging.id
+        conn = connection(charging.charge_point_id)
+        conn.boot_accepted = True
+    for _ in range(2):
+        assert (await closure.scan_unsettled_sessions()).pending == 1
+        assert await counts(factory) == (0, 0, 0)
+    async with factory() as db, db.begin():
+        await notify(db, conn, "Finishing", STAMP + timedelta(hours=1))
+        await notify(db, conn, "Available", STAMP + timedelta(hours=1, minutes=12))
+    for _ in range(2):
+        assert (await closure.scan_unsettled_sessions()).ready == 1
+        assert await counts(factory) == (1, 2, 0)
+    async with factory() as db:
+        saved_invoice = await db.scalar(
+            select(Invoice).where(Invoice.session_id == session_id)
+        )
+        assert saved_invoice.total_vnd == 4400
+
+
+async def test_new_start_waits_without_deadlocking_invoice_station_lock(factory):
+    session_id = await saved(factory)
+    pid = asyncio.Future()
+
+    async def next_start(charger_id):
+        async with factory() as db, db.begin():
+            pid.set_result(await db.scalar(text("SELECT pg_backend_pid()")))
+            conn = connection(charger_id)
+            conn.boot_accepted = True
+            return await dispatcher.process_call(
+                conn,
+                Frame(
+                    2,
+                    "s28-next-start",
+                    {
+                        "connectorId": 1,
+                        "idTag": "UNKNOWN",
+                        "meterStart": 1000,
+                        "timestamp": (STAMP + timedelta(hours=2)).isoformat(),
+                    },
+                    action="StartTransaction",
+                ),
+                db,
+            )
+
+    worker = None
+    try:
+        async with factory() as writer, writer.begin():
+            charging = await writer.scalar(
+                select(ChargingSession)
+                .where(ChargingSession.id == session_id)
+                .with_for_update()
+            )
+            worker = asyncio.create_task(next_start(charging.charge_point_id))
+            blocked_pid = await asyncio.wait_for(pid, 2)
+            async with factory() as observer:
+                async with asyncio.timeout(5):
+                    while not await observer.scalar(
+                        text("SELECT cardinality(pg_blocking_pids(:pid)) > 0"),
+                        {"pid": blocked_pid},
+                    ):
+                        await asyncio.sleep(0.01)
+            result = await asyncio.wait_for(
+                closure.chot_phien(session_id, db=writer), 2
+            )
+            assert result.status == "ready"
+        assert decode_frame(await asyncio.wait_for(worker, 5)).kind == 3
+    finally:
+        if worker is not None and not worker.done():
+            worker.cancel()
+            await asyncio.gather(worker, return_exceptions=True)
 
 
 async def test_scan_pages_existing_invoices_manual_sessions_and_exclusions(factory):

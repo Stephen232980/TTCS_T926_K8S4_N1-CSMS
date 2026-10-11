@@ -96,9 +96,7 @@ async def test_old_suspension_after_charging_does_not_restart_idle(db_session):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "status", ["SuspendedEVSE", "Finishing", "Available", "Faulted"]
-)
+@pytest.mark.parametrize("status", ["SuspendedEVSE", "Available", "Faulted"])
 async def test_other_statuses_do_not_start_idle(db_session, status):
     _, charging, conn = await setup(db_session)
     await notify(db_session, conn, status, BASE + timedelta(minutes=1))
@@ -136,6 +134,9 @@ async def test_closed_session_not_modified(db_session, status):
     _, charging, conn = await setup(db_session)
     charging.idle_since = BASE + timedelta(minutes=1)
     charging.ended_at = BASE + timedelta(minutes=2)
+    charging.billing_lifecycle_version = (
+        0  # Only legacy sessions ignore post-stop idle.
+    )
     await db_session.flush()
     await notify(db_session, conn, status, BASE + timedelta(minutes=3))
     await db_session.refresh(charging)

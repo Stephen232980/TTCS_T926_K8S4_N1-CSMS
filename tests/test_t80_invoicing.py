@@ -70,6 +70,7 @@ async def seed(
         meter_start_wh=Decimal(first),
         meter_stop_wh=Decimal(last),
         review_reasons=[],
+        billing_lifecycle_version=0,  # Historical invoices retain their original policy.
     )
     db.add(charging)
     await db.flush()
@@ -432,6 +433,7 @@ async def test_real_ocpp_wh_kwh_to_saved_invoice(db_session):
             "transactionId": session_id,
             "meterStop": 2000,
             "timestamp": (STAMP + timedelta(hours=1)).isoformat(),
+            "reason": "EVDisconnected",
         },
     )
     result = await lap_hoa_don(db_session, session_id)

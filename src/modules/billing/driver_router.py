@@ -25,7 +25,9 @@ router = APIRouter(
     dependencies=[Depends(authorize_request)],
 )
 Database = Annotated[AsyncSession, Depends(get_db_session)]
-InvoiceStatus = Literal["ready", "pending", "needs_review", "in_progress"]
+InvoiceStatus = Literal[
+    "ready", "pending", "needs_review", "in_progress", "awaiting_unplug"
+]
 
 
 class LineResponse(BaseModel):
@@ -67,6 +69,12 @@ def invoice_status(charging: ChargingSession, invoice: Invoice | None) -> Invoic
         return "needs_review"
     if charging.ended_at is None:
         return "in_progress"
+    if (
+        invoice is None
+        and charging.billing_lifecycle_version == 1
+        and charging.connector_released_at is None
+    ):
+        return "awaiting_unplug"
     return "ready" if invoice else "pending"
 
 

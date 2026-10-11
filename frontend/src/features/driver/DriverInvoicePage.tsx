@@ -4,6 +4,7 @@ import { driverInvoiceApi, invoiceMoney, type DriverInvoice, type DriverInvoiceA
 const statusText: Record<InvoiceStatus, string> = {
   ready: 'Đã lập hóa đơn', pending: 'Đang chờ lập hóa đơn',
   needs_review: 'Phiên đang chờ xử lý', in_progress: 'Phiên sạc chưa kết thúc',
+  awaiting_unplug: 'Đã dừng sạc, đang chờ xác nhận rút súng',
 }
 const utcTime = (value: string) => new Intl.DateTimeFormat('vi-VN', {
   dateStyle: 'short', timeStyle: 'short', timeZone: 'UTC',
@@ -49,10 +50,10 @@ export function DriverInvoicePage({ api = driverInvoiceApi, sessionId, onOpen, o
     {sessionId !== undefined && <button className="secondary-button" onClick={onBack}>Về danh sách hóa đơn</button>}
     {loading && <p role="status">Đang tải hóa đơn…</p>}
     {error && <p role="alert">{error}</p>}
-    {!loading && (error || invoice?.status === 'pending' || invoice?.status === 'needs_review') &&
+    {!loading && (error || invoice?.status === 'pending' || invoice?.status === 'needs_review' || invoice?.status === 'awaiting_unplug') &&
       <button className="secondary-button" onClick={() => setRetry(value => value + 1)}>Kiểm tra lại</button>}
     {!loading && !error && sessionId === undefined && page && <>
-      <p>Hóa đơn được lưu khi phiên kết thúc. Chọn một phiên để xem cách tính tiền.</p>
+      <p>Hóa đơn được chốt sau khi dừng sạc và xác nhận rút súng. Chọn một phiên để xem cách tính tiền.</p>
       {!page.items.length && <p>Chưa có phiên đã kết thúc để xem hóa đơn.</p>}
       <ul className="driver-invoice-list">{page.items.map(item => <li key={item.session_id}>
         <button className="secondary-button" onClick={() => onOpen(item.session_id)}>

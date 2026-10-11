@@ -203,10 +203,10 @@ async def process_call(
                 )
             else:
                 status = StatusPayload.model_validate_json(json.dumps(frame.payload))
-                await report_status(session, charge_point, status)
-                await note_connector_status(
-                    session, charge_point.id, status.connectorId, status.status
-                )
+                if await report_status(session, charge_point, status):
+                    await note_connector_status(
+                        session, charge_point.id, status.connectorId, status.status
+                    )
                 response = encode_frame(Frame(3, frame.message_id, {}))
         except (ValidationError, ValueError):
             if frame.action == "StatusNotification":
