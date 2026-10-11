@@ -6,6 +6,7 @@ import asyncio
 import os
 from decimal import Decimal
 from typing import cast
+from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +18,9 @@ from src.modules.identity.models import Role, User
 from src.modules.identity.role_assignment import assign_user_roles
 from src.modules.identity.security import hash_password
 from src.modules.stations.models import ChargePoint, Connector, Station
+from src.modules.wallet.eligibility import du_so_du_de_sac
+from src.modules.wallet.provisioning import ensure_driver_wallet
+from src.modules.wallet.service import ghi_so_cai
 from src.platform.database.session import SessionFactory
 
 SIMULATOR_OPERATOR_EMAIL = "simulator.operator@example.com"
@@ -46,7 +50,47 @@ async def seed_simulator_data(settings: SimulatorSettings) -> None:
                 "simulator-driver-only",
             )
             await _assign_role(session, driver, driver_role)
+            await _ensure_simulator_wallet(session, driver, station)
             await _card(session, driver, operator, settings.tag_for(index))
+
+
+async def _ensure_simulator_wallet(
+    session: AsyncSession, driver: User, station: Station
+) -> None:
+    wallet = await ensure_driver_wallet(session, driver.id)
+    eligibility = await du_so_du_de_sac(
+        session, driver_id=driver.id, station_id=station.id
+    )
+    if eligibility.allowed:
+        return
+    minimum = eligibility.minimum_balance_vnd
+    balance = eligibility.balance_vnd
+    if eligibility.reason != "wallet_low" or minimum is None or balance is None:
+        raise RuntimeError(
+            f"Simulator driver {driver.email} cannot be made wallet-eligible: "
+            f"{eligibility.reason}"
+        )
+    amount = minimum - balance
+    if amount <= 0:
+        raise RuntimeError(
+            f"Simulator driver {driver.email} has inconsistent wallet eligibility"
+        )
+    await ghi_so_cai(
+        session,
+        wallet_id=wallet.id,
+        entry_type="gateway_topup",
+        amount_vnd=amount,
+        reference_type="simulator_seed",
+        reference_id=f"{driver.id}:{uuid4()}",
+    )
+    eligibility = await du_so_du_de_sac(
+        session, driver_id=driver.id, station_id=station.id
+    )
+    if not eligibility.allowed:
+        raise RuntimeError(
+            f"Simulator driver {driver.email} remains wallet-ineligible after seed "
+            f"funding: {eligibility.reason}"
+        )
 
 
 async def _role(session: AsyncSession, code: str) -> Role:

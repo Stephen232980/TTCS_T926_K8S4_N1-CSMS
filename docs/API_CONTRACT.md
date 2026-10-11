@@ -598,6 +598,22 @@ Chọn đúng measurand/phase/location. Power chuẩn hoá về W, Current về 
 Voltage về V; không dùng các đại lượng này như chỉ số điện năng. Đơn vị
 không hỗ trợ hoặc giá trị không hợp lệ không được suy thành số đo 0.
 
+## S-38 / T-105 — Wallet rejection at charging boundaries
+
+`POST /api/v1/driver/charging/start` rejects an ineligible wallet with HTTP 409
+and `detail` equal to `wallet_low`, `wallet_missing`, `wallet_locked`, or
+`tariff_unavailable`, before creating a start/control request or sending OCPP.
+An existing request ID still replays its persisted result without another command.
+
+If eligibility changes before StartTransaction, the matching virtual-tag request
+becomes `status: "Rejected"`, `session_id: null`, `deadline: null`, with persisted
+`rejection_reason` equal to the same reason codes. `reply_status` remains the
+RemoteStart command result (which may be `Accepted`). The additive nullable
+`rejection_reason` field is returned by start responses/replays and by
+`start_request` in current/SSE snapshots. A late command reply does not overwrite
+the wallet denial. No charging session is created. Physical-card rejections do not
+terminate an unrelated virtual-tag request. T-106 owns UI reason mapping/top-up.
+
 ## S-35 / T-93 — Driver wallet topups
 
 - `POST /api/v1/driver/wallet/topups`: `driver.wallet.topup`, `own_wallet`, driver; body chỉ có amount_vnd nguyên. Ngưỡng mặc định 10.000–5.000.000 đồng, cấu hình bằng WALLET_TOPUP_MIN_VND/WALLET_TOPUP_MAX_VND. Body/query chỉ định wallet_id/driver_id trả 403.

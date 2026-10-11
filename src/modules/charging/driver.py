@@ -20,6 +20,7 @@ from src.modules.ocpp.connection_registry import ocpp_connections
 from src.modules.ocpp.control_models import ControlRequest
 from src.modules.ocpp.monitoring import database_time
 from src.modules.stations.models import ChargePoint, Connector, Station
+from src.modules.wallet.eligibility import du_so_du_de_sac
 from src.platform.database.session import SessionFactory
 
 START_CONFIRMATION_SECONDS = 60
@@ -75,6 +76,7 @@ def start_result(request: DriverStartRequest) -> dict[str, object]:
         "id": request.id,
         "status": status,
         "reply_status": request.reply_status,
+        "rejection_reason": request.rejection_reason,
         "session_id": request.session_id,
         "deadline": request.lease_until if status == "Accepted" else None,
     }
@@ -163,6 +165,13 @@ async def remote_start(
                 409,
                 "Đầu nối đang bận, được đặt chỗ hoặc chưa sẵn sàng. Vui lòng chọn đầu nối khác.",
             )
+        eligibility = await du_so_du_de_sac(
+            session, driver_id=driver_id, station_id=charger.station_id
+        )
+        if not eligibility.allowed:
+            if eligibility.reason is None:
+                raise RuntimeError("Ineligible wallet has no rejection reason")
+            raise HTTPException(status_code=409, detail=eligibility.reason)
         connection = await ocpp_connections.get(charger.code.strip().lower())
         observed_at = await database_time(session)
         online = (
@@ -226,7 +235,7 @@ async def remote_start(
             outcome = await control.command_status(session, request_id)
             completed.reply_status = outcome
             completed.reply_at = received
-            if completed.status != "Started":
+            if completed.status not in ("Started", "Rejected"):
                 completed.status = outcome
                 completed.lease_until = (
                     received + timedelta(seconds=START_CONFIRMATION_SECONDS)
@@ -234,6 +243,41 @@ async def remote_start(
                     else received
                 )
         return start_result(completed)
+
+
+async def reject_remote_start(
+    session: AsyncSession, connector: Connector, card: ChargingCard | None, reason: str
+) -> None:
+    """A wallet denial terminates only the matching virtual-tag start request.
+
+    The OCPP dispatcher already holds charger/connector locks. Keep the command
+    reply separate: a charger may accept RemoteStart but fail authorization later.
+    """
+    if card is None:
+        return
+    tag = await session.scalar(
+        select(DriverVirtualTag).where(DriverVirtualTag.card_id == card.id)
+    )
+    if tag is None:
+        return
+    request = await session.scalar(
+        select(DriverStartRequest)
+        .where(
+            DriverStartRequest.driver_id == card.driver_id,
+            DriverStartRequest.connector_id == connector.id,
+            DriverStartRequest.session_id.is_(None),
+            DriverStartRequest.status.in_(
+                ["Pending", "Accepted", "StartNotConfirmed", "Timeout", "Disconnected"]
+            ),
+        )
+        .order_by(DriverStartRequest.created_at.desc())
+        .limit(1)
+        .with_for_update()
+    )
+    if request is not None:
+        request.status = "Rejected"
+        request.rejection_reason = reason
+        request.lease_until = datetime.now(UTC)
 
 
 async def attach_remote_start(
