@@ -24,7 +24,7 @@ describe('T-82 invoice snapshots', () => {
     expect(screen.getByText(/Quy tắc làm tròn/)).toHaveTextContent(invoice.rounding_rule!)
     expect(screen.getByText(/Số đo tại ranh giới/)).toBeTruthy()
   })
-  it.each(['needs_review', 'pending', 'in_progress'] as const)('hides amounts for %s even if a response contains money', async status => {
+  it.each(['needs_review', 'pending', 'in_progress', 'awaiting_unplug'] as const)('hides amounts for %s even if a response contains money', async status => {
     render(<DriverInvoicePage sessionId={42} api={apiFor({...invoice,status})} onOpen={vi.fn()} onBack={vi.fn()} />)
     await screen.findByText(/chưa có số tiền được xác nhận/)
     expect(screen.queryByText(/Tổng cộng/)).toBeNull()
@@ -40,6 +40,15 @@ describe('T-82 invoice snapshots', () => {
     await screen.findByText(/Tổng cộng/)
     finish(invoice)
     await waitFor(() => expect(screen.getByText(/Tổng cộng/)).toHaveTextContent('0 đ'))
+  })
+  it('explains unplug waiting and reloads the final invoice after release', async () => {
+    const api = apiFor(invoice)
+    vi.mocked(api.get).mockResolvedValueOnce({...invoice, status: 'awaiting_unplug'})
+    render(<DriverInvoicePage sessionId={42} api={api} onOpen={vi.fn()} onBack={vi.fn()} />)
+    expect(await screen.findByText(/Đã dừng sạc, đang chờ xác nhận rút súng/)).toBeTruthy()
+    expect(screen.queryByText(/Tổng cộng/)).toBeNull()
+    await userEvent.setup().click(screen.getByRole('button', {name: 'Kiểm tra lại'}))
+    expect(await screen.findByText(/Tổng cộng/)).toHaveTextContent('3.500 đ')
   })
   it('opens selected session and paginates invoice candidates', async () => {
     const api:DriverInvoiceApi={get:vi.fn(),list:vi.fn().mockResolvedValue({items:[invoice],next_cursor:42})}

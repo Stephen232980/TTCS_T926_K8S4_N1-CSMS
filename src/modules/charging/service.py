@@ -9,6 +9,7 @@ from decimal import Decimal
 from sqlalchemy import case, literal, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.config import settings
 from src.modules.charging.meter_units import UNITS, numeric_sample
 from src.modules.charging.models import (
     AuthorizationAttempt,
@@ -18,6 +19,7 @@ from src.modules.charging.models import (
     MeterSample,
     PendingChargingMessage,
 )
+from src.modules.charging.occupation import flag, note_stop
 from src.modules.charging.payloads import (
     AuthorizePayload,
     MeterBlock,
@@ -266,8 +268,22 @@ async def store_recovery_samples(
 async def start_transaction(
     session: AsyncSession, charger: ChargePoint, frame: Frame, payload: StartPayload
 ) -> dict[str, object]:
+    # Invoice closure locks session -> station. Lock the prior session before
+    # station here too, so reuse cannot deadlock against an in-flight invoice.
+    previous = await session.scalar(
+        select(ChargingSession)
+        .join(Connector, Connector.id == ChargingSession.connector_id)
+        .where(
+            ChargingSession.charge_point_id == charger.id,
+            Connector.connector_number == payload.connectorId,
+            Connector.archived_at.is_(None),
+        )
+        .order_by(ChargingSession.id.desc())
+        .limit(1)
+        .with_for_update(of=ChargingSession)
+    )
     # Serialize the first session with station-timezone changes. The dispatcher
-    # already locks the charger; keep charger -> station -> connector lock order.
+    # already holds the charger lock.
     await session.scalar(
         select(Station.id).where(Station.id == charger.station_id).with_for_update()
     )
@@ -302,6 +318,13 @@ async def start_transaction(
             "ocpp_open_session_replaced transaction=%s charger=%s", old.id, charger.id
         )
         await session.flush()
+    if (
+        previous is not None
+        and previous.billing_lifecycle_version == 1
+        and previous.ended_at is not None
+        and previous.connector_released_at is None
+    ):
+        flag(previous, "occupation_replaced_before_release")
     transaction = ChargingSession(
         charge_point_id=charger.id,
         connector_id=connector.id,
@@ -311,6 +334,9 @@ async def start_transaction(
         started_at=payload.timestamp,
         meter_start_wh=Decimal(payload.meterStart),
         review_reasons=[],
+        release_detection="available"
+        if settings.billing_available_confirms_unplug
+        else "explicit",
     )
     if result != "Accepted":
         review(transaction, "authorization_" + result.lower())
@@ -490,6 +516,7 @@ async def stop_transaction(
         transaction.energy_kwh = (
             Decimal(payload.meterStop) - transaction.meter_start_wh
         ) / Decimal(1000)
+    await note_stop(session, transaction)
     return {}
 
 

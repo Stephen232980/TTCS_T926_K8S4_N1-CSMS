@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.billing.idle_fee import tinh_phi_chiem_tru
 from src.modules.billing.models import Invoice, InvoiceLine
 from src.modules.billing.segmentation import MeterValue, TariffFrame, chia_doan
-from src.modules.charging.models import ChargingSession, MeterSample
+from src.modules.charging.models import ChargingSession, MeterSample, OccupationInterval
 from src.modules.pricing.bands import BandInput, TariffBandsError, kiem_khung_gio
 from src.modules.pricing.models import Tariff, TariffBand
 from src.modules.pricing.service import (
@@ -23,11 +23,18 @@ from src.modules.pricing.service import (
 )
 from src.modules.stations.models import ChargePoint, Connector, Station
 
-ROUNDING_RULE = (
+LEGACY_ROUNDING_RULE = (
     "Tiền điện: làm tròn nửa lên đến đồng nguyên ở từng đoạn rồi cộng tổng. "
     "Phí chiếm trụ: khoảng cuối đã ghi nhận đến StopTransaction; trừ ân hạn một lần "
     "theo biểu giá lúc bắt đầu chiếm trụ, làm tròn lên theo phút một lần; "
     "mỗi phút bắt đầu dùng biểu giá hiệu lực theo ngày địa phương của trạm."
+)
+ROUNDING_RULE = (
+    "Tiền điện: làm tròn nửa lên đến đồng nguyên ở từng đoạn rồi cộng tổng. "
+    "Phí chiếm trụ: khoảng đã xác nhận kết thúc sạc đến lúc rút súng; "
+    "trừ ân hạn một lần theo biểu giá lúc bắt đầu khoảng liên tục, "
+    "làm tròn lên theo phút một lần; mỗi phút bắt đầu dùng biểu giá "
+    "hiệu lực theo ngày địa phương của trạm. Khoảng tạm dừng rồi sạc lại không thu phí."
 )
 MAX_VND = 2**63 - 1
 MINUTE = timedelta(minutes=1)
@@ -144,8 +151,10 @@ def _idle_lines(
     end: datetime,
     versions: dict[date, Tariff],
     invoice_id: UUID,
+    *,
+    idle_start: datetime | None = None,
 ) -> list[InvoiceLine]:
-    idle = charging.idle_since
+    idle = idle_start if idle_start is not None else charging.idle_since
     if idle is None:
         return []
     if idle < charging.started_at or idle > end:
@@ -216,7 +225,30 @@ async def _create_invoice(
     if end <= charging.started_at:
         raise _InvalidInvoice("invoice_invalid_interval")
     readings = await _meter_values(db, charging, end)
-    versions, frames = await _daily_tariffs(db, station, charging.started_at, end)
+    billing_end = end
+    intervals: list[OccupationInterval] = []
+    if charging.billing_lifecycle_version == 1:
+        assert charging.connector_released_at is not None
+        intervals = list(
+            await db.scalars(
+                select(OccupationInterval)
+                .where(
+                    OccupationInterval.session_id == charging.id,
+                    OccupationInterval.confirmed.is_(True),
+                )
+                .order_by(OccupationInterval.started_at)
+            )
+        )
+        if len(intervals) > 1 or any(
+            i.ended_at != charging.connector_released_at or i.end_reason != "released"
+            for i in intervals
+        ):
+            raise _InvalidInvoice("invoice_invalid_occupation_history")
+        if intervals:
+            billing_end = max(end, charging.connector_released_at)
+    versions, frames = await _daily_tariffs(
+        db, station, charging.started_at, billing_end
+    )
     # Numeric(24,6) readings may use all 24 digits; avoid caller Decimal contexts.
     with localcontext() as ctx:
         ctx.prec = 50
@@ -233,7 +265,9 @@ async def _create_invoice(
         driver_id=charging.driver_id,
         station_id=station.id,
         total_vnd=0,
-        rounding_rule=ROUNDING_RULE,
+        rounding_rule=ROUNDING_RULE
+        if charging.billing_lifecycle_version == 1
+        else LEGACY_ROUNDING_RULE,
     )
     lines = [
         InvoiceLine(
@@ -251,7 +285,19 @@ async def _create_invoice(
         )
         for s in segments
     ]
-    lines += _idle_lines(charging, station, end, versions, invoice.id)
+    if charging.billing_lifecycle_version == 0:
+        lines += _idle_lines(charging, station, end, versions, invoice.id)
+    else:
+        for interval in intervals:
+            assert interval.ended_at is not None
+            lines += _idle_lines(
+                charging,
+                station,
+                interval.ended_at,
+                versions,
+                invoice.id,
+                idle_start=interval.started_at,
+            )
     total = sum(line.amount_vnd for line in lines)
     if total > MAX_VND or any(line.amount_vnd > MAX_VND for line in lines):
         raise _InvalidInvoice("invoice_amount_overflow")
@@ -286,6 +332,11 @@ async def lap_hoa_don(db: AsyncSession, session_id: int) -> InvoiceResult:
     existing = await db.scalar(select(Invoice).where(Invoice.session_id == session_id))
     if existing is not None:
         return InvoiceResult("ready", existing)
+    if (
+        charging.billing_lifecycle_version == 1
+        and charging.connector_released_at is None
+    ):
+        return InvoiceResult("pending", reason="invoice_awaiting_unplug")
     end = charging.ended_at
     try:
         async with db.begin_nested():

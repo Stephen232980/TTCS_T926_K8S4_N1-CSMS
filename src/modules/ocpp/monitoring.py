@@ -12,6 +12,7 @@ from sqlalchemy.orm.attributes import set_committed_value
 from sqlalchemy.sql.elements import ColumnElement
 
 from src.modules.charging.models import ChargingSession
+from src.modules.charging.occupation import note_offline_gap, note_status
 from src.modules.stations.models import ChargePoint, Connector, ConnectorError
 
 logger = logging.getLogger("csms.ocpp")
@@ -120,6 +121,8 @@ async def lock_and_mark_seen(
                 updated_at=Connector.updated_at,
             )
         )
+        if last_seen is not None:
+            await note_offline_gap(session, charger_id)
     return cast(ChargePoint, charger)
 
 
@@ -176,6 +179,8 @@ async def mark_seen(
                 updated_at=Connector.updated_at,
             )
         )
+        if last_seen is not None:
+            await note_offline_gap(session, charger_id)
     if locked_charger is not None:
         set_committed_value(locked_charger, "last_seen_at", now)
 
@@ -189,6 +194,8 @@ async def expire_chargers(session: AsyncSession, now: datetime | None = None) ->
             .with_for_update(skip_locked=True)
         )
     )
+    for charger_id in stale:
+        await note_offline_gap(session, charger_id)
     await session.execute(
         update(Connector)
         .where(
@@ -212,7 +219,7 @@ async def expire_chargers(session: AsyncSession, now: datetime | None = None) ->
 
 async def report_status(
     session: AsyncSession, charger: ChargePoint, status: StatusPayload
-) -> None:
+) -> bool:
     now = datetime.now(UTC)
     if status.connectorId == 0:
         await session.execute(
@@ -226,7 +233,7 @@ async def report_status(
                 status_updated_at=now,
             )
         )
-        return
+        return False
     statement = update(Connector).where(
         Connector.charge_point_id == charger.id,
         Connector.connector_number == status.connectorId,
@@ -258,13 +265,15 @@ async def report_status(
                 charger.id,
                 status.connectorId,
             )
-        return
+        return False
     # Without source time we cannot safely infer an idle interval or its ordering.
+    await note_status(session, connector_id, status.status, status.timestamp)
     if status.timestamp is not None and status.status in {"SuspendedEV", "Charging"}:
         idle_update = update(ChargingSession).where(
             ChargingSession.connector_id == connector_id,
             ChargingSession.ended_at.is_(None),
             ChargingSession.started_at <= status.timestamp,
+            ChargingSession.billing_lifecycle_version == 0,
         )
         if status.status == "SuspendedEV":
             idle_update = idle_update.where(
@@ -283,3 +292,4 @@ async def report_status(
                 details=status.info,
             )
         )
+    return True

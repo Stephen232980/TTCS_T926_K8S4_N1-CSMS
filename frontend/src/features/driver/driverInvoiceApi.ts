@@ -1,6 +1,6 @@
 import { notifySessionUnauthorized } from '../auth/sessionEvents'
 
-export type InvoiceStatus = 'ready' | 'pending' | 'needs_review' | 'in_progress'
+export type InvoiceStatus = 'ready' | 'pending' | 'needs_review' | 'in_progress' | 'awaiting_unplug'
 export interface InvoiceSummary {
   session_id: number
   station_name: string

@@ -11,8 +11,9 @@ def tinh_phi_chiem_tru(
 ) -> tuple[int, int]:
     """Return (billable minutes, whole VND) after grace, rounding minutes up.
 
-    session_end is the StopTransaction end time. Missing idle_since means
-    no idle fee. Aware timestamps are compared as actual instants in UTC.
+    session_end is the verified occupation end (unplug), or the legacy
+    StopTransaction bound. Missing idle_since means no idle fee. Aware
+    timestamps are compared as actual instants in UTC.
     """
     for name, value in (
         ("grace_minutes", grace_minutes),

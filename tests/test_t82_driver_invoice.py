@@ -32,6 +32,7 @@ async def sample(db, *, review=False, invoice=True, total=3500, existing_driver=
         meter_start_wh=0,
         meter_stop_wh=1000,
         review_reasons=["meter_decreased"] if review else [],
+        billing_lifecycle_version=0,  # Existing API fixtures represent legacy snapshots.
     )
     db.add(charging)
     await db.flush()
