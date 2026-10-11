@@ -58,6 +58,33 @@ describe('HttpAuthApi', () => {
     })
   })
 
+  it('logs out with cookie credentials', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(null, { status: 204 }),
+    )
+
+    await new HttpAuthApi('http://localhost:8001/').logout()
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:8001/api/v1/auth/logout',
+      { method: 'POST', credentials: 'include' },
+    )
+  })
+
+  it('preserves the current session when logout fails', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ detail: 'service_unavailable' }), {
+        status: 503,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+
+    await expect(new HttpAuthApi().logout()).rejects.toMatchObject({
+      status: 503,
+      detail: 'service_unavailable',
+    })
+  })
+
   it('preserves the backend status and detail for login errors', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ detail: 'Email hoặc mật khẩu không đúng' }), {

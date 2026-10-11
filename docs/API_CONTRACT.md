@@ -1,5 +1,13 @@
 # API contract CSMS
 
+Phân quyền endpoint cập nhật 05/10/2026: xem [contract phạm vi và chuyển API](ENDPOINT_AUTHORIZATION_DELIVERY.md). Các endpoint `/stations`, `/charge-points`, `/charging` (đọc/quản lý thẻ), `/ocpp/connections` cũ là alias chủ trạm, luôn `owned`; vận hành dùng `/api/v1/ops/...`, quản trị đọc dùng `/api/v1/admin/...`, kế toán đọc phiên dùng `/api/v1/accounting/...`. Reset/RemoteStop/đóng tay chỉ cần vai trò operator, admin đơn thuần không được gửi lệnh. Đây là quy tắc hiện hành thay thế các mô tả quyền chung trong phần lịch sử bên dưới.
+
+API quản trị tài khoản bổ sung ngày 05/10/2026: xem
+[contract, quy tắc và kiểm chứng](ADMIN_ACCOUNT_API_DELIVERY.md).
+Nhóm endpoint `/api/v1/admin/accounts` và `/api/v1/admin/roles` chỉ dành cho
+admin. Nhóm tiếp theo bổ sung đọc nhật ký tài khoản và sức khỏe hệ thống:
+[contract và định nghĩa chỉ số](ADMIN_MONITORING_API_DELIVERY.md).
+
 Trạng thái: baseline cho frontend và backend, chốt ngày 26/09/2026.
 
 Tài liệu này định nghĩa contract HTTP mà frontend có thể dùng để phát triển. OpenAPI của
@@ -130,7 +138,7 @@ Thành công: `204 No Content`. Endpoint có tính idempotent: gọi khi không 
 
 ### 4.3. Người dùng hiện tại
 
-Contract đề xuất cho một cải tiến độc lập sau T-06; endpoint chưa được triển khai:
+Endpoint đã triển khai, lấy tài khoản và quyền hiện tại từ DB:
 
 ```text
 GET /api/v1/auth/me
@@ -142,19 +150,24 @@ Thành công `200 OK`:
 {
   "id": "8cc86d88-43a8-4d14-a32b-b7c49749694f",
   "email": "owner@example.com",
-  "roles": ["station_owner"]
+  "roles": ["station_owner"],
+  "default_role": "station_owner"
 }
 ```
 
 Quy tắc:
 
 - `roles` luôn là mảng, sắp xếp tăng dần để response ổn định.
+- `default_role` là vai trò đã được cấp hoặc `null`; chỉ chọn khu vực mở đầu,
+  không thay đổi quyền/phạm vi dữ liệu.
 - Không trả session token, password hash hoặc thông tin khóa đăng nhập.
 - Session thiếu, sai hoặc hết hạn trả `401 authentication_required`.
 - Endpoint này chỉ yêu cầu đã đăng nhập; không áp một role cụ thể.
 
-T-06 đã cung cấp cơ chế nội bộ `CurrentActor` gồm `user_id` và `roles`. Repository cần lấy
-thêm email hoặc endpoint truy vấn user theo `user_id` để tạo response trên.
+`PUT /api/v1/auth/default-role` nhận `{ "role": "admin" }`, trả cùng kiểu dữ
+liệu như `/auth/me`; chỉ lưu cho tài khoản đang đăng nhập. Vai trò chưa được
+cấp hoặc trường lạ trả 422. Cần migration `e030007a2026`.
+Xem [lựa chọn khu vực và vai trò mặc định](DEFAULT_ROLE_DELIVERY.md).
 
 ## 5. Station
 
@@ -183,10 +196,10 @@ task có migration/contract rõ ràng; frontend phải có fallback hiển thị
 GET /api/v1/stations?page=1&page_size=20&status=active&search=quan%201
 ```
 
-Role: `station_owner`, `operator`, `admin`.
+Role đường dẫn cũ: `station_owner`; đường dẫn `/ops` cho `operator`, `/admin` cho `admin`.
 
 - `station_owner` chỉ nhận station thuộc chính mình.
-- `operator` và `admin` nhận dữ liệu theo scope được backend quy định.
+- Scope route chủ trạm luôn `owned`, kể cả tài khoản có thêm vai trò admin/operator.
 - `search` tìm theo tên và địa chỉ, tối đa 100 ký tự.
 - Response dùng cấu trúc phân trang chung, `items` là mảng station.
 
@@ -196,10 +209,10 @@ Role: `station_owner`, `operator`, `admin`.
 GET /api/v1/stations/{station_id}
 ```
 
-Role: `station_owner`, `operator`, `admin`.
+Role đường dẫn cũ: `station_owner`; đường dẫn `/ops` cho `operator`, `/admin` cho `admin`.
 
 - `station_owner` chỉ đọc được station thuộc chính mình.
-- `operator` và `admin` đọc theo global scope.
+- Scope toàn hệ thống chỉ ở route `/ops` hoặc `/admin` tương ứng.
 - Station không tồn tại trả `404 resource_not_found`.
 - Station tồn tại nhưng nằm ngoài ownership scope trả `403 permission_denied` và ghi
   security log không chứa dữ liệu nhạy cảm.
@@ -280,7 +293,39 @@ Response `200 OK`:
 
 Kết quả này chỉ hỗ trợ UX; backend vẫn phải kiểm tra unique constraint khi tạo.
 
-### 6.2. Tạo charge point và connector
+### 6.2. Danh sách charge point theo station
+
+```text
+GET /api/v1/stations/{station_id}/charge-points?page=1&page_size=20
+```
+
+Quy tắc:
+
+- `station_owner` chỉ xem được charge point thuộc station do mình sở hữu.
+- Vận hành/quản trị xem toàn cục qua route riêng `/ops` và `/admin` tương ứng.
+- `page` bắt đầu từ 1; `page_size` từ 1 đến 100.
+- Charge point được sắp theo thời gian tạo mới nhất; connector trong từng charge point
+  được sắp theo `connector_number` tăng dần.
+- Station không tồn tại trả `404 resource_not_found`.
+- Station tồn tại nhưng nằm ngoài ownership scope trả `403 permission_denied` và ghi
+  security log.
+
+Response `200 OK`:
+
+```json
+{
+  "items": [],
+  "page": 1,
+  "page_size": 20,
+  "total": 0,
+  "total_pages": 0
+}
+```
+
+Mỗi phần tử trong `items` dùng schema charge point và connector như response tạo mới
+bên dưới, bao gồm `code_locked_at`.
+
+### 6.3. Tạo charge point và connector
 
 ```text
 POST /api/v1/stations/{station_id}/charge-points
@@ -337,7 +382,7 @@ Response:
 }
 ```
 
-### 6.3. Sửa mã charge point
+### 6.4. Sửa mã charge point
 
 ```text
 PATCH /api/v1/charge-points/{charge_point_id}
@@ -376,8 +421,186 @@ Quy tắc:
 | --- | --- |
 | Login/logout | Đã triển khai trên `main`; error shape chưa theo chuẩn chung |
 | Session lookup + RBAC | Đã triển khai trên `main` qua T-06 |
-| `GET /auth/me` | Đã chốt contract đề xuất; chưa triển khai |
+| `GET /auth/me` | Đã triển khai; trả vai trò hiện tại và mặc định |
 | Station list/create/update | Đã chốt baseline, chờ T-07/T-08/T-09 |
 | Charge point/code availability | Đã chốt baseline, chờ T-10/T-11 |
 | Error contract chung | Đã chốt baseline, chưa triển khai exception handler |
 
+
+## Kết nối OCPP và màn hình vận hành
+
+WebSocket: /ocpp/{charge_point_code}, subprotocol ocpp1.6.
+GET /api/v1/ocpp/connections?page=1&page_size=50 dành cho owner; operator/admin dùng route `/ops/ocpp/connections` hoặc `/admin/ocpp/connections`;
+owner chỉ thấy trụ thuộc trạm của mình, driver nhận 403. page >= 1, page_size
+từ 1 đến 100. Trả items/total/page/total_pages và dữ liệu kết nối/Boot;
+xem [hợp đồng chi tiết](OCPP_FOUNDATION_DELIVERY.md).
+Các action OCPP ngoài BootNotification hiện trả NotImplemented sau Boot.
+
+Boot replay: nếu phản hồi đã lưu là `Accepted` nhưng trạm hiện đã bị khóa
+hoặc lưu trữ, trả `CALLRESULT` với `status=Rejected`, `currentTime` hiện tại
+và `interval` cấu hình. Socket không được chấp nhận Boot; không ghi đè cache
+cũ. Khi trạm khả dụng trở lại, replay có thể nhận phản hồi cũ. Phản hồi Boot
+đã lưu là `Rejected` giữ nguyên; muốn xin chấp nhận lại cần message ID mới.
+Xem quy tắc S-08/S-14 trong hợp đồng chi tiết ở trên.
+
+
+## Bản đồ vị trí trạm — điều chỉnh 02/10/2026
+
+Chủ trạm chọn vị trí trên bản đồ thay cho nhập kinh độ/vĩ độ. POST/PATCH trạm vẫn gửi `latitude`/`longitude` dưới dạng number, giữ nguyên ràng buộc và DB; UI không hiện tọa độ thô.
+
+`GET /api/v1/driver/stations?page=1&page_size=100&search=...` cần phiên đăng nhập có role `driver`. Chỉ trả trạm `active` và `archived_at IS NULL`. Các field item: `id`, `name`, `address`, `latitude`, `longitude`; không trả `owner_id`, dữ liệu quản lý hay tài chính. Response gồm `items`, `page`, `total`, `total_pages`. Page >= 1, page_size 1..100, search tối đa 100 ký tự, tìm tên/địa chỉ không phân biệt hoa thường. 401/403/422 theo hành vi hiện tại. Tài xế vẫn không có quyền gọi API quản lý trạm.
+
+Đây là phần vị trí được làm sớm của S-47, chưa trả giá hoặc số đầu nối rảnh. API đang dùng DB CSMS, không lấy danh sách trạm ngoài hệ thống.
+
+## Nhóm giám sát S-09–S-12
+
+Nhóm 2 bổ sung Heartbeat, trạng thái/lỗi đầu nối, offline theo lần liên lạc cuối
+và màn hình SSE tự nối lại. Xem [phạm vi, API và kiểm chứng](OCPP_MONITORING_DELIVERY.md).
+Cần nâng migration a721093e4f62 trước khi chạy. Bằng chứng hiện là kiểm thử
+cục bộ; trạng thái Jira/CI và nghiệm thu được kiểm tra riêng.
+
+## Nhóm 3: phiên sạc OCPP
+
+S-15, S-17, S-18, S-19, S-20 bổ sung xác thực thẻ, phiên sạc, số đo và kiểm tra dữ liệu; có màn hình quản lý phiên/thẻ/chờ đối chiếu dùng API thật. Nâng migration d830a62f194b trước khi chạy. Xem [Coverage Matrix, API, kiểm chứng và demo thủ công](OCPP_CHARGING_DELIVERY.md). Đối chiếu/xử lý pending, đóng tay và điều khiển từ xa thuộc các nhóm tiếp theo. Bằng chứng local không thay thế Jira/CI.
+
+
+## Nhóm 4: phục hồi phiên sạc
+
+S-21 và S-25 bổ sung giữ phiên khi nối lại, nhận tin/số đo muộn theo transactionId, đánh dấu bất thường khi offline quá ngưỡng (mặc định 6 giờ), đóng tay có lý do và lịch sử. Giao diện có bộ lọc bất thường, xác nhận đóng tay và quyền đọc cho kế toán. Nâng migration e41b9027c6a8 trước khi chạy. Xem [AC, API, cấu hình và kiểm thử thủ công](OCPP_RECOVERY_DELIVERY.md). Đóng tay hồ sơ không gửi lệnh dừng tới trụ; pending không khớp vẫn không tự gán phiên. Bằng chứng local không thay Jira/CI.
+
+## Nhóm 5: điều khiển từ xa
+
+S-16, S-23, S-27 thêm Reset, dừng phiên từ xa và nhật ký bất biến. Operator gửi lệnh; admin lọc nhật ký. Accepted không tự đóng phiên; chờ StopTransaction thật, sau 2 phút thiếu tin kết thúc thì cần kiểm tra. Nâng migration f52c813d7a09. Xem [AC, API và test thủ công](OCPP_CONTROL_DELIVERY.md). Bằng chứng local không thay Jira/CI.
+
+## Nhóm 6: tài xế theo dõi và bắt đầu sạc
+
+S-22 và S-24 thêm phiên hiện tại theo tài khoản đăng nhập, cập nhật kWh/thời gian và bắt đầu bằng thẻ ảo qua RemoteStartTransaction. Accepted chờ StartTransaction thật; thiếu xác nhận sau 60 giây cho thử lại. Đầu nối bận/Reserved bị chặn; quyền sở hữu đặt chỗ thuộc phần đặt chỗ sau. Nâng migration c60318a4d962. Xem [AC, API và kiểm thử thủ công](DRIVER_CHARGING_DELIVERY.md). Bằng chứng local không thay Jira/CI.
+
+
+## Realtime phiên tài xế
+
+`GET /api/v1/driver/charging/current/events` dùng cookie `session`, quyền
+`driver.current`, scope `own`, role `driver`. Trả `text/event-stream` với
+`Cache-Control: no-store` và `X-Accel-Buffering: no`. 401/403 trước khi mở
+stream theo kiểm tra đăng nhập/quyền hiện hành.
+
+Message mặc định chứa `{session, start_request}` như API current. Mỗi lần
+kết nối/nối lại nhận full snapshot mới nhất. Backend đọc snapshot đã commit
+mỗi 0,5 giây, phát dữ liệu khi phiên, số đo hoặc yêu cầu bắt đầu thay đổi;
+các lượt khác gửi comment keepalive. `retry: 1000` hướng dẫn nối lại.
+`elapsed_seconds` là thời gian tại snapshot; trình duyệt tăng đồng hồ tại
+chỗ. Stream phản ánh trạng thái mới nhất, không phát lại mọi số đo theo
+Last-Event-ID. Thông tin phiên luôn tra theo tài khoản đăng nhập.
+
+Cookie, thời hạn, trạng thái tài khoản và role được kiểm tra lại mỗi chu kỳ.
+Mất quyền phát `event: access-denied` với `data: {}` rồi đóng stream.
+
+## Bổ sung API phục vụ thiết kế chủ trạm
+
+Ảnh đại diện trạm, tên trụ và cấu hình danh định đầu nối được mô tả trong [OWNER_UI_API_DELIVERY.md](OWNER_UI_API_DELIVERY.md). Migration `a4d901ce8207` bổ sung ảnh trạm. Đây là mở rộng API cho thiết kế đã chốt, chưa triển khai giao diện và không thay các story biểu giá/phân bổ công suất/doanh thu/đổi trạng thái trạm.
+
+## Quản trị nạp ví theo phiếu thu
+
+`POST /api/v1/admin/drivers/{driver_id}/wallet/manual-topups` dùng cookie
+`session`, quyền `admin.wallet.manual_topup`, phạm vi `all`, chỉ admin hoạt động.
+
+Body: `{"amount_vnd": 500000, "receipt_code": "PT-001"}`. Tiền phải là số
+nguyên dương (không nhận boolean, số lẻ hay chuỗi); tối đa mặc định 10.000.000
+đồng, cấu hình `WALLET_MANUAL_TOPUP_MAX_VND`. Mã phiếu 1–128 ký tự sau khi bỏ
+khoảng trắng ở hai đầu, phân biệt hoa/thường; từ chối trường thừa.
+
+201 trả `ledger_id`, `wallet_id`, `driver_id`, `amount_vnd`,
+`balance_after_vnd`, `receipt_code`, `actor_id`, `created_at`. Số dư trả về là
+số dư ngay sau dòng nạp này. Một giao dịch ghi cả sổ cái và nhật ký; không
+nạp nếu không ghi được nhật ký. Không tự tạo ví cho tài xế chưa có ví.
+
+401 chưa đăng nhập; 403 không đủ quyền; 404 `resource_not_found` nếu không
+có ví; 409 `receipt_already_used` nếu mã phiếu đã dùng, hoặc `wallet_locked`
+nếu ví khoá; 422 với tên trường `amount_vnd` nếu vượt giới hạn/tràn số dư,
+và lỗi schema cho các đầu vào sai khác. Gửi lại cùng phiếu, kể cả cùng ví và
+số tiền, trả 409. Mã phiếu duy nhất toàn hệ thống trong loại `manual_topup`;
+hai request cùng phiếu đồng thời chỉ một request thành công.
+
+## Quản trị đối chiếu ví
+
+Ba lệnh dưới đây dùng cookie `session`, scope `all`, chỉ admin hoạt động.
+Tất cả ghi audit cùng giao dịch nghiệp vụ. Ví không tồn tại trả 404;
+chưa đăng nhập trả 401, không đủ quyền trả 403. Chưa có giao diện.
+
+| Method/path | Quyền | Body | Kết quả |
+| --- | --- | --- | --- |
+| POST `/api/v1/admin/wallets/{wallet_id}/repair-cache` | admin.wallet.repair_cache | `{"reason":"Đã kiểm sổ cái"}` | 200: wallet_id, balance_vnd, status |
+| POST `/api/v1/admin/wallets/{wallet_id}/unlock` | admin.wallet.unlock | Không có | 200: wallet_id, balance_vnd, status |
+| POST `/api/v1/admin/wallets/{wallet_id}/adjustments` | admin.wallet.adjust | `{"amount_vnd":-5000,"reason":"Điều chỉnh đã duyệt","audit_id":"UUID-mới"}` | 201: ledger_id, wallet_id, audit_id, amount_vnd, balance_after_vnd |
+
+`reason` là chuỗi 1–500 ký tự sau trim. Điều chỉnh nhận số nguyên khác 0
+trong BIGINT, không nhận boolean, chuỗi hoặc số lẻ; từ chối trường thừa.
+`audit_id` là mã idempotency do người gọi tạo, đồng thời là `wallet_audits.id`
+và mã tham chiếu sổ cái. Gửi lại cùng mã, ví, người, số tiền và lý do trả
+dòng cũ; đổi một trong các dữ liệu đó trả 409 `adjustment_conflict`.
+
+Sửa cache kiểm các hoá đơn `debited` dưới khoá dòng ví rồi đặt số dư bằng
+tổng sổ cái, không thêm dòng tiền hoặc mở khoá. Điều chỉnh ghi được vào ví
+khoá nhưng yêu cầu cache khớp tổng sổ cái trước khi ghi; không tự mở khoá.
+Mở khoá kiểm lại cả số dư và các hoá đơn `debited` dưới khoá dòng ví.
+Nếu còn lỗi, trả 409 với detail
+`{"code":"wallet_checks_failed","checks":["invoice_debit_count"]}` và giữ khoá.
+
+Các mã kiểm tra: balance_mismatch, ledger_total_overflow, invoice_driver_mismatch,
+invoice_debit_count, invoice_debit_wallet, invoice_debit_type,
+invoice_debit_reference, invoice_debit_amount. Số tiền trừ phải bằng âm
+invoice.total_vnd; đúng một dòng charging_debit với reference_type
+charging_session và reference_id là mã phiên dạng chuỗi chuẩn.
+
+Sửa cache hoặc mở khoá đã đạt trạng thái mong muốn không tạo thêm audit.
+Adjustment không thay thế dòng trừ phí sai/thiếu, nên không làm các kiểm tra
+hoá đơn sai trở thành đạt chỉ vì số dư tổng đã khớp.
+
+
+## Nhóm trạng thái đầu nối
+
+Các response đầu nối trong API quản lý trạm/trụ, snapshot/SSE theo dõi OCPP
+và `GET /api/v1/driver/stations/{station_id}/connectors` có thêm
+`status_group` (chỉ đọc, tính từ `status`). Trường `status` và trạng thái
+OCPP chi tiết giữ nguyên hợp đồng hiện tại.
+
+| status | status_group | Ý nghĩa hiển thị |
+| --- | --- | --- |
+| Available | available | Rảnh |
+| Preparing, Charging, SuspendedEV, SuspendedEVSE, Finishing | occupied | Đang sử dụng |
+| Reserved | reserved | Đặt chỗ |
+| Unavailable | unavailable | Không khả dụng |
+| Faulted | faulted | Lỗi |
+| unknown, NULL hoặc giá trị không nhận diện | unknown | Chưa rõ |
+
+API theo dõi ngoại tuyến trả `status='unknown'` và `status_group='unknown'`
+kể cả khi database còn quan sát Available cũ. Các API cấu hình đầu nối
+vẫn mô tả trạng thái được lưu; nhóm tổng hợp không phải quyền bắt đầu sạc.
+Quyết định bắt đầu phiên tiếp tục kiểm trạm, liên lạc, đầu nối và phiên mở
+ở dịch vụ hiện hành, không dựa vào status_group.
+
+StatusNotification không hợp lệ tiếp tục nhận PropertyConstraintViolation,
+không ghi đè trạng thái hợp lệ. Log chẩn đoán chỉ ghi mã trụ nội bộ và mã
+sự kiện; không ghi payload hoặc giá trị trạng thái tuỳ ý. Không thêm bảng
+hay cột trạng thái tổng hợp.
+
+## Hợp đồng đơn vị số đo phiên sạc
+
+`GET /api/v1/charging/sessions/{transaction_id}/samples` trả số đo đã chuẩn
+hoá khi nhận OCPP. Với `measurand=Energy.Active.Import.Register`, `unit`
+là `Wh`; `value` là chỉ số công tơ tích luỹ dạng chuỗi Decimal, tối đa sáu
+chữ số thập phân Wh. Đầu vào 1 kWh và 1000 Wh đều trả value tương đương
+1000 Wh. Đơn vị gốc không còn là đơn vị của giá trị trả về.
+
+Đầu đọc tính tiền sử dụng giá trị Wh trực tiếp, lấy hiệu chỉ số và chỉ
+chia 1000 khi chuyển phần chênh lệch sang kWh; không nhân 1000 lần nữa.
+Chọn đúng measurand/phase/location. Power chuẩn hoá về W, Current về A,
+Voltage về V; không dùng các đại lượng này như chỉ số điện năng. Đơn vị
+không hỗ trợ hoặc giá trị không hợp lệ không được suy thành số đo 0.
+
+## S-35 / T-93 — Driver wallet topups
+
+- `POST /api/v1/driver/wallet/topups`: `driver.wallet.topup`, `own_wallet`, driver; body chỉ có amount_vnd nguyên. Ngưỡng mặc định 10.000–5.000.000 đồng, cấu hình bằng WALLET_TOPUP_MIN_VND/WALLET_TOPUP_MAX_VND. Body/query chỉ định wallet_id/driver_id trả 403.
+- `GET /api/v1/driver/wallet/topups/{order_id}`: `driver.wallet.topup.read`, `own_wallet`, driver; đọc status/reason của lệnh cùng driver_id. Lệnh lạ hoặc của người khác cùng trả 404.
+- Chưa có adapter: 503, không tạo lệnh. Timeout/lỗi sau khi gửi: 503 với detail.order_id, giữ pending đã commit để hỏi trạng thái; không tự retry POST và không cộng ví.
+- POST thành công trả 201 với order_id, amount_vnd, status, reason, created_at, redirect_url. GET trả cùng dữ liệu trừ redirect_url. Adapter T-92 chưa tích hợp; dùng gateway thử trong kiểm thử. Chi tiết ở [T93_WALLET_TOPUP_API.md](T93_WALLET_TOPUP_API.md).

@@ -189,3 +189,39 @@ typecheck, migration hoặc build thất bại; cần đổi ngoài backlog; c�
 đã merge; cần thao tác phá huỷ dữ liệu; cần push/merge/force-push chưa được phép;
 hoặc không thể chứng minh một AC. Không hiển thị `.env`, password, token, cookie,
 secret hoặc connection string thật.
+
+## Nền tảng OCPP Sprint 2–3
+
+Nhóm kết nối OCPP (S-06/07/08/13/14) được giao cùng màn hình Kết nối trụ.
+Xem [phạm vi, Coverage Matrix và cách kiểm thử](OCPP_FOUNDATION_DELIVERY.md). Registry hiện chạy
+một process; nâng migration trước khi khởi động. Kiểm tra trạng thái Jira riêng
+trước nghiệm thu. Phần bản đồ tài xế đã được tích hợp cùng trên nhánh cục bộ.
+
+
+## Điều chỉnh Sprint 2–3 (02/10/2026)
+
+Theo quyết định của người dùng, Sprint 2–3 triển khai theo chức năng với đầu ra DB/API/giao diện chạy thật. Quy tắc một story một nhánh và không làm sớm backlog tương lai được điều chỉnh trong phạm vi [kế hoạch chức năng](SPRINT_2_3_FUNCTION_PLAN.md); AC/NFR của story vẫn được giữ để đối chiếu. Bản đồ vị trí trạm cho tài xế được làm sớm theo yêu cầu mentor.
+
+## Nhóm giám sát S-09–S-12
+
+Nhóm 2 bổ sung Heartbeat, trạng thái/lỗi đầu nối, offline theo lần liên lạc cuối
+và màn hình SSE tự nối lại. Xem [phạm vi, API và kiểm chứng](OCPP_MONITORING_DELIVERY.md).
+Cần nâng migration a721093e4f62 trước khi chạy. Bằng chứng hiện là kiểm thử
+cục bộ; trạng thái Jira/CI và nghiệm thu được kiểm tra riêng.
+
+## Nhóm 3: phiên sạc OCPP
+
+S-15, S-17, S-18, S-19, S-20 bổ sung xác thực thẻ, phiên sạc, số đo và kiểm tra dữ liệu; có màn hình quản lý phiên/thẻ/chờ đối chiếu dùng API thật. Nâng migration d830a62f194b trước khi chạy. Xem [Coverage Matrix, API, kiểm chứng và demo thủ công](OCPP_CHARGING_DELIVERY.md). Đối chiếu/xử lý pending, đóng tay và điều khiển từ xa thuộc các nhóm tiếp theo. Bằng chứng local không thay thế Jira/CI.
+
+
+## Nhóm 4: phục hồi phiên sạc
+
+S-21 và S-25 bổ sung giữ phiên khi nối lại, nhận tin/số đo muộn theo transactionId, đánh dấu bất thường khi offline quá ngưỡng (mặc định 6 giờ), đóng tay có lý do và lịch sử. Giao diện có bộ lọc bất thường, xác nhận đóng tay và quyền đọc cho kế toán. Nâng migration e41b9027c6a8 trước khi chạy. Xem [AC, API, cấu hình và kiểm thử thủ công](OCPP_RECOVERY_DELIVERY.md). Đóng tay hồ sơ không gửi lệnh dừng tới trụ; pending không khớp vẫn không tự gán phiên. Bằng chứng local không thay Jira/CI.
+
+## Nhóm 5: điều khiển từ xa
+
+S-16, S-23, S-27 thêm Reset, dừng phiên từ xa và nhật ký bất biến. Operator/admin gửi lệnh; admin lọc nhật ký. Accepted không tự đóng phiên; chờ StopTransaction thật, sau 2 phút thiếu tin kết thúc thì cần kiểm tra. Nâng migration f52c813d7a09. Xem [AC, API và test thủ công](OCPP_CONTROL_DELIVERY.md). Bằng chứng local không thay Jira/CI.
+
+## Nhóm 6: tài xế theo dõi và bắt đầu sạc
+
+S-22 và S-24 thêm phiên hiện tại theo tài khoản đăng nhập, cập nhật kWh/thời gian và bắt đầu bằng thẻ ảo qua RemoteStartTransaction. Accepted chờ StartTransaction thật; thiếu xác nhận sau 60 giây cho thử lại. Đầu nối bận/Reserved bị chặn; quyền sở hữu đặt chỗ thuộc phần đặt chỗ sau. Nâng migration c60318a4d962. Xem [AC, API và kiểm thử thủ công](DRIVER_CHARGING_DELIVERY.md). Bằng chứng local không thay Jira/CI.

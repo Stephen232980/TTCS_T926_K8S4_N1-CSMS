@@ -2,6 +2,10 @@ class StationOwnershipDeniedError(Exception):
     pass
 
 
+class StationTimezoneLockedError(Exception):
+    pass
+
+
 class StationIdempotencyConflictError(Exception):
     pass
 
@@ -15,4 +19,8 @@ class ChargePointCodeLockedError(Exception):
 
 
 class ChargePointOwnershipDeniedError(Exception):
+    pass
+
+
+class ConnectorConfigurationNotFoundError(Exception):
     pass

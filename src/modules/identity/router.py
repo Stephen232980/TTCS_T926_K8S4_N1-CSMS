@@ -12,10 +12,14 @@ from fastapi import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
+from src.modules.identity.authorization import AccessPolicy, access_policy, user_policy
 from src.modules.identity.dependencies import CurrentActorDependency
+from src.modules.identity.policy_routing import PolicyRoute
 from src.modules.identity.repository import IdentityRepository
+from src.modules.identity.role_assignment import get_default_role, set_default_role
 from src.modules.identity.schemas import (
     CurrentUserResponse,
+    DefaultRoleRequest,
     LoginRequest,
     LoginResponse,
 )
@@ -26,7 +30,7 @@ from src.modules.identity.service import (
 )
 from src.platform.database.session import get_db_session
 
-router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
+router = APIRouter(route_class=PolicyRoute, prefix="/api/v1/auth", tags=["auth"])
 
 DatabaseSession = Annotated[AsyncSession, Depends(get_db_session)]
 
@@ -44,6 +48,7 @@ def build_auth_service(db_session: AsyncSession) -> AuthService:
 
 
 @router.post("/login", response_model=LoginResponse)
+@access_policy(AccessPolicy("public", note="S-02 credentials checked by login service"))
 async def login(
     payload: LoginRequest,
     request: Request,
@@ -84,6 +89,7 @@ async def login(
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+@access_policy(AccessPolicy("public", note="Idempotent cookie/session revocation"))
 async def logout(
     response: Response,
     db_session: DatabaseSession,
@@ -105,6 +111,15 @@ async def logout(
 
 
 @router.get("/me", response_model=CurrentUserResponse)
+@user_policy(
+    "identity.me.read",
+    "own",
+    "admin",
+    "operator",
+    "accountant",
+    "station_owner",
+    "driver",
+)
 async def get_current_user(
     response: Response,
     actor: CurrentActorDependency,
@@ -124,4 +139,25 @@ async def get_current_user(
         id=user.id,
         email=user.email,
         roles=sorted(actor.roles),
+        default_role=await get_default_role(db_session, actor.user_id),
     )
+
+
+@router.put("/default-role", response_model=CurrentUserResponse)
+@user_policy(
+    "identity.default_role.choose",
+    "own",
+    "admin",
+    "operator",
+    "accountant",
+    "station_owner",
+    "driver",
+)
+async def choose_default_role(
+    payload: DefaultRoleRequest,
+    response: Response,
+    actor: CurrentActorDependency,
+    db_session: DatabaseSession,
+) -> CurrentUserResponse:
+    await set_default_role(db_session, actor.user_id, payload.role)
+    return await get_current_user(response, actor, db_session)

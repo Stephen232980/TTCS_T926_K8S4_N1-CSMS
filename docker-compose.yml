@@ -1,3 +1,11 @@
+# S-26: update this pinned tag/build argument together when the simulator changes.
+x-s26-simulator-build: &s26_simulator_build
+  context: .
+  dockerfile: simulator/Dockerfile
+  args:
+    OCPP_VERSION: ${SIMULATOR_OCPP_VERSION:-2.1.0}
+    WEBSOCKETS_VERSION: ${SIMULATOR_WEBSOCKETS_VERSION:-15.0.1}
+
 services:
   app:
     build:
@@ -6,6 +14,15 @@ services:
     container_name: csms-app
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      CHARGING_MINIMUM_KWH: ${CHARGING_MINIMUM_KWH:-5}
+      WALLET_RESERVE_VND: ${WALLET_RESERVE_VND:-10000}
+      WALLET_RECONCILIATION_INTERVAL_SECONDS: ${WALLET_RECONCILIATION_INTERVAL_SECONDS:-300}
+      WALLET_TOPUP_MIN_VND: ${WALLET_TOPUP_MIN_VND:-10000}
+      WALLET_TOPUP_MAX_VND: ${WALLET_TOPUP_MAX_VND:-5000000}
+      PAYMENT_GATEWAY: ${PAYMENT_GATEWAY:-disabled}
+      PAYMENT_WEBHOOK_SECRET: ${PAYMENT_WEBHOOK_SECRET:-}
+      PAYMENT_RETURN_URL: ${PAYMENT_RETURN_URL:-http://localhost:5173/wallet/topup/return}
+      PAYMENT_FAKE_BASE_URL: ${PAYMENT_FAKE_BASE_URL:-http://localhost:8000}
     ports:
       - "8001:8000"
     depends_on:
@@ -14,7 +31,7 @@ services:
     command:
       - sh
       - -c
-      - alembic upgrade head && exec uvicorn src.entrypoints.http:app --host 0.0.0.0 --port 8000
+      - alembic upgrade head && python scripts/create_test_accounts.py && exec uvicorn src.entrypoints.http:app --host 0.0.0.0 --port 8000
     healthcheck:
       test:
         [
@@ -36,7 +53,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -45,6 +62,84 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
-  
+
+  # S-26: seed a namespaced fleet only after migrations and the API are ready.
+  simulator-seed:
+    profiles: ["simulator"]
+    build: *s26_simulator_build
+    image: csms-ocpp-simulator:${SIMULATOR_OCPP_VERSION:-2.1.0}
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      SIMULATOR_COUNT: ${SIMULATOR_COUNT:-20}
+      SIMULATOR_CODE_PREFIX: ${SIMULATOR_CODE_PREFIX:-SIM-}
+      SIMULATOR_TAG_PREFIX: ${SIMULATOR_TAG_PREFIX:-SIMTAG-}
+      OCPP_URL: ws://app:8000
+      SIMULATOR_OPERATOR_PASSWORD: ${SIMULATOR_OPERATOR_PASSWORD:-}
+    depends_on:
+      app:
+        condition: service_healthy
+    command: ["python", "-m", "simulator.seed"]
+    restart: "no"
+
+  # S-26: run the deterministic reconnect scenario and keep sockets online for verification.
+  simulator:
+    profiles: ["simulator"]
+    build: *s26_simulator_build
+    image: csms-ocpp-simulator:${SIMULATOR_OCPP_VERSION:-2.1.0}
+    environment:
+      SIMULATOR_COUNT: ${SIMULATOR_COUNT:-20}
+      SIMULATOR_CODE_PREFIX: ${SIMULATOR_CODE_PREFIX:-SIM-}
+      SIMULATOR_TAG_PREFIX: ${SIMULATOR_TAG_PREFIX:-SIMTAG-}
+      SIMULATOR_SCENARIO: recovery
+      SIMULATOR_RANDOM_SEED: ${SIMULATOR_RANDOM_SEED:-2600}
+      SIMULATOR_MAX_RECONNECTS: ${SIMULATOR_MAX_RECONNECTS:-3}
+      SIMULATOR_HOLD_SECONDS: ${SIMULATOR_HOLD_SECONDS:-45}
+      SIMULATOR_HEARTBEAT_SECONDS: ${SIMULATOR_HEARTBEAT_SECONDS:-2}
+      SIMULATOR_REPORT_PATH: /reports/simulator-results.json
+      OCPP_URL: ws://app:8000
+    volumes:
+      - ./.local/simulator-reports:/reports
+    depends_on:
+      simulator-seed:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "from simulator.reporting import report_ready; raise SystemExit(not report_ready('/reports/simulator-results.json'))",
+        ]
+      interval: 1s
+      timeout: 3s
+      retries: 60
+      start_period: 5s
+    command: ["python", "-m", "simulator.client"]
+    restart: "no"
+
+  # S-26: fail Compose/CI with per-charger detail after simulator writes its report.
+  simulator-verify:
+    profiles: ["simulator"]
+    build: *s26_simulator_build
+    image: csms-ocpp-simulator:${SIMULATOR_OCPP_VERSION:-2.1.0}
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      CSMS_HTTP_URL: http://app:8000
+      SIMULATOR_COUNT: ${SIMULATOR_COUNT:-20}
+      SIMULATOR_CODE_PREFIX: ${SIMULATOR_CODE_PREFIX:-SIM-}
+      SIMULATOR_TAG_PREFIX: ${SIMULATOR_TAG_PREFIX:-SIMTAG-}
+      SIMULATOR_SCENARIO: recovery
+      SIMULATOR_REPORT_PATH: /reports/simulator-results.json
+      SIMULATOR_VERIFY_TIMEOUT_SECONDS: ${SIMULATOR_VERIFY_TIMEOUT_SECONDS:-180}
+      SIMULATOR_OPERATOR_PASSWORD: ${SIMULATOR_OPERATOR_PASSWORD:-}
+    volumes:
+      - ./.local/simulator-reports:/reports
+    depends_on:
+      simulator:
+        condition: service_healthy
+    command: ["python", "-m", "simulator.verify"]
+    restart: "no"
+
+
 volumes:
   postgres_data:

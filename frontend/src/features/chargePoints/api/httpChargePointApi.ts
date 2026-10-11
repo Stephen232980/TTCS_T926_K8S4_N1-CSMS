@@ -2,12 +2,19 @@ import type {
   ChargePoint,
   ChargePointCodeAvailability,
   ChargePointInput,
+  ChargePointPage,
+  ChargePointUpdate,
   Connector,
 } from '../model/chargePoint'
 import { ChargePointApiError, type ChargePointApi } from './chargePointApi'
 import { notifySessionUnauthorized } from '../../auth/sessionEvents'
 
 interface ConnectorResponse {
+  connector_type?: string | null
+  current_type?: 'AC' | 'DC' | null
+  max_power_kw?: string | null
+  voltage?: string | null
+  amperage?: string | null
   id: string
   connector_number: number
   status: string
@@ -16,11 +23,15 @@ interface ConnectorResponse {
 }
 
 interface ChargePointResponse {
+  vendor?: string | null
+  model?: string | null
+  firmware_version?: string | null
   id: string
   station_id: string
   code: string
   name: string | null
   status: string
+  code_locked_at: string | null
   connectors: ConnectorResponse[]
   created_at: string
   updated_at: string
@@ -29,6 +40,14 @@ interface ChargePointResponse {
 interface CodeAvailabilityResponse {
   code: string
   available: boolean
+}
+
+interface ChargePointListResponse {
+  items: ChargePointResponse[]
+  page: number
+  page_size: number
+  total: number
+  total_pages: number
 }
 
 interface ErrorResponse {
@@ -56,6 +75,11 @@ function mapConnector(response: ConnectorResponse): Connector {
     status: response.status,
     createdAt: response.created_at,
     updatedAt: response.updated_at,
+    connectorType: response.connector_type,
+    currentType: response.current_type,
+    maxPowerKw: response.max_power_kw,
+    voltage: response.voltage,
+    amperage: response.amperage,
   }
 }
 
@@ -66,19 +90,50 @@ function mapChargePoint(response: ChargePointResponse): ChargePoint {
     code: response.code,
     name: response.name,
     status: response.status,
+    codeLockedAt: response.code_locked_at,
+    vendor: response.vendor,
+    model: response.model,
+    firmwareVersion: response.firmware_version,
     connectors: response.connectors.map(mapConnector),
     createdAt: response.created_at,
     updatedAt: response.updated_at,
   }
 }
 
-const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''
+const configuredBaseUrl =
+  import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''
 
 export class HttpChargePointApi implements ChargePointApi {
   private readonly baseUrl: string
+  private readonly area: '' | 'ops'
 
-  constructor(baseUrl = configuredBaseUrl) {
+  constructor(baseUrl = configuredBaseUrl, area: '' | 'ops' = '') {
     this.baseUrl = baseUrl.replace(/\/$/, '')
+    this.area = area
+  }
+
+  async listChargePoints(
+    stationId: string,
+    page = 1,
+    pageSize = 20,
+    signal?: AbortSignal,
+  ): Promise<ChargePointPage> {
+    const searchParams = new URLSearchParams({
+      page: String(page),
+      page_size: String(pageSize),
+    })
+    const response = await fetch(
+      `${this.baseUrl}/api/v1${this.area ? `/${this.area}` : ''}/stations/${encodeURIComponent(stationId)}/charge-points?${searchParams.toString()}`,
+      { credentials: 'include', signal },
+    )
+    const payload = await parseResponse<ChargePointListResponse>(response)
+    return {
+      items: payload.items.map(mapChargePoint),
+      page: payload.page,
+      pageSize: payload.page_size,
+      total: payload.total,
+      totalPages: payload.total_pages,
+    }
   }
 
   async checkCodeAvailability(
@@ -106,7 +161,7 @@ export class HttpChargePointApi implements ChargePointApi {
     input: ChargePointInput,
   ): Promise<ChargePoint> {
     const response = await fetch(
-      `${this.baseUrl}/api/v1/stations/${encodeURIComponent(stationId)}/charge-points`,
+      `${this.baseUrl}/api/v1${this.area ? `/${this.area}` : ''}/stations/${encodeURIComponent(stationId)}/charge-points`,
       {
         method: 'POST',
         credentials: 'include',
@@ -114,6 +169,30 @@ export class HttpChargePointApi implements ChargePointApi {
         body: JSON.stringify({
           code: input.code,
           connector_count: input.connectorCount,
+          ...(input.name !== undefined ? { name: input.name } : {}),
+          ...(input.connectors !== undefined
+            ? { connectors: input.connectors }
+            : {}),
+        }),
+      },
+    )
+
+    return mapChargePoint(await parseResponse<ChargePointResponse>(response))
+  }
+
+  async updateChargePoint(
+    chargePointId: string,
+    input: ChargePointUpdate,
+  ): Promise<ChargePoint> {
+    const response = await fetch(
+      `${this.baseUrl}/api/v1/charge-points/${encodeURIComponent(chargePointId)}`,
+      {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...input,
+          ...(input.code !== undefined ? { code: input.code.trim() } : {}),
         }),
       },
     )

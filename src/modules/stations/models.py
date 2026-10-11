@@ -10,6 +10,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     Numeric,
     String,
     UniqueConstraint,
@@ -18,6 +19,10 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from src.modules.identity.models import User
+from src.modules.stations.timezones import (
+    DEFAULT_STATION_TIMEZONE,
+    validate_station_timezone,
+)
 from src.platform.database.base import Base
 
 
@@ -46,6 +51,16 @@ class Station(Base):
     )
     name: Mapped[str] = mapped_column(String(150), nullable=False)
     address: Mapped[str] = mapped_column(String(500), nullable=False)
+    photo_data: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True)
+    photo_mime: Mapped[str | None] = mapped_column(String(30))
+    photo_digest: Mapped[str | None] = mapped_column(String(64))
+
+    @property
+    def photo_url(self) -> str | None:
+        if self.photo_digest is None:
+            return None
+        return f"/api/v1/stations/{self.id}/photo?v={self.photo_digest}"
+
     latitude: Mapped[Decimal] = mapped_column(Numeric(9, 6), nullable=False)
     longitude: Mapped[Decimal] = mapped_column(Numeric(10, 6), nullable=False)
     status: Mapped[str] = mapped_column(
@@ -56,8 +71,8 @@ class Station(Base):
     )
     timezone: Mapped[str] = mapped_column(
         String(64),
-        default="Asia/Ho_Chi_Minh",
-        server_default="Asia/Ho_Chi_Minh",
+        default=DEFAULT_STATION_TIMEZONE,
+        server_default=DEFAULT_STATION_TIMEZONE,
         nullable=False,
     )
     archived_at: Mapped[datetime | None] = mapped_column(
@@ -77,6 +92,11 @@ class Station(Base):
     )
 
     owner: Mapped[User] = relationship(User)
+
+    @validates("timezone")
+    def validate_timezone(self, _key: str, value: str) -> str:
+        return validate_station_timezone(value)
+
     charge_points: Mapped[list[ChargePoint]] = relationship(
         "ChargePoint",
         back_populates="station",
@@ -109,6 +129,10 @@ class ChargePoint(Base):
     __table_args__ = (
         Index("ix_charge_points_code", "code", unique=True),
         Index("ix_charge_points_station_id", "station_id"),
+        Index("ix_charge_points_last_seen_at", "last_seen_at"),
+        CheckConstraint(
+            "heartbeat_interval_seconds > 0", name="ck_charge_points_heartbeat_positive"
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
@@ -130,6 +154,15 @@ class ChargePoint(Base):
     last_seen_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
+    )
+    heartbeat_interval_seconds: Mapped[int] = mapped_column(
+        Integer, default=60, server_default="60", nullable=False
+    )
+    raw_ocpp_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    vendor_error_code: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    error_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
     last_boot_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
@@ -222,6 +255,9 @@ class Connector(Base):
         nullable=False,
     )
     raw_ocpp_status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    last_status_notification_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
     status_updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

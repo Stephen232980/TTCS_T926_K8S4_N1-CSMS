@@ -43,4 +43,22 @@ describe('StationFilters', () => {
 
     expect(onStatusChange).toHaveBeenCalledWith('active')
   })
+
+  it('offers the operational statuses introduced by S-05', () => {
+    render(
+      <StationFilters
+        search=""
+        status=""
+        onSearchChange={() => undefined}
+        onStatusChange={() => undefined}
+      />,
+    )
+
+    expect(screen.getByRole('option', { name: 'Tạm ngưng' })).toHaveValue(
+      'suspended',
+    )
+    expect(screen.getByRole('option', { name: 'Đã khóa' })).toHaveValue(
+      'blocked',
+    )
+  })
 })

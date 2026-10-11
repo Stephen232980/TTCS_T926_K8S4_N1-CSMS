@@ -9,13 +9,23 @@ interface StationListProps {
   onEdit: (station: Station) => void
   onClearFilters: () => void
   onRetry: () => void
+  onCreate: () => void
+  hasActiveFilters: boolean
+  canManageStations: boolean
+}
+
+const statusLabels: Record<StationStatus, string> = {
+  active: 'Đang hoạt động',
+  inactive: 'Chưa hoạt động',
+  suspended: 'Tạm ngưng',
+  blocked: 'Đã khóa',
 }
 
 function StatusBadge({ status }: { status: StationStatus }) {
   return (
     <span className={`status-badge status-badge--${status}`}>
       <span aria-hidden="true" />
-      {status === 'active' ? 'Đang hoạt động' : 'Chưa hoạt động'}
+      {statusLabels[status]}
     </span>
   )
 }
@@ -24,7 +34,8 @@ function StationCards({
   stations,
   onView,
   onEdit,
-}: Pick<StationListProps, 'stations' | 'onView' | 'onEdit'>) {
+  canManageStations,
+}: Pick<StationListProps, 'stations' | 'onView' | 'onEdit' | 'canManageStations'>) {
   return (
     <div className="station-cards">
       {stations.map((station) => (
@@ -33,10 +44,6 @@ function StationCards({
             <div><h2>{station.name}</h2><p>{station.address}</p></div>
             <StatusBadge status={station.status} />
           </div>
-          <dl>
-            <div><dt>Vĩ độ</dt><dd>{station.latitude.toFixed(4)}</dd></div>
-            <div><dt>Kinh độ</dt><dd>{station.longitude.toFixed(4)}</dd></div>
-          </dl>
           <div className="station-card__actions">
             <button
               className="text-button"
@@ -46,13 +53,15 @@ function StationCards({
               Xem chi tiết
               <Icon name="chevronRight" />
             </button>
-            <button
-              className="text-button text-button--muted"
-              type="button"
-              onClick={() => onEdit(station)}
-            >
-              <Icon name="edit" /> Chỉnh sửa
-            </button>
+            {canManageStations && (
+              <button
+                className="text-button text-button--muted"
+                type="button"
+                onClick={() => onEdit(station)}
+              >
+                <Icon name="edit" /> Chỉnh sửa
+              </button>
+            )}
           </div>
         </article>
       ))}
@@ -64,7 +73,8 @@ function StationTable({
   stations,
   onView,
   onEdit,
-}: Pick<StationListProps, 'stations' | 'onView' | 'onEdit'>) {
+  canManageStations,
+}: Pick<StationListProps, 'stations' | 'onView' | 'onEdit' | 'canManageStations'>) {
   return (
     <div className="station-table-wrap">
       <table className="station-table">
@@ -72,9 +82,8 @@ function StationTable({
           <tr>
             <th scope="col">Tên trạm</th>
             <th scope="col">Địa chỉ</th>
-            <th scope="col">Tọa độ</th>
             <th scope="col">Trạng thái</th>
-            <th scope="col"><span className="sr-only">Thao tác</span></th>
+            {canManageStations && <th scope="col"><span className="sr-only">Thao tác</span></th>}
           </tr>
         </thead>
         <tbody>
@@ -91,20 +100,19 @@ function StationTable({
                 </button>
               </td>
               <td>{station.address}</td>
-              <td className="coordinates">
-                {station.latitude.toFixed(4)}, {station.longitude.toFixed(4)}
-              </td>
               <td><StatusBadge status={station.status} /></td>
-              <td>
-                <button
-                  className="icon-button"
-                  type="button"
-                  aria-label={`Chỉnh sửa ${station.name}`}
-                  onClick={() => onEdit(station)}
-                >
-                  <Icon name="edit" />
-                </button>
-              </td>
+              {canManageStations && (
+                <td>
+                  <button
+                    className="icon-button"
+                    type="button"
+                    aria-label={`Chỉnh sửa ${station.name}`}
+                    onClick={() => onEdit(station)}
+                  >
+                    <Icon name="edit" />
+                  </button>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
@@ -121,11 +129,19 @@ export function StationList({
   onEdit,
   onClearFilters,
   onRetry,
+  onCreate,
+  hasActiveFilters,
+  canManageStations,
 }: StationListProps) {
   return (
-    <div className="data-surface" aria-live="polite">
+    <div className="data-surface" aria-live="polite" aria-busy={isLoading}>
       {isLoading ? (
-        <div className="skeleton-list" aria-label="Đang tải danh sách trạm">
+        <div
+          className="skeleton-list"
+          role="status"
+          aria-label="Đang tải danh sách trạm"
+        >
+          <span className="sr-only">Đang tải danh sách trạm</span>
           {[0, 1].map((item) => <div className="skeleton-row" key={item} />)}
         </div>
       ) : error ? (
@@ -135,16 +151,36 @@ export function StationList({
           <button type="button" onClick={onRetry}>Thử lại</button>
         </div>
       ) : stations.length === 0 ? (
-        <div className="state-message">
-          <span className="state-message__icon"><Icon name="search" /></span>
-          <h2>Không tìm thấy trạm</h2>
-          <p>Thử đổi từ khóa hoặc chọn trạng thái khác.</p>
-          <button type="button" onClick={onClearFilters}>Xóa bộ lọc</button>
-        </div>
+        hasActiveFilters ? (
+          <div className="state-message">
+            <span className="state-message__icon"><Icon name="search" /></span>
+            <h2>Không tìm thấy trạm</h2>
+            <p>Thử đổi từ khóa hoặc chọn trạng thái khác.</p>
+            <button type="button" onClick={onClearFilters}>Xóa bộ lọc</button>
+          </div>
+        ) : (
+          <div className="empty-station-onboarding">
+            <span className="empty-station-onboarding__icon">
+              <Icon name="station" />
+            </span>
+            <h2>Chưa có trạm sạc</h2>
+            <p>
+              {canManageStations
+                ? 'Tạo trạm đầu tiên để bắt đầu quản lý trụ sạc và đầu nối.'
+                : 'Hiện chưa có trạm nào trong phạm vi theo dõi.'}
+            </p>
+            {canManageStations && (
+              <button className="primary-button empty-station-onboarding__action" type="button" onClick={onCreate}>
+                <Icon name="plus" />
+                <span>Tạo trạm đầu tiên</span>
+              </button>
+            )}
+          </div>
+        )
       ) : (
         <>
-          <StationTable stations={stations} onView={onView} onEdit={onEdit} />
-          <StationCards stations={stations} onView={onView} onEdit={onEdit} />
+          <StationTable stations={stations} onView={onView} onEdit={onEdit} canManageStations={canManageStations} />
+          <StationCards stations={stations} onView={onView} onEdit={onEdit} canManageStations={canManageStations} />
         </>
       )}
     </div>

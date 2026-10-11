@@ -56,19 +56,12 @@ export function ChargePointForm({
     setSubmitError('')
   }
 
-  const handleCodeBlur = async () => {
-    const normalizedCode = code.trim()
-    const validationError = validateChargePointCode(code)
-    if (validationError) {
-      setCodeError(validationError)
-      setAvailability('idle')
-      return
-    }
+  const checkAvailability = async (normalizedCode: string): Promise<boolean> => {
     if (
       normalizedCode === lastCheckedCode &&
       (availability === 'available' || availability === 'unavailable')
     ) {
-      return
+      return availability === 'available'
     }
 
     availabilityController.current?.abort()
@@ -81,24 +74,42 @@ export function ChargePointForm({
 
     try {
       const result = await api.checkCodeAvailability(normalizedCode, controller.signal)
-      if (controller.signal.aborted || requestId !== availabilityRequest.current) return
+      if (controller.signal.aborted || requestId !== availabilityRequest.current) {
+        return false
+      }
 
       setLastCheckedCode(result.code)
       if (result.available) {
         setAvailability('available')
+        return true
       } else {
         setAvailability('unavailable')
         setCodeError('Mã trụ đã được sử dụng.')
+        return false
       }
     } catch (error: unknown) {
-      if (controller.signal.aborted || requestId !== availabilityRequest.current) return
+      if (controller.signal.aborted || requestId !== availabilityRequest.current) {
+        return false
+      }
       setAvailability('error')
       if (error instanceof ChargePointApiError && error.status === 401) {
         setCodeError('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.')
       } else {
-        setCodeError('Không thể kiểm tra mã. Rời ô nhập để thử lại.')
+        setCodeError('Không thể kiểm tra mã. Vui lòng thử lại.')
       }
+      return false
     }
+  }
+
+  const handleCodeBlur = async () => {
+    const normalizedCode = code.trim()
+    const validationError = validateChargePointCode(code)
+    if (validationError) {
+      setCodeError(validationError)
+      setAvailability('idle')
+      return
+    }
+    await checkAvailability(normalizedCode)
   }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -113,15 +124,17 @@ export function ChargePointForm({
     setSubmitError('')
 
     if (nextCodeError || nextConnectorCountError) return
-    if (availability !== 'available' || lastCheckedCode !== normalizedCode) {
-      setCodeError('Rời ô nhập để kiểm tra mã trước khi lưu.')
-      return
-    }
 
     submitInFlight.current = true
     setIsSubmitting(true)
 
     try {
+      const isCodeAvailable =
+        availability === 'available' && lastCheckedCode === normalizedCode
+          ? true
+          : await checkAvailability(normalizedCode)
+      if (!isCodeAvailable) return
+
       const created = await api.createChargePoint(stationId, {
         code: normalizedCode,
         connectorCount: Number(connectorCount),
@@ -158,7 +171,12 @@ export function ChargePointForm({
         : ''
 
   return (
-    <form className="charge-point-form" aria-label="Thêm trụ sạc" onSubmit={handleSubmit}>
+    <form
+      className="charge-point-form"
+      aria-label="Thêm trụ sạc"
+      aria-busy={isSubmitting}
+      onSubmit={handleSubmit}
+    >
       <div className="form-field">
         <label htmlFor="charge-point-code">Mã trụ</label>
         <input
@@ -178,6 +196,7 @@ export function ChargePointForm({
           id="charge-point-code-message"
           className={codeError ? 'field-error' : 'field-help'}
           role={codeError ? 'alert' : undefined}
+          aria-live="polite"
         >
           {codeError || availabilityMessage || 'Mã phải duy nhất trong toàn hệ thống.'}
         </span>
@@ -219,7 +238,11 @@ export function ChargePointForm({
           type="submit"
           disabled={isSubmitting || availability === 'checking'}
         >
-          {isSubmitting ? 'Đang thêm…' : 'Thêm trụ sạc'}
+          {availability === 'checking'
+            ? 'Đang kiểm tra mã…'
+            : isSubmitting
+              ? 'Đang thêm…'
+              : 'Thêm trụ sạc'}
         </button>
       </div>
     </form>

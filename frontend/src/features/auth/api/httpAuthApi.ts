@@ -5,6 +5,7 @@ interface CurrentUserResponse {
   id: string
   email: string
   roles: string[]
+  default_role?: string | null
 }
 
 interface ErrorResponse {
@@ -32,6 +33,15 @@ export class HttpAuthApi implements AuthApi {
     this.baseUrl = baseUrl.replace(/\/$/, '')
   }
 
+  async setDefaultRole(role: string): Promise<AuthenticatedUser> {
+    const response = await fetch(`${this.baseUrl}/api/v1/auth/default-role`, {
+      method: 'PUT', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role }),
+    })
+    const payload = await parseResponse<CurrentUserResponse>(response)
+    return { id: payload.id, email: payload.email, roles: payload.roles, defaultRole: payload.default_role }
+  }
+
   async login(input: LoginInput): Promise<void> {
     const response = await fetch(`${this.baseUrl}/api/v1/auth/login`, {
       method: 'POST',
@@ -46,6 +56,23 @@ export class HttpAuthApi implements AuthApi {
     await parseResponse<{ status: 'authenticated' }>(response)
   }
 
+  async logout(): Promise<void> {
+    const response = await fetch(`${this.baseUrl}/api/v1/auth/logout`, {
+      method: 'POST',
+      credentials: 'include',
+    })
+
+    if (!response.ok) {
+      let detail: unknown
+      try {
+        detail = ((await response.json()) as ErrorResponse).detail
+      } catch {
+        detail = undefined
+      }
+      throw new AuthApiError(response.status, detail)
+    }
+  }
+
   async getCurrentUser(signal?: AbortSignal): Promise<AuthenticatedUser> {
     const response = await fetch(`${this.baseUrl}/api/v1/auth/me`, {
       credentials: 'include',
@@ -57,6 +84,7 @@ export class HttpAuthApi implements AuthApi {
       id: payload.id,
       email: payload.email,
       roles: payload.roles,
+      ...(payload.default_role !== undefined ? { defaultRole: payload.default_role } : {}),
     }
   }
 }

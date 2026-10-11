@@ -18,6 +18,10 @@ export class MockAuthApi implements AuthApi {
     this.currentUser = defaultUser
   }
 
+  async logout(): Promise<void> {
+    this.currentUser = null
+  }
+
   async getCurrentUser(): Promise<AuthenticatedUser> {
     if (this.currentUser === null) throw new AuthApiError(401)
     return this.currentUser

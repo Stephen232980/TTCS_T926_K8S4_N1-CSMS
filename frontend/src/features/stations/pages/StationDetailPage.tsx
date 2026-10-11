@@ -1,8 +1,10 @@
+import { StationMap } from '../../../components/maps/StationMap'
 import { useEffect, useState } from 'react'
 import { Icon } from '../../../components/icons/Icon'
 import type { ChargePointApi } from '../../chargePoints/api/chargePointApi'
 import { HttpChargePointApi } from '../../chargePoints/api/httpChargePointApi'
 import { ChargePointForm } from '../../chargePoints/components/ChargePointForm'
+import { ChargePointList } from '../../chargePoints/components/ChargePointList'
 import type { ChargePoint } from '../../chargePoints/model/chargePoint'
 import { HttpStationApi, StationApiError } from '../api/httpStationApi'
 import type { StationApi } from '../api/stationApi'
@@ -10,6 +12,13 @@ import type { Station } from '../model/station'
 
 const defaultStationApi = new HttpStationApi()
 const defaultChargePointApi = new HttpChargePointApi()
+
+const stationStatusLabels: Record<Station['status'], string> = {
+  active: 'Đang hoạt động',
+  inactive: 'Chưa hoạt động',
+  suspended: 'Tạm ngưng',
+  blocked: 'Đã khóa',
+}
 
 function detailErrorMessage(error: unknown): string {
   if (error instanceof StationApiError) {
@@ -25,6 +34,7 @@ interface StationDetailPageProps {
   onBack: () => void
   api?: StationApi
   chargePointApi?: ChargePointApi
+  canManageChargePoints?: boolean
 }
 
 export function StationDetailPage({
@@ -32,6 +42,7 @@ export function StationDetailPage({
   onBack,
   api = defaultStationApi,
   chargePointApi = defaultChargePointApi,
+  canManageChargePoints = false,
 }: StationDetailPageProps) {
   const [station, setStation] = useState<Station | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -40,6 +51,7 @@ export function StationDetailPage({
   const [createdChargePoint, setCreatedChargePoint] = useState<ChargePoint | null>(
     null,
   )
+  const [chargePointReloadKey, setChargePointReloadKey] = useState(0)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -78,7 +90,13 @@ export function StationDetailPage({
       </button>
 
       {isLoading ? (
-        <div className="station-detail__loading" aria-label="Đang tải chi tiết trạm">
+        <div
+          className="station-detail__loading"
+          role="status"
+          aria-label="Đang tải chi tiết trạm"
+          aria-busy="true"
+        >
+          <span className="sr-only">Đang tải chi tiết trạm</span>
           <div className="skeleton-row" />
           <div className="skeleton-row" />
         </div>
@@ -102,35 +120,51 @@ export function StationDetailPage({
             </div>
             <span className={`status-badge status-badge--${station.status}`}>
               <span aria-hidden="true" />
-              {station.status === 'active' ? 'Đang hoạt động' : 'Chưa hoạt động'}
+              {stationStatusLabels[station.status]}
             </span>
           </header>
 
           <dl className="station-detail__facts">
             <div><dt>Mã trạm</dt><dd>{station.id}</dd></div>
-            <div><dt>Vĩ độ</dt><dd>{station.latitude.toFixed(6)}</dd></div>
-            <div><dt>Kinh độ</dt><dd>{station.longitude.toFixed(6)}</dd></div>
           </dl>
+
+          <StationMap stations={[station]} />
 
           <section className="station-detail__charge-points" aria-labelledby="charge-points-title">
             <div className="station-detail__section-heading">
               <h2 id="charge-points-title">Trụ sạc và đầu nối</h2>
-              <p>Thêm trụ sạc thuộc trạm này và khai báo số đầu nối đi kèm.</p>
+              <p>Theo dõi các trụ thuộc trạm, trạng thái đầu nối và cập nhật mã khi còn được phép.</p>
             </div>
             {createdChargePoint && (
               <div className="charge-point-created" role="status">
                 <div>
-                  <strong>Đã thêm trụ {createdChargePoint.code}</strong>
-                  <span>{createdChargePoint.connectors.length} đầu nối, trạng thái ban đầu chưa rõ</span>
+                  <strong>Đã thêm trụ sạc</strong>
+                  <span>{createdChargePoint.connectors.length} đầu nối đã được khởi tạo.</span>
                 </div>
-                <span className="status-badge status-badge--inactive">Ngoại tuyến</span>
               </div>
             )}
-            <ChargePointForm
+            <ChargePointList
+              key={chargePointReloadKey}
               stationId={station.id}
               api={chargePointApi}
-              onCreated={setCreatedChargePoint}
+              canManageChargePoints={canManageChargePoints}
             />
+            {canManageChargePoints && (
+              <>
+                <div className="station-detail__add-charge-point">
+                  <h3>Thêm trụ sạc</h3>
+                  <p>Khai báo mã trụ duy nhất và số đầu nối đi kèm.</p>
+                </div>
+                <ChargePointForm
+                  stationId={station.id}
+                  api={chargePointApi}
+                  onCreated={(chargePoint) => {
+                    setCreatedChargePoint(chargePoint)
+                    setChargePointReloadKey((value) => value + 1)
+                  }}
+                />
+              </>
+            )}
           </section>
         </>
       ) : null}

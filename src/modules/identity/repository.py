@@ -63,6 +63,8 @@ class IdentityRepository:
             .where(
                 Session.token_hash == token_hash,
                 Session.expires_at > current_time,
+                Session.revoked_at.is_(None),
+                User.status == "active",
             )
         )
         rows = (await self._db_session.execute(statement)).all()

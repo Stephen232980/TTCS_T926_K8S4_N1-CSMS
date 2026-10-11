@@ -10,8 +10,10 @@ import type { StationApi } from './stationApi'
 import { notifySessionUnauthorized } from '../../auth/sessionEvents'
 
 interface StationResponse {
+  photo_url?: string | null
   id: string
   owner_id: string
+  timezone: string
   name: string
   address: string
   latitude: number
@@ -48,6 +50,7 @@ export class StationApiError extends Error {
 function mapStation(response: StationResponse): Station {
   return {
     id: response.id,
+    timezone: response.timezone,
     name: response.name,
     address: response.address,
     latitude: response.latitude,
@@ -55,6 +58,7 @@ function mapStation(response: StationResponse): Station {
     status: response.status,
     createdAt: response.created_at,
     updatedAt: response.updated_at,
+    photoUrl: response.photo_url,
   }
 }
 
@@ -72,23 +76,27 @@ async function parseResponse<T>(response: Response): Promise<T> {
   throw new StationApiError(response.status, detail)
 }
 
-const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''
+const configuredBaseUrl =
+  import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''
 
 export class HttpStationApi implements StationApi {
   private readonly baseUrl: string
+  private readonly area: '' | 'ops'
   private readonly idempotencyKeyFactory: () => string
 
   constructor(
     baseUrl = configuredBaseUrl,
     idempotencyKeyFactory: () => string = () => crypto.randomUUID(),
+    area: '' | 'ops' = '',
   ) {
     this.baseUrl = baseUrl.replace(/\/$/, '')
+    this.area = area
     this.idempotencyKeyFactory = idempotencyKeyFactory
   }
 
   async getStation(stationId: string, signal?: AbortSignal): Promise<Station> {
     const response = await fetch(
-      `${this.baseUrl}/api/v1/stations/${encodeURIComponent(stationId)}`,
+      `${this.baseUrl}/api/v1${this.area ? `/${this.area}` : ''}/stations/${encodeURIComponent(stationId)}`,
       {
         credentials: 'include',
         signal,
@@ -111,7 +119,7 @@ export class HttpStationApi implements StationApi {
     if (query.status) searchParams.set('status', query.status)
 
     const response = await fetch(
-      `${this.baseUrl}/api/v1/stations?${searchParams.toString()}`,
+      `${this.baseUrl}/api/v1${this.area ? `/${this.area}` : ''}/stations?${searchParams.toString()}`,
       {
         credentials: 'include',
         signal,
@@ -129,7 +137,7 @@ export class HttpStationApi implements StationApi {
   }
 
   async createStation(input: StationInput): Promise<Station> {
-    const response = await fetch(`${this.baseUrl}/api/v1/stations`, {
+    const response = await fetch(`${this.baseUrl}/api/v1${this.area ? `/${this.area}` : ''}/stations`, {
       method: 'POST',
       credentials: 'include',
       headers: {
@@ -147,7 +155,7 @@ export class HttpStationApi implements StationApi {
     input: StationUpdate,
   ): Promise<Station> {
     const response = await fetch(
-      `${this.baseUrl}/api/v1/stations/${encodeURIComponent(stationId)}`,
+      `${this.baseUrl}/api/v1${this.area ? `/${this.area}` : ''}/stations/${encodeURIComponent(stationId)}`,
       {
         method: 'PATCH',
         credentials: 'include',

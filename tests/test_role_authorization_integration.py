@@ -4,7 +4,7 @@ import pytest
 from fastapi import APIRouter, Depends, FastAPI
 from fastapi.testclient import TestClient
 
-from src.modules.identity.authorization import CurrentActor, allow_roles
+from src.modules.identity.authorization import CurrentActor, user_policy
 from src.modules.identity.dependencies import authorize_request, get_current_actor
 
 
@@ -21,7 +21,7 @@ def authorization_app() -> FastAPI:
         return {"status": "should-not-run"}
 
     @router.get("/admin")
-    @allow_roles("admin")
+    @user_policy("test.manage", "all", "admin")
     async def admin_route() -> dict[str, str]:
         return {"status": "allowed"}
 

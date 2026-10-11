@@ -23,6 +23,9 @@ const defaultProps = {
   onEdit: () => undefined,
   onClearFilters: () => undefined,
   onRetry: () => undefined,
+  onCreate: () => undefined,
+  hasActiveFilters: false,
+  canManageStations: true,
 }
 
 describe('StationList', () => {
@@ -49,7 +52,7 @@ describe('StationList', () => {
     expect(onRetry).toHaveBeenCalledOnce()
   })
 
-  it('renders the empty state and clears filters', async () => {
+  it('renders the filtered empty state and clears filters', async () => {
     const user = userEvent.setup()
     const onClearFilters = vi.fn()
     render(
@@ -57,6 +60,7 @@ describe('StationList', () => {
         {...defaultProps}
         stations={[]}
         onClearFilters={onClearFilters}
+        hasActiveFilters
       />,
     )
 
@@ -64,6 +68,23 @@ describe('StationList', () => {
     await user.click(screen.getByRole('button', { name: 'Xóa bộ lọc' }))
 
     expect(onClearFilters).toHaveBeenCalledOnce()
+  })
+
+  it('onboards a new owner and opens station creation', async () => {
+    const user = userEvent.setup()
+    const onCreate = vi.fn()
+    render(
+      <StationList {...defaultProps} stations={[]} onCreate={onCreate} />,
+    )
+
+    expect(
+      screen.getByRole('heading', { name: 'Chưa có trạm sạc' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Xóa bộ lọc')).not.toBeInTheDocument()
+    await user.click(
+      screen.getByRole('button', { name: 'Tạo trạm đầu tiên' }),
+    )
+    expect(onCreate).toHaveBeenCalledOnce()
   })
 
   it('renders responsive station views and reports edit actions', async () => {
@@ -89,5 +110,32 @@ describe('StationList', () => {
     )
 
     expect(onView).toHaveBeenCalledWith(station)
+  })
+
+  it('keeps the read-only list free of create and edit actions', () => {
+    render(
+      <StationList
+        {...defaultProps}
+        stations={[]}
+        canManageStations={false}
+      />,
+    )
+
+    expect(screen.getByText('Hiện chưa có trạm nào trong phạm vi theo dõi.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Tạo trạm|Chỉnh sửa/ })).not.toBeInTheDocument()
+  })
+
+  it.each([
+    ['suspended', 'Tạm ngưng'],
+    ['blocked', 'Đã khóa'],
+  ] as const)('renders the %s station status', (status, label) => {
+    render(
+      <StationList
+        {...defaultProps}
+        stations={[{ ...station, status }]}
+      />,
+    )
+
+    expect(screen.getAllByText(label)).toHaveLength(2)
   })
 })

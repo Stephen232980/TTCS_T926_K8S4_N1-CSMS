@@ -27,17 +27,22 @@ function mutationErrorMessage(error: unknown): string {
 interface StationListPageProps {
   notice: string
   onNotice: (message: string) => void
+  onDismissNotice?: () => void
   onOpenStation?: (stationId: string) => void
   api?: StationApi
+  canManageStations?: boolean
 }
 
 export function StationListPage({
   notice,
   onNotice,
+  onDismissNotice = () => undefined,
   onOpenStation = () => undefined,
   api = defaultStationApi,
+  canManageStations = false,
 }: StationListPageProps) {
   const [stations, setStations] = useState<Station[]>([])
+  const [searchInput, setSearchInput] = useState('')
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<StationStatus | ''>('')
   const [page, setPage] = useState(1)
@@ -52,6 +57,19 @@ export function StationListPage({
   const [submitError, setSubmitError] = useState('')
   const submitInFlight = useRef(false)
   const pageSize = 2
+  const hasActiveFilters = Boolean(search.trim() || status)
+
+  useEffect(() => {
+    if (searchInput === search) return
+    const timeoutId = window.setTimeout(() => {
+      setIsLoading(true)
+      setError('')
+      setPage(1)
+      setSearch(searchInput)
+    }, 300)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [search, searchInput])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -85,9 +103,13 @@ export function StationListPage({
 
   const resultSummary = useMemo(() => {
     if (isLoading) return 'Đang đồng bộ dữ liệu trạm…'
-    if (total === 0) return 'Không có trạm phù hợp'
+    if (total === 0) {
+      return hasActiveFilters
+        ? 'Không có trạm phù hợp bộ lọc'
+        : ''
+    }
     return `${total} trạm trong phạm vi quản lý`
-  }, [isLoading, total])
+  }, [hasActiveFilters, isLoading, total])
 
   const prepareRequest = () => {
     setIsLoading(true)
@@ -95,8 +117,14 @@ export function StationListPage({
   }
 
   const handleSearch = (value: string) => {
+    setSearchInput(value)
+  }
+
+  const handleClearFilters = () => {
     prepareRequest()
-    setSearch(value)
+    setSearchInput('')
+    setSearch('')
+    setStatus('')
     setPage(1)
   }
 
@@ -186,26 +214,36 @@ export function StationListPage({
       <div className="page-heading">
         <div>
           <h1 id="page-title">Trạm sạc</h1>
-          <p>{resultSummary}</p>
+          {resultSummary && <p>{resultSummary}</p>}
         </div>
-        <button
-          className="primary-button"
-          type="button"
-          onClick={openCreateForm}
-          disabled={isSubmitting}
-        >
-          <Icon name="plus" />
-          <span>Tạo trạm</span>
-        </button>
+        {canManageStations && (total > 0 || hasActiveFilters) && (
+          <button
+            className="primary-button"
+            type="button"
+            aria-label="Tạo trạm"
+            onClick={openCreateForm}
+            disabled={isSubmitting}
+          >
+            <Icon name="plus" />
+            <span>Tạo trạm</span>
+          </button>
+        )}
       </div>
 
       {notice && (
         <div className="notice" role="status">
-          {notice}
+          <span>{notice}</span>
+          <button
+            type="button"
+            aria-label="Đóng thông báo"
+            onClick={onDismissNotice}
+          >
+            <Icon name="close" />
+          </button>
         </div>
       )}
 
-      {isCreateFormOpen && (
+      {canManageStations && isCreateFormOpen && (
         <StationForm
           mode="create"
           isSubmitting={isSubmitting}
@@ -215,7 +253,7 @@ export function StationListPage({
         />
       )}
 
-      {editingStation && (
+      {canManageStations && editingStation && (
         <StationForm
           key={editingStation.id}
           mode="edit"
@@ -227,12 +265,14 @@ export function StationListPage({
         />
       )}
 
-      <StationFilters
-        search={search}
-        status={status}
-        onSearchChange={handleSearch}
-        onStatusChange={handleStatus}
-      />
+      {(total > 0 || hasActiveFilters) && (
+        <StationFilters
+          search={searchInput}
+          status={status}
+          onSearchChange={handleSearch}
+          onStatusChange={handleStatus}
+        />
+      )}
 
       <StationList
         stations={stations}
@@ -240,11 +280,11 @@ export function StationListPage({
         error={error}
         onView={(station) => onOpenStation(station.id)}
         onEdit={openEditForm}
-        onClearFilters={() => {
-          handleSearch('')
-          handleStatus('')
-        }}
+        onClearFilters={handleClearFilters}
         onRetry={handleRetry}
+        onCreate={openCreateForm}
+        hasActiveFilters={hasActiveFilters}
+        canManageStations={canManageStations}
       />
 
       {!isLoading && !error && totalPages > 0 && (

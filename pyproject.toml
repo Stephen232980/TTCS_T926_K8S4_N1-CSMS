@@ -16,13 +16,15 @@ dependencies = [
     "pydantic-settings",
     "argon2-cffi>=23.1",
     "email-validator>=2.0",
+    "Pillow>=11,<13",
+    "tzdata",
+    "httpx>=0.28,<1",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest",
     "pytest-asyncio",
-    "httpx",
     "ruff",
     "mypy",
 ]
@@ -35,10 +37,13 @@ asyncio_mode = "auto"
 target-version = "py312"
 line-length = 88
 
+[tool.ruff.lint]
+ignore = ["EXE002"]
+
 [tool.mypy]
 python_version = "3.12"
 strict = true
 plugins = ["pydantic.mypy"]
 
 [tool.setuptools.packages.find]
-include = ["src*"]
+include = ["src*", "simulator*"]

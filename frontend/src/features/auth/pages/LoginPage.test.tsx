@@ -7,6 +7,7 @@ import { LoginPage } from './LoginPage'
 
 class LoginTestApi implements AuthApi {
   login = vi.fn<(input: LoginInput) => Promise<void>>()
+  logout = vi.fn<() => Promise<void>>()
 
   async getCurrentUser(): Promise<AuthenticatedUser> {
     throw new Error('Not used by LoginPage')
@@ -24,6 +25,7 @@ describe('LoginPage', () => {
     expect(screen.getByText('Vui lòng nhập email.')).toBeInTheDocument()
     expect(screen.getByText('Vui lòng nhập mật khẩu.')).toBeInTheDocument()
     expect(api.login).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Email')).toHaveFocus()
   })
 
   it('submits valid credentials once and reports success', async () => {

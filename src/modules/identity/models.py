@@ -3,7 +3,17 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, func
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    func,
+    text,
+)
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from src.platform.database.base import Base
@@ -94,7 +104,18 @@ class Role(Base):
 
 class UserRole(Base):
     __tablename__ = "user_roles"
-    __table_args__ = (Index("ix_user_roles_role_id", "role_id"),)
+    __table_args__ = (
+        Index("ix_user_roles_role_id", "role_id"),
+        Index(
+            "uq_user_roles_default",
+            "user_id",
+            unique=True,
+            postgresql_where=text("is_default = true"),
+        ),
+    )
+    is_default: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
 
     user_id: Mapped[UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),
@@ -169,3 +190,29 @@ class LoginIpAttempt(Base):
         onupdate=func.now(),
         nullable=False,
     )
+
+
+class AccountAudit(Base):
+    """Account mutations only: deliberately excludes passwords and session tokens."""
+
+    __tablename__ = "account_audits"
+    __table_args__ = (
+        CheckConstraint(
+            "action IN ('account_created', 'account_updated')",
+            name="ck_account_audits_action",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    actor_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    target_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), index=True
+    )
+    action: Mapped[str] = mapped_column(String(40))
+    permission: Mapped[str | None] = mapped_column(String(100))
+    actor_roles: Mapped[list[str] | None] = mapped_column(JSONB)
+    before_state: Mapped[dict[str, object] | None] = mapped_column(JSONB)
+    after_state: Mapped[dict[str, object]] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)

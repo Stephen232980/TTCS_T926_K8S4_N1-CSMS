@@ -204,6 +204,48 @@ docker compose down
 Lệnh trên giữ dữ liệu. `docker compose down -v` xoá volume database, chỉ dùng
 khi chủ động muốn mất toàn bộ dữ liệu local.
 
+### 5.1. S-26 — Chạy 20 trụ OCPP ảo
+
+Compose thông thường không cần mật khẩu simulator. Khi bật profile simulator,
+seed và verifier yêu cầu `SIMULATOR_OPERATOR_PASSWORD`. Mỗi lần chạy có mã
+riêng để báo cáo cũ không được dùng để nghiệm thu; trước khi chạy lại, dùng
+`docker compose --profile simulator down` rồi khởi động lại.
+
+CI chặn merge khi kịch bản lỗi qua check `Build Docker image` đã bắt buộc
+trên `main`: job này báo thất bại nếu simulator không thành công, kể cả khi
+dependency bị skip. Xem [hướng dẫn S-26](docs/S26_SIMULATOR_DELIVERY.md).
+
+S-26 thêm profile `simulator`: profile này seed trụ có tiền tố riêng, chạy
+kịch bản sạc có ngắt–nối lại và tự đối chiếu phiên, công tơ và kWh. Trong `.env`,
+đặt `SIMULATOR_OPERATOR_PASSWORD` là mật khẩu chỉ dùng local; không dùng mật
+khẩu production và không commit `.env`.
+
+Bật toàn bộ app, database và 20 trụ ảo bằng một lệnh:
+
+```powershell
+docker compose --profile simulator up --build -d
+```
+
+Kiểm tra kết quả:
+
+```powershell
+docker compose --profile simulator ps
+docker compose --profile simulator logs --no-color simulator-verify
+```
+
+Đạt khi `simulator-verify` kết thúc với mã `0` và log ghi `S-26 verified
+20/20 online chargers and sessions.` Báo cáo không chứa id tag nằm tại
+`.local/simulator-reports/simulator-results.json`, là dữ liệu local đã bị Git
+bỏ qua. Có thể đổi `SIMULATOR_COUNT`, `SIMULATOR_CODE_PREFIX`,
+`SIMULATOR_TAG_PREFIX` và `SIMULATOR_RANDOM_SEED` trong `.env`; mặc định là
+20 trụ `SIM-001` đến `SIM-020`.
+
+Docker Desktop phải đang chạy trước khi gọi lệnh. Nếu đổi logic OCPP, dùng
+`docker compose --profile simulator up --build -d` lại để build lại image
+simulator. Khi nâng simulator, chỉ đổi `SIMULATOR_OCPP_VERSION` và phiên bản
+WebSocket tương ứng trong cấu hình Compose; client, seed và verifier không cần
+sửa.
+
 ## 6. Chạy backend trên máy, database trong Docker
 
 Cách này tiện khi phát triển vì Uvicorn tự reload.
@@ -468,3 +510,59 @@ Trước mỗi backlog, đọc đầy đủ dòng tương ứng trong
 dependency. Không dùng danh sách task kỹ thuật để xác định hoặc thu hẹp phạm vi. Nếu tài
 liệu khác acceptance criteria trong backlog, acceptance criteria là nguồn kiểm
 tra cuối.
+
+## Nền tảng OCPP Sprint 2–3
+
+Nhóm kết nối OCPP (S-06/07/08/13/14) được giao cùng màn hình Kết nối trụ.
+Xem [phạm vi, Coverage Matrix và cách kiểm thử](docs/OCPP_FOUNDATION_DELIVERY.md). Registry hiện chạy
+một process; nâng migration trước khi khởi động. Kiểm tra trạng thái Jira riêng
+trước nghiệm thu. Phần bản đồ tài xế đã được tích hợp cùng trên nhánh cục bộ.
+
+
+## Điều chỉnh Sprint 2–3 (02/10/2026)
+
+Theo quyết định của người dùng, Sprint 2–3 triển khai theo chức năng với đầu ra DB/API/giao diện chạy thật. Quy tắc một story một nhánh và không làm sớm backlog tương lai được điều chỉnh trong phạm vi [kế hoạch chức năng](docs/SPRINT_2_3_FUNCTION_PLAN.md); AC/NFR của story vẫn được giữ để đối chiếu. Bản đồ vị trí trạm cho tài xế được làm sớm theo yêu cầu mentor.
+
+## Nhóm giám sát S-09–S-12
+
+Nhóm 2 bổ sung Heartbeat, trạng thái/lỗi đầu nối, offline theo lần liên lạc cuối
+và màn hình SSE tự nối lại. Xem [phạm vi, API và kiểm chứng](docs/OCPP_MONITORING_DELIVERY.md).
+Cần nâng migration a721093e4f62 trước khi chạy. Bằng chứng hiện là kiểm thử
+cục bộ; trạng thái Jira/CI và nghiệm thu được kiểm tra riêng.
+
+## Nhóm 3: phiên sạc OCPP
+
+S-15, S-17, S-18, S-19, S-20 bổ sung xác thực thẻ, phiên sạc, số đo và kiểm tra dữ liệu; có màn hình quản lý phiên/thẻ/chờ đối chiếu dùng API thật. Nâng migration d830a62f194b trước khi chạy. Xem [Coverage Matrix, API, kiểm chứng và demo thủ công](docs/OCPP_CHARGING_DELIVERY.md). Đối chiếu/xử lý pending, đóng tay và điều khiển từ xa thuộc các nhóm tiếp theo. Bằng chứng local không thay thế Jira/CI.
+
+
+## Nhóm 4: phục hồi phiên sạc
+
+S-21 và S-25 bổ sung giữ phiên khi nối lại, nhận tin/số đo muộn theo transactionId, đánh dấu bất thường khi offline quá ngưỡng (mặc định 6 giờ), đóng tay có lý do và lịch sử. Giao diện có bộ lọc bất thường, xác nhận đóng tay và quyền đọc cho kế toán. Nâng migration e41b9027c6a8 trước khi chạy. Xem [AC, API, cấu hình và kiểm thử thủ công](docs/OCPP_RECOVERY_DELIVERY.md). Đóng tay hồ sơ không gửi lệnh dừng tới trụ; pending không khớp vẫn không tự gán phiên. Bằng chứng local không thay Jira/CI.
+
+## Nhóm 5: điều khiển từ xa
+
+S-16, S-23, S-27 thêm Reset, dừng phiên từ xa và nhật ký bất biến. Operator/admin gửi lệnh; admin lọc nhật ký. Accepted không tự đóng phiên; chờ StopTransaction thật, sau 2 phút thiếu tin kết thúc thì cần kiểm tra. Nâng migration f52c813d7a09. Xem [AC, API và test thủ công](docs/OCPP_CONTROL_DELIVERY.md). Bằng chứng local không thay Jira/CI.
+
+## Nhóm 6: tài xế theo dõi và bắt đầu sạc
+
+S-22 và S-24 thêm phiên hiện tại theo tài khoản đăng nhập, cập nhật kWh/thời gian và bắt đầu bằng thẻ ảo qua RemoteStartTransaction. Accepted chờ StartTransaction thật; thiếu xác nhận sau 60 giây cho thử lại. Đầu nối bận/Reserved bị chặn; quyền sở hữu đặt chỗ thuộc phần đặt chỗ sau. Nâng migration c60318a4d962. Xem [AC, API và kiểm thử thủ công](docs/DRIVER_CHARGING_DELIVERY.md). Bằng chứng local không thay Jira/CI.
+
+## S-35: contract cổng thanh toán (T-90)
+
+Luồng nạp ví dùng cổng giả lập cho local/test; cổng sandbox thật thuộc S-67.
+Contract `PaymentGateway` có hai hàm: `create_payment(PaymentRequest)` trả
+`PaymentRedirect`, và `verify_webhook(raw_body, headers)` trả `GatewayEvent`.
+Ba biến môi trường: `PAYMENT_GATEWAY` (mặc định `disabled`, chọn `fake` hoặc
+`sandbox`), `PAYMENT_WEBHOOK_SECRET` (bắt buộc khi bật cổng),
+`PAYMENT_RETURN_URL` (local `http://localhost:5173/wallet/topup/return`).
+Không có khóa webhook mặc định. T-90 chưa cung cấp route hoặc adapter thanh toán.
+Xem [contract, ví dụ webhook HMAC và quy ước T-92/T-93/T-94/T-95](docs/T90_PAYMENT_GATEWAY.md).
+
+## S-35: tạo lệnh nạp ví (T-93)
+
+`POST /api/v1/driver/wallet/topups` kiểm quyền tài xế, lấy ví của chính tài xế,
+kiểm số tiền nguyên theo `WALLET_TOPUP_MIN_VND`/`WALLET_TOPUP_MAX_VND` (mặc định
+10.000–5.000.000 đồng), ghi lệnh pending và gọi PaymentGateway.
+`GET /api/v1/driver/wallet/topups/{order_id}` cung cấp trạng thái cho T-94.
+Chưa có adapter T-92 thì POST trả 503; tạo lệnh không cộng tiền vào ví.
+Xem [API, lỗi/timeout và điểm nối T-92/T-94](docs/T93_WALLET_TOPUP_API.md).

@@ -1,6 +1,7 @@
 import type {
   ChargePoint,
   ChargePointInput,
+  ChargePointUpdate,
 } from '../model/chargePoint'
 import { ChargePointApiError, type ChargePointApi } from './chargePointApi'
 
@@ -36,12 +37,37 @@ export class MockChargePointApi implements ChargePointApi {
     this.latency = latency
   }
 
+  async listChargePoints(
+    stationId: string,
+    page = 1,
+    pageSize = 20,
+    signal?: AbortSignal,
+  ) {
+    await wait(this.latency, signal)
+    const matchingItems = this.chargePoints.filter(
+      (item) => item.stationId === stationId,
+    )
+    const start = (page - 1) * pageSize
+    return {
+      items: matchingItems.slice(start, start + pageSize).map((item) => ({
+        ...item,
+        connectors: item.connectors.map((connector) => ({ ...connector })),
+      })),
+      page,
+      pageSize,
+      total: matchingItems.length,
+      totalPages: Math.ceil(matchingItems.length / pageSize),
+    }
+  }
+
   async checkCodeAvailability(code: string, signal?: AbortSignal) {
     await wait(this.latency, signal)
     const normalizedCode = code.trim()
     return {
       code: normalizedCode,
-      available: !this.chargePoints.some((item) => item.code === normalizedCode),
+      available: !this.chargePoints.some(
+        (item) => item.code === normalizedCode,
+      ),
     }
   }
 
@@ -63,16 +89,14 @@ export class MockChargePointApi implements ChargePointApi {
       code,
       name: null,
       status: 'offline',
-      connectors: Array.from(
-        { length: input.connectorCount },
-        (_, index) => ({
-          id: crypto.randomUUID(),
-          connectorNumber: index + 1,
-          status: 'unknown',
-          createdAt: now,
-          updatedAt: now,
-        }),
-      ),
+      codeLockedAt: null,
+      connectors: Array.from({ length: input.connectorCount }, (_, index) => ({
+        id: crypto.randomUUID(),
+        connectorNumber: index + 1,
+        status: 'unknown',
+        createdAt: now,
+        updatedAt: now,
+      })),
       createdAt: now,
       updatedAt: now,
     }
@@ -81,6 +105,61 @@ export class MockChargePointApi implements ChargePointApi {
     return {
       ...chargePoint,
       connectors: chargePoint.connectors.map((connector) => ({ ...connector })),
+    }
+  }
+
+  async updateChargePoint(
+    chargePointId: string,
+    input: ChargePointUpdate,
+  ): Promise<ChargePoint> {
+    await wait(this.latency)
+    const current = this.chargePoints.find((item) => item.id === chargePointId)
+    if (!current) throw new ChargePointApiError(404, 'resource_not_found')
+    if (input.code !== undefined && current.codeLockedAt != null) {
+      throw new ChargePointApiError(
+        409,
+        'charge_point_code_locked_after_charging',
+      )
+    }
+
+    const code = input.code?.trim() ?? current.code
+    if (
+      this.chargePoints.some(
+        (item) =>
+          item.id !== chargePointId &&
+          item.code.toLowerCase() === code.toLowerCase(),
+      )
+    ) {
+      throw new ChargePointApiError(409, 'charge_point_code_already_exists')
+    }
+
+    const updated = {
+      ...current,
+      code,
+      ...(input.name !== undefined ? { name: input.name } : {}),
+      connectors: current.connectors.map((connector) => {
+        const config = input.connectors?.find(
+          (item) => item.connector_number === connector.connectorNumber,
+        )
+        return config
+          ? {
+              ...connector,
+              connectorType: config.connector_type,
+              currentType: config.current_type,
+              maxPowerKw: config.max_power_kw,
+              voltage: config.voltage,
+              amperage: config.amperage,
+            }
+          : connector
+      }),
+      updatedAt: new Date().toISOString(),
+    }
+    this.chargePoints = this.chargePoints.map((item) =>
+      item.id === chargePointId ? updated : item,
+    )
+    return {
+      ...updated,
+      connectors: updated.connectors.map((connector) => ({ ...connector })),
     }
   }
 }

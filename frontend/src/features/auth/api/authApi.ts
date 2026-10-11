@@ -1,7 +1,9 @@
 import type { AuthenticatedUser, LoginInput } from '../model/auth'
 
 export interface AuthApi {
+  setDefaultRole?(role: string): Promise<AuthenticatedUser>
   login(input: LoginInput): Promise<void>
+  logout(): Promise<void>
   getCurrentUser(signal?: AbortSignal): Promise<AuthenticatedUser>
 }
 

@@ -8,21 +8,30 @@ from uuid import UUID
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from sqlalchemy.sql.elements import ColumnElement
 
+from src.modules.charging.models import ChargingSession
 from src.modules.identity.authorization import ActorScope
 from src.modules.stations.exceptions import (
     ChargePointCodeAlreadyExistsError,
     ChargePointCodeLockedError,
     ChargePointOwnershipDeniedError,
+    ConnectorConfigurationNotFoundError,
     StationIdempotencyConflictError,
     StationOwnershipDeniedError,
+    StationTimezoneLockedError,
 )
 from src.modules.stations.models import (
     ChargePoint,
     Connector,
     Station,
     StationCreateIdempotency,
+)
+from src.modules.stations.schemas import ConnectorConfiguration
+from src.modules.stations.timezones import (
+    DEFAULT_STATION_TIMEZONE,
+    validate_station_timezone,
 )
 
 _security_logger = logging.getLogger("csms.security")
@@ -36,6 +45,12 @@ def _idempotency_lock_id(actor_id: UUID, idempotency_key: UUID) -> int:
 @dataclass(frozen=True)
 class StationPage:
     items: list[Station]
+    total: int
+
+
+@dataclass(frozen=True)
+class ChargePointPage:
+    items: list[ChargePoint]
     total: int
 
 
@@ -129,6 +144,7 @@ class StationRepository:
         address: str,
         latitude: Decimal,
         longitude: Decimal,
+        timezone: str = DEFAULT_STATION_TIMEZONE,
     ) -> Station:
         station = Station(
             owner_id=owner_id,
@@ -136,6 +152,7 @@ class StationRepository:
             address=address,
             latitude=latitude,
             longitude=longitude,
+            timezone=timezone,
         )
         self._db_session.add(station)
         await self._db_session.flush()
@@ -166,6 +183,8 @@ class StationRepository:
         *,
         code: str,
         connector_count: int,
+        name: str | None = None,
+        connectors: list[ConnectorConfiguration] | None = None,
     ) -> ChargePoint | None:
         station = await self.get_station_by_id(station_id, scope)
         if station is None:
@@ -177,11 +196,19 @@ class StationRepository:
         charge_point = ChargePoint(
             station_id=station.id,
             code=code.strip(),
+            name=name,
             connectors=[
                 Connector(connector_number=connector_number)
                 for connector_number in range(1, connector_count + 1)
             ],
         )
+        if connectors is not None:
+            by_number = {c.connector_number: c for c in charge_point.connectors}
+            for configuration in connectors:
+                for key, value in configuration.model_dump(
+                    exclude={"connector_number"}
+                ).items():
+                    setattr(by_number[configuration.connector_number], key, value)
         self._db_session.add(charge_point)
 
         try:
@@ -206,12 +233,52 @@ class StationRepository:
         )
         return charge_point
 
+    async def list_charge_points_page(
+        self,
+        station_id: UUID,
+        scope: ActorScope,
+        *,
+        page: int,
+        page_size: int,
+    ) -> ChargePointPage | None:
+        station = await self.get_station_by_id(station_id, scope)
+        if station is None:
+            return None
+
+        offset = (page - 1) * page_size
+        items_statement = (
+            select(ChargePoint)
+            .where(ChargePoint.station_id == station.id)
+            .options(selectinload(ChargePoint.connectors))
+            .order_by(
+                ChargePoint.created_at.desc(),
+                ChargePoint.id.asc(),
+            )
+            .offset(offset)
+            .limit(page_size)
+        )
+        count_statement = (
+            select(func.count(ChargePoint.id))
+            .select_from(ChargePoint)
+            .where(ChargePoint.station_id == station.id)
+        )
+
+        items_result = await self._db_session.execute(items_statement)
+        total = await self._db_session.scalar(count_statement)
+        return ChargePointPage(
+            items=list(items_result.scalars().all()),
+            total=total or 0,
+        )
+
     async def update_charge_point_code(
         self,
         charge_point_id: UUID,
         scope: ActorScope,
         *,
-        code: str,
+        code: str | None,
+        name: str | None = None,
+        name_provided: bool = False,
+        connectors: list[ConnectorConfiguration] | None = None,
     ) -> ChargePoint | None:
         statement = (
             select(ChargePoint)
@@ -236,17 +303,30 @@ class StationRepository:
             )
             raise ChargePointOwnershipDeniedError
 
-        if charge_point.code_locked_at is not None:
+        if code is not None and charge_point.code_locked_at is not None:
             raise ChargePointCodeLockedError
 
-        normalized_code = code.strip()
-        if not await self.is_charge_point_code_available(
-            normalized_code,
-            excluding_charge_point_id=charge_point.id,
-        ):
-            raise ChargePointCodeAlreadyExistsError
+        await self._db_session.refresh(charge_point, attribute_names=["connectors"])
+        by_number = {item.connector_number: item for item in charge_point.connectors}
+        if any(item.connector_number not in by_number for item in connectors or []):
+            raise ConnectorConfigurationNotFoundError
 
-        charge_point.code = normalized_code
+        if code is not None:
+            normalized_code = code.strip()
+            if not await self.is_charge_point_code_available(
+                normalized_code,
+                excluding_charge_point_id=charge_point.id,
+            ):
+                raise ChargePointCodeAlreadyExistsError
+            charge_point.code = normalized_code
+
+        if name_provided:
+            charge_point.name = name
+        for configuration in connectors or []:
+            for key, value in configuration.model_dump(
+                exclude={"connector_number"}, exclude_unset=True
+            ).items():
+                setattr(by_number[configuration.connector_number], key, value)
         try:
             await self._db_session.flush()
         except IntegrityError as error:
@@ -294,6 +374,7 @@ class StationRepository:
         address: str,
         latitude: Decimal,
         longitude: Decimal,
+        timezone: str = DEFAULT_STATION_TIMEZONE,
     ) -> Station:
         await self._db_session.execute(
             select(
@@ -329,6 +410,7 @@ class StationRepository:
             address=address,
             latitude=latitude,
             longitude=longitude,
+            timezone=timezone,
         )
         self._db_session.add(
             StationCreateIdempotency(
@@ -345,11 +427,18 @@ class StationRepository:
         self,
         station_id: UUID,
         scope: ActorScope,
+        *,
+        for_update: bool = False,
     ) -> Station | None:
         statement = select(Station).where(Station.id == station_id)
 
         if scope.owner_id is not None:
             statement = statement.where(Station.owner_id == scope.owner_id)
+
+        if for_update:
+            statement = statement.with_for_update().execution_options(
+                populate_existing=True
+            )
 
         station = await self._db_session.scalar(statement)
 
@@ -378,10 +467,28 @@ class StationRepository:
         address: str | None,
         latitude: Decimal | None,
         longitude: Decimal | None,
+        timezone: str | None = None,
     ) -> Station | None:
-        station = await self.get_station_by_id(station_id, scope)
+        if timezone is not None:
+            timezone = validate_station_timezone(timezone)
+        station = await self.get_station_by_id(
+            station_id, scope, for_update=timezone is not None
+        )
         if station is None:
             return None
+
+        if timezone is not None and timezone != station.timezone:
+            # StartTransaction takes this same station lock before inserting a
+            # session. Include ended/invalid sessions: the first session freezes it.
+            has_session = await self._db_session.scalar(
+                select(ChargingSession.id)
+                .join(ChargePoint, ChargePoint.id == ChargingSession.charge_point_id)
+                .where(ChargePoint.station_id == station_id)
+                .limit(1)
+            )
+            if has_session is not None:
+                raise StationTimezoneLockedError
+            station.timezone = timezone
 
         if name is not None:
             station.name = name

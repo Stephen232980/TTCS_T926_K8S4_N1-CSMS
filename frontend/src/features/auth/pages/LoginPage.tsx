@@ -37,6 +37,8 @@ export function LoginPage({
   const [submitError, setSubmitError] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const submitInFlight = useRef(false)
+  const emailInputRef = useRef<HTMLInputElement>(null)
+  const passwordInputRef = useRef<HTMLInputElement>(null)
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -45,7 +47,11 @@ export function LoginPage({
     const nextErrors = validateLogin({ email, password })
     setErrors(nextErrors)
     setSubmitError('')
-    if (Object.keys(nextErrors).length > 0) return
+    if (Object.keys(nextErrors).length > 0) {
+      if (nextErrors.email) emailInputRef.current?.focus()
+      else if (nextErrors.password) passwordInputRef.current?.focus()
+      return
+    }
 
     submitInFlight.current = true
     setIsSubmitting(true)
@@ -88,6 +94,7 @@ export function LoginPage({
               <label htmlFor="login-email">Email</label>
               <input
                 id="login-email"
+                ref={emailInputRef}
                 type="email"
                 autoComplete="email"
                 value={email}
@@ -107,6 +114,7 @@ export function LoginPage({
               <label htmlFor="login-password">Mật khẩu</label>
               <input
                 id="login-password"
+                ref={passwordInputRef}
                 type="password"
                 autoComplete="current-password"
                 value={password}

@@ -1,0 +1,285 @@
+"""Server-clock liveness and short row updates; never create undeclared connectors."""
+
+import logging
+from datetime import UTC, datetime, timedelta
+from typing import Annotated, Literal, cast
+from uuid import UUID
+
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from sqlalchemy import func, literal, or_, select, text, update
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import set_committed_value
+from sqlalchemy.sql.elements import ColumnElement
+
+from src.modules.charging.models import ChargingSession
+from src.modules.stations.models import ChargePoint, Connector, ConnectorError
+
+logger = logging.getLogger("csms.ocpp")
+Status = Literal[
+    "Available",
+    "Preparing",
+    "Charging",
+    "SuspendedEVSE",
+    "SuspendedEV",
+    "Finishing",
+    "Reserved",
+    "Unavailable",
+    "Faulted",
+]
+ErrorCode = Literal[
+    "ConnectorLockFailure",
+    "EVCommunicationError",
+    "GroundFailure",
+    "HighTemperature",
+    "InternalError",
+    "LocalListConflict",
+    "NoError",
+    "OtherError",
+    "OverCurrentFailure",
+    "PowerMeterFailure",
+    "PowerSwitchFailure",
+    "ReaderFailure",
+    "ResetFailure",
+    "UnderVoltage",
+    "OverVoltage",
+    "WeakSignal",
+]
+
+
+class HeartbeatPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+
+class StatusPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    connectorId: Annotated[int, Field(ge=0)]
+    status: Status
+    errorCode: ErrorCode
+    vendorErrorCode: Annotated[str, Field(max_length=50)] | None = None
+    info: Annotated[str, Field(max_length=50)] | None = None
+    vendorId: Annotated[str, Field(max_length=255)] | None = None
+    timestamp: AwareDatetime | None = None
+
+
+async def database_time(session: AsyncSession) -> datetime:
+    """Read wall-clock time, including after waiting for a charger row lock."""
+    return cast(
+        datetime, (await session.execute(select(func.clock_timestamp()))).scalar_one()
+    )
+
+
+def expired(now: datetime) -> ColumnElement[bool]:
+    return (ChargePoint.last_seen_at.is_(None)) | (
+        ChargePoint.last_seen_at
+        < now - ChargePoint.heartbeat_interval_seconds * literal(timedelta(seconds=2))
+    )
+
+
+async def lock_and_mark_seen(
+    session: AsyncSession, charger_id: UUID
+) -> ChargePoint | None:
+    """Lock and record contact in one round trip, using the clock after the lock."""
+    previous = (
+        select(
+            ChargePoint.id,
+            ChargePoint.last_seen_at.label("previous_seen_at"),
+            ChargePoint.heartbeat_interval_seconds.label("previous_interval"),
+        )
+        .where(ChargePoint.id == charger_id, ChargePoint.archived_at.is_(None))
+        .with_for_update()
+        .cte("locked_contact")
+    )
+    row = (
+        await session.execute(
+            update(ChargePoint)
+            .where(ChargePoint.id == previous.c.id)
+            .values(
+                last_seen_at=func.clock_timestamp(), updated_at=ChargePoint.updated_at
+            )
+            .returning(
+                ChargePoint, previous.c.previous_seen_at, previous.c.previous_interval
+            )
+            .execution_options(synchronize_session=False, populate_existing=True)
+        )
+    ).first()
+    if row is None:
+        return None
+    charger, last_seen, interval = row
+    if last_seen is None or charger.last_seen_at - last_seen > timedelta(
+        seconds=2 * interval
+    ):
+        await session.execute(
+            update(Connector)
+            .where(
+                Connector.charge_point_id == charger_id, Connector.archived_at.is_(None)
+            )
+            .values(
+                status="unknown",
+                raw_ocpp_status=None,
+                status_updated_at=charger.last_seen_at,
+                updated_at=Connector.updated_at,
+            )
+        )
+    return cast(ChargePoint, charger)
+
+
+async def mark_seen(
+    session: AsyncSession,
+    charger_id: UUID,
+    now: datetime | None = None,
+    *,
+    locked_charger: ChargePoint | None = None,
+) -> None:
+    # Expired connector observations remain unknown after reconnection until reported anew.
+    if locked_charger is None:
+        row = (
+            await session.execute(
+                select(ChargePoint.last_seen_at, ChargePoint.heartbeat_interval_seconds)
+                .where(ChargePoint.id == charger_id)
+                .with_for_update()
+            )
+        ).first()
+        if row is None:
+            return
+        last_seen, interval = row
+    else:
+        last_seen, interval = (
+            locked_charger.last_seen_at,
+            locked_charger.heartbeat_interval_seconds,
+        )
+    # Evaluate the DB clock in the write after acquiring the charger lock.
+    # RETURNING shares the round trip and timestamp with the persisted contact.
+    clock_expression = "clock_timestamp()" if now is None else ":now"
+    recorded_at = (
+        await session.execute(
+            text(
+                "UPDATE charge_points SET last_seen_at = "
+                + clock_expression
+                + " WHERE id = :id AND archived_at IS NULL RETURNING last_seen_at"
+            ),
+            {"id": charger_id} if now is None else {"id": charger_id, "now": now},
+        )
+    ).scalar_one_or_none()
+    if recorded_at is None:
+        return
+    now = cast(datetime, recorded_at)
+    if last_seen is None or now - last_seen > timedelta(seconds=2 * interval):
+        await session.execute(
+            update(Connector)
+            .where(
+                Connector.charge_point_id == charger_id, Connector.archived_at.is_(None)
+            )
+            .values(
+                status="unknown",
+                raw_ocpp_status=None,
+                status_updated_at=now,
+                updated_at=Connector.updated_at,
+            )
+        )
+    if locked_charger is not None:
+        set_committed_value(locked_charger, "last_seen_at", now)
+
+
+async def expire_chargers(session: AsyncSession, now: datetime | None = None) -> None:
+    now = now if now is not None else await database_time(session)
+    stale = list(
+        await session.scalars(
+            select(ChargePoint.id)
+            .where(expired(now), ChargePoint.archived_at.is_(None))
+            .with_for_update(skip_locked=True)
+        )
+    )
+    await session.execute(
+        update(Connector)
+        .where(
+            Connector.charge_point_id.in_(stale),
+            Connector.archived_at.is_(None),
+            Connector.status != "unknown",
+        )
+        .values(status="unknown", raw_ocpp_status=None, status_updated_at=now)
+    )
+    await session.execute(
+        update(ChargePoint)
+        .where(
+            ChargePoint.id.in_(stale),
+            expired(now),
+            ChargePoint.archived_at.is_(None),
+            ChargePoint.status != "offline",
+        )
+        .values(status="offline", status_updated_at=now)
+    )
+
+
+async def report_status(
+    session: AsyncSession, charger: ChargePoint, status: StatusPayload
+) -> None:
+    now = datetime.now(UTC)
+    if status.connectorId == 0:
+        await session.execute(
+            update(ChargePoint)
+            .where(ChargePoint.id == charger.id)
+            .values(
+                raw_ocpp_status=status.status,
+                error_code=status.errorCode,
+                vendor_error_code=status.vendorErrorCode,
+                error_at=now if status.errorCode != "NoError" else None,
+                status_updated_at=now,
+            )
+        )
+        return
+    statement = update(Connector).where(
+        Connector.charge_point_id == charger.id,
+        Connector.connector_number == status.connectorId,
+        Connector.archived_at.is_(None),
+    )
+    statement = statement.values(
+        status=status.status, raw_ocpp_status=status.status, status_updated_at=now
+    )
+    if status.timestamp is not None:
+        # Source time orders notifications; server time remains the monitoring clock.
+        statement = statement.where(
+            or_(
+                Connector.last_status_notification_at.is_(None),
+                Connector.last_status_notification_at < status.timestamp,
+            )
+        ).values(last_status_notification_at=status.timestamp)
+    connector_id = await session.scalar(statement.returning(Connector.id))
+    if connector_id is None:
+        exists = await session.scalar(
+            select(Connector.id).where(
+                Connector.charge_point_id == charger.id,
+                Connector.connector_number == status.connectorId,
+                Connector.archived_at.is_(None),
+            )
+        )
+        if exists is None:
+            logger.warning(
+                "ocpp_unknown_connector charger=%s connector=%s",
+                charger.id,
+                status.connectorId,
+            )
+        return
+    # Without source time we cannot safely infer an idle interval or its ordering.
+    if status.timestamp is not None and status.status in {"SuspendedEV", "Charging"}:
+        idle_update = update(ChargingSession).where(
+            ChargingSession.connector_id == connector_id,
+            ChargingSession.ended_at.is_(None),
+            ChargingSession.started_at <= status.timestamp,
+        )
+        if status.status == "SuspendedEV":
+            idle_update = idle_update.where(
+                ChargingSession.idle_since.is_(None)
+            ).values(idle_since=status.timestamp)
+        else:
+            idle_update = idle_update.values(idle_since=None)
+        await session.execute(idle_update)
+    if status.errorCode != "NoError":
+        session.add(
+            ConnectorError(
+                connector_id=connector_id,
+                error_code=status.errorCode,
+                vendor_error_code=status.vendorErrorCode,
+                occurred_at=now,
+                details=status.info,
+            )
+        )

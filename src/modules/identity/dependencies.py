@@ -6,8 +6,12 @@ from fastapi import Cookie, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.identity.authorization import (
+    ActorScope,
+    AuthorizationEvidence,
     CurrentActor,
+    build_actor_scope,
     enforce_role_policy,
+    get_access_policy,
 )
 from src.modules.identity.repository import IdentityRepository
 from src.modules.identity.security import hash_session_token
@@ -63,3 +67,41 @@ async def authorize_request(
 
     handler = cast(Callable[..., object], endpoint)
     enforce_role_policy(handler, actor)
+
+
+async def get_request_scope(
+    request: Request, actor: CurrentActorDependency
+) -> ActorScope:
+    endpoint = request.scope.get("endpoint")
+    policy = get_access_policy(endpoint) if callable(endpoint) else None
+    if (
+        not callable(endpoint)
+        or policy is None
+        or policy.kind != "user"
+        or policy.scope is None
+    ):
+        raise HTTPException(403, "Không có phạm vi truy cập dữ liệu")
+    enforce_role_policy(endpoint, actor)
+    return build_actor_scope(actor, policy.scope)
+
+
+RequestScope = Annotated[ActorScope, Depends(get_request_scope)]
+
+
+async def get_authorization_evidence(
+    request: Request, actor: CurrentActorDependency
+) -> AuthorizationEvidence:
+    endpoint = request.scope.get("endpoint")
+    policy = get_access_policy(endpoint) if callable(endpoint) else None
+    if (
+        not callable(endpoint)
+        or policy is None
+        or policy.kind != "user"
+        or policy.permission is None
+    ):
+        raise HTTPException(403, "Không có quyền truy cập")
+    enforce_role_policy(endpoint, actor)
+    return AuthorizationEvidence(policy.permission, tuple(sorted(actor.roles)))
+
+
+AuditEvidence = Annotated[AuthorizationEvidence, Depends(get_authorization_evidence)]

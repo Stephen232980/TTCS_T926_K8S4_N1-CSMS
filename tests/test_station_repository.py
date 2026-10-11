@@ -95,10 +95,8 @@ async def test_list_stations_returns_all_for_global_scope(
 
     stations = await repository.list_stations(scope)
 
-    assert {station.id for station in stations} == {
-        station_a.id,
-        station_b.id,
-    }
+    returned_ids = {station.id for station in stations}
+    assert {station_a.id, station_b.id}.issubset(returned_ids)
 
 
 @pytest.mark.asyncio

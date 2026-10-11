@@ -1,3 +1,4 @@
+vi.mock('../../../components/maps/StationMap', () => ({ StationMap: ({ onPick }: { onPick?: (p: { latitude: number; longitude: number }) => void }) => <button type="button" onClick={() => onPick?.({ latitude: 10.7731, longitude: 106.7032 })}>Chọn vị trí thử</button> }))
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
@@ -28,8 +29,7 @@ describe('StationForm', () => {
     expect(screen.getByLabelText('Tên trạm')).toHaveFocus()
     expect(screen.getByText('Tên trạm là bắt buộc')).toBeInTheDocument()
     expect(screen.getByText('Địa chỉ là bắt buộc')).toBeInTheDocument()
-    expect(screen.getByText('Vĩ độ là bắt buộc')).toBeInTheDocument()
-    expect(screen.getByText('Kinh độ là bắt buộc')).toBeInTheDocument()
+    expect(screen.getByText('Hãy chọn vị trí trạm trên bản đồ.')).toBeInTheDocument()
     expect(onSubmit).not.toHaveBeenCalled()
   })
 
@@ -45,8 +45,7 @@ describe('StationForm', () => {
       screen.getByLabelText('Địa chỉ'),
       '  123 Nguyễn Huệ, Quận 1  ',
     )
-    await user.type(screen.getByLabelText('Vĩ độ'), '10.7731')
-    await user.type(screen.getByLabelText('Kinh độ'), '106.7032')
+    await user.click(screen.getByRole('button', { name: 'Chọn vị trí thử' }))
     await user.click(screen.getByRole('button', { name: 'Tạo trạm' }))
 
     expect(onSubmit).toHaveBeenCalledWith({
@@ -72,8 +71,8 @@ describe('StationForm', () => {
     expect(screen.getByLabelText('Địa chỉ')).toHaveValue(
       '123 Nguyễn Huệ, Quận 1',
     )
-    expect(screen.getByLabelText('Vĩ độ')).toHaveValue('10.7731')
-    expect(screen.getByLabelText('Kinh độ')).toHaveValue('106.7032')
+    expect(screen.getByText('Đã chọn vị trí trạm. Bạn có thể chọn lại trên bản đồ.')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Vĩ độ')).not.toBeInTheDocument()
     expect(screen.getByRole('alert')).toHaveTextContent(
       'Không thể lưu thay đổi. Vui lòng thử lại.',
     )

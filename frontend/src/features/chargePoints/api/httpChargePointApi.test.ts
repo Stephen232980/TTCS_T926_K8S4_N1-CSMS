@@ -9,6 +9,7 @@ const chargePointResponse = {
   code: 'CP-Q1-001',
   name: null,
   status: 'offline',
+  code_locked_at: null,
   connectors: [
     {
       id: 'connector-1',
@@ -30,6 +31,39 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe('HttpChargePointApi', () => {
+  it('lists a paginated station charge-point response', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        items: [chargePointResponse],
+        page: 1,
+        page_size: 10,
+        total: 1,
+        total_pages: 1,
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const controller = new AbortController()
+
+    const result = await new HttpChargePointApi().listChargePoints(
+      'station/1',
+      1,
+      10,
+      controller.signal,
+    )
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/stations/station%2F1/charge-points?page=1&page_size=10',
+      { credentials: 'include', signal: controller.signal },
+    )
+    expect(result).toMatchObject({
+      page: 1,
+      pageSize: 10,
+      total: 1,
+      totalPages: 1,
+      items: [{ code: 'CP-Q1-001', connectors: [{ connectorNumber: 1 }] }],
+    })
+  })
+
   it('checks a trimmed code with cookie credentials', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse({ code: 'CP-Q1-001', available: true }),
@@ -98,6 +132,36 @@ describe('HttpChargePointApi', () => {
         detail: 'charge_point_code_already_exists',
       }),
     )
+  })
+
+  it('updates a charge-point code and maps its lock state', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        ...chargePointResponse,
+        code: 'CP-Q1-002',
+        code_locked_at: '2026-09-30T11:00:00Z',
+      }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await new HttpChargePointApi().updateChargePoint(
+      'charge/point-1',
+      { code: '  CP-Q1-002  ' },
+    )
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/v1/charge-points/charge%2Fpoint-1',
+      {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: 'CP-Q1-002' }),
+      },
+    )
+    expect(result).toMatchObject({
+      code: 'CP-Q1-002',
+      codeLockedAt: '2026-09-30T11:00:00Z',
+    })
   })
 
   it('notifies the app when the session is unauthorized', async () => {
