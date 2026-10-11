@@ -20,6 +20,7 @@ from src.modules.ocpp import control
 from src.modules.ocpp.connection_registry import ocpp_connections
 from src.modules.ocpp.control_models import ControlRequest
 from src.modules.ocpp.frames import decode_frame
+from src.modules.wallet.eligibility import ChargingEligibility
 from tests.test_charging_sessions import call, meter_payload, setup, start
 from tests.test_ocpp_control import db_session as control_database
 from tests.test_ocpp_control import reply_with
@@ -228,6 +229,39 @@ async def test_driver_endpoint_roles_body_and_empty_state(db_session, fixture):
             )
         ).status_code == 403
         conn.websocket.send_text.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "reason",
+    ["wallet_low", "wallet_missing", "wallet_locked", "tariff_unavailable"],
+)
+async def test_start_api_returns_wallet_rejection_without_creating_request(
+    db_session, fixture, monkeypatch, reason
+):
+    _, _, connector, driver, _, conn, _ = fixture
+    check_wallet = AsyncMock(
+        return_value=ChargingEligibility(False, reason, None, None, None)
+    )
+    monkeypatch.setattr(driver_service, "du_so_du_de_sac", check_wallet)
+    app.dependency_overrides[get_current_actor] = lambda: CurrentActor(
+        driver.id, frozenset({"driver"})
+    )
+    request_id = uuid4()
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/api/v1/driver/charging/start",
+            json={"request_id": str(request_id), "connector_id": str(connector.id)},
+        )
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": reason}
+    assert await db_session.get(DriverStartRequest, request_id) is None
+    assert await db_session.get(ControlRequest, request_id) is None
+    check_wallet.assert_awaited_once()
+    conn.websocket.send_text.assert_not_awaited()
 
 
 async def test_pending_scan_releases_request_without_resend(db_session, fixture):

@@ -3,6 +3,7 @@ import json
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from time import perf_counter
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import httpx
@@ -10,6 +11,7 @@ import pytest
 from sqlalchemy import delete, func, select
 
 from src.entrypoints.http import app
+from src.modules import charging as charging_module
 from src.modules.charging.models import (
     AuthorizationAttempt,
     ChargingCard,
@@ -25,6 +27,8 @@ from src.modules.ocpp.dispatcher import dispatch_call, process_call
 from src.modules.ocpp.frames import Frame, decode_frame
 from src.modules.ocpp.transport import handle_message
 from src.modules.stations.models import ChargePoint, Connector, Station
+from src.modules.wallet.eligibility import ChargingEligibility
+from src.modules.wallet.models import Wallet
 from src.platform.database.session import SessionFactory, get_db_session
 from tests.test_ocpp_foundation import charger_fixture, connection
 
@@ -70,6 +74,7 @@ async def setup(session):
         session.add(role)
     await session.flush()
     session.add(UserRole(user_id=driver.id, role_id=role.id))
+    session.add(Wallet(driver_id=driver.id, balance_vnd=1_000_000, status="active"))
     card = ChargingCard(
         tag_hash=tag_hash(TAG + str(charger.id)),
         tag_tail="ABCD",
@@ -162,6 +167,68 @@ async def test_authorize_states_and_masked_audit(
         )
     )
     assert attempt.result == expected and attempt.tag_tail == tag[-4:]
+
+
+@pytest.mark.asyncio
+async def test_authorize_blocks_driver_with_ineligible_wallet(db_session, monkeypatch):
+    _, _, _, driver, _, conn, tag = await setup(db_session)
+    check_wallet = AsyncMock(
+        return_value=ChargingEligibility(False, "wallet_low", 0, 12500, None)
+    )
+    monkeypatch.setattr(charging_module.service, "du_so_du_de_sac", check_wallet)
+
+    reply = await call(db_session, conn, "Authorize", {"idTag": tag})
+
+    assert reply.payload["idTagInfo"]["status"] == "Blocked"
+    attempt = await db_session.scalar(
+        select(AuthorizationAttempt).where(
+            AuthorizationAttempt.charge_point_id == conn.charge_point_id
+        )
+    )
+    assert attempt.result == "Blocked"
+    check_wallet.assert_awaited_once()
+    assert check_wallet.await_args.kwargs == {
+        "driver_id": driver.id,
+        "station_id": conn.station_id,
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "reason",
+    ["wallet_low", "wallet_missing", "wallet_locked", "tariff_unavailable"],
+)
+async def test_start_blocks_and_records_wallet_rejection(
+    db_session, monkeypatch, reason
+):
+    _, charger, _, _, _, conn, tag = await setup(db_session)
+    check_wallet = AsyncMock(
+        return_value=ChargingEligibility(False, reason, None, None, None)
+    )
+    monkeypatch.setattr(charging_module.service, "du_so_du_de_sac", check_wallet)
+
+    reply = await start(db_session, conn, tag)
+
+    assert reply.kind == 3
+    assert reply.payload == {
+        "transactionId": 0,
+        "idTagInfo": {"status": "Blocked"},
+    }
+    pending_message = await db_session.scalar(
+        select(PendingChargingMessage).where(
+            PendingChargingMessage.charge_point_id == charger.id
+        )
+    )
+    assert pending_message.action == "StartTransaction"
+    assert pending_message.reason == reason
+    assert (
+        await db_session.scalar(
+            select(func.count())
+            .select_from(ChargingSession)
+            .where(ChargingSession.charge_point_id == charger.id)
+        )
+        == 0
+    )
 
 
 @pytest.mark.asyncio

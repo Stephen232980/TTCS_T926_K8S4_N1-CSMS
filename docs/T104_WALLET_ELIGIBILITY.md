@@ -22,7 +22,7 @@ Hàm chỉ đọc; không tạo ví, không giữ tiền, không ghi sổ cái, 
 
 ## Phạm vi
 
-T-105 sẽ gọi hàm tại Authorize, StartTransaction và API bắt đầu sạc. T-106 hiển thị lý do/ngưỡng và nút nạp. Kết quả là snapshot, không phải bảo đảm số dư cho một lần bắt đầu trong tương lai; bên gọi cần kiểm lại tại thời điểm sử dụng. Không cache kết quả chấp nhận.
+T-105 gọi hàm tại Authorize, StartTransaction và API bắt đầu sạc. Authorize ánh xạ ví không đủ điều kiện thành `Blocked`; StartTransaction từ chối mà không tạo phiên, đồng thời lưu lý do vào tin nhắn pending. API bắt đầu từ ứng dụng trả HTTP 409 với `detail` là một trong bốn mã lý do ở trên trước khi tạo yêu cầu/lệnh OCPP. T-106 có thể dùng mã này để hiển thị lý do/ngưỡng và nút nạp. Kết quả là snapshot, không phải bảo đảm số dư cho một lần bắt đầu trong tương lai; mỗi ranh giới cần kiểm lại, không cache kết quả chấp nhận.
 
 ## Kiểm tra
 

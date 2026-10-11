@@ -32,8 +32,11 @@ async def invoice_wallet(session, settlement="debited", total=200):
         total_vnd=total,
         rounding_rule="Round then sum",
     )
-    wallet = Wallet(driver_id=driver.id)
-    session.add_all([invoice, wallet])
+    wallet = await session.scalar(select(Wallet).where(Wallet.driver_id == driver.id))
+    if wallet is None:
+        raise RuntimeError("Charging fixture did not create the driver's wallet")
+    wallet.balance_vnd = 0
+    session.add(invoice)
     await session.flush()
     return wallet, invoice
 
