@@ -15,25 +15,57 @@ Invariants verified:
 12. Full reconciliation compatibility with doi_chieu_so_du / wallet_issues.
 """
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from uuid import uuid4
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select, text
 
 from src.modules.billing.models import Invoice
 from src.modules.charging.models import ChargingSession
-from src.modules.wallet.exceptions import WalletAmountError, WalletLockedError
+from src.modules.identity.models import Role, User, UserRole
+from src.modules.stations.models import Connector
+from src.modules.wallet.exceptions import (
+    WalletAmountError,
+    WalletLockedError,
+    WalletNotFoundError,
+    WalletOwnershipError,
+)
 from src.modules.wallet.models import Wallet, WalletLedger
 from src.modules.wallet.provisioning import ensure_driver_wallet
 from src.modules.wallet.reconciliation import wallet_issues
-from src.modules.wallet.service import tru_vi
-from tests.test_charging_sessions import setup
+from src.modules.wallet.service import ghi_so_cai, tru_vi
+from tests import test_wallet_service
+from tests.test_ocpp_foundation import charger_fixture
+
+isolated_wallet_db = test_wallet_service.isolated_wallet_db
 
 STAMP = datetime(2026, 10, 11, 10, 0, tzinfo=UTC)
 
 
-async def create_fixture(session, *, initial_balance: int = 100_000, wallet_status: str = "active"):
+async def setup(session):
+    """Create a driver with no wallet; provisioning is exercised explicitly."""
+    station, charger = await charger_fixture(session)
+    connector = Connector(
+        charge_point_id=charger.id, connector_number=1, status="Available"
+    )
+    driver = User(email=f"t101-{uuid4()}@example.com", password_hash="unused")
+    role = await session.scalar(select(Role).where(Role.code == "driver"))
+    if role is None:
+        role = Role(code="driver")
+        session.add(role)
+    session.add_all([connector, driver])
+    await session.flush()
+    session.add(UserRole(user_id=driver.id, role_id=role.id))
+    await session.flush()
+    return station, charger, connector, driver
+
+
+async def create_fixture(
+    session, *, initial_balance: int = 100_000, wallet_status: str = "active"
+):
     """Create station, charge point, connector, driver, wallet, charging session, and invoice."""
     station, charger, connector, driver, *_ = await setup(session)
 
@@ -42,7 +74,14 @@ async def create_fixture(session, *, initial_balance: int = 100_000, wallet_stat
     if wallet is None:
         wallet = await ensure_driver_wallet(session, driver.id)
     if initial_balance != 0:
-        wallet.balance_vnd = initial_balance
+        await ghi_so_cai(
+            session,
+            wallet_id=wallet.id,
+            entry_type="manual_topup",
+            amount_vnd=initial_balance,
+            reference_type="test",
+            reference_id=str(uuid4()),
+        )
     if wallet_status != "active":
         wallet.status = wallet_status
     await session.flush()
@@ -250,12 +289,15 @@ async def test_tru_vi_trong_giao_dich_caller_rollback_sach(db_session):
     await db_session.flush()
 
     # Mở một savepoint mô phỏng transaction nhánh của caller
-    async with db_session.begin_nested():
+    charging_id = charging.id
+    savepoint = await db_session.begin_nested()
+    try:
         await tru_vi(db_session, invoice=invoice)
         # Trong transaction: số dư là 30.000 đ
         assert wallet.balance_vnd == 30_000
         # Cố ý rollback savepoint
-        await db_session.rollback()
+    finally:
+        await savepoint.rollback()
 
     # Sau rollback: số dư phục hồi về 50.000 đ và không có dòng sổ cái
     await db_session.refresh(wallet)
@@ -263,7 +305,7 @@ async def test_tru_vi_trong_giao_dich_caller_rollback_sach(db_session):
 
     entry = await db_session.scalar(
         select(WalletLedger).where(
-            WalletLedger.reference_id == str(charging.id),
+            WalletLedger.reference_id == str(charging_id),
             WalletLedger.entry_type == "charging_debit",
         )
     )
@@ -388,9 +430,195 @@ async def test_tru_vi_tuong_thich_reconciliation_doi_chieu(db_session):
 
     # Giả định sau khi chốt phiên (T-102), charging_session đánh dấu settlement_reason = 'debited'
     charging.settlement_reason = "debited"
+    charging.settlement_completed_at = STAMP + timedelta(hours=1)
     await db_session.flush()
 
     # Chạy kiểm tra đối chiếu sổ cái
     total, issues = await wallet_issues(db_session, wallet)
     assert total == 55_000
     assert issues == []
+
+
+@pytest.mark.asyncio
+async def test_explicit_wallet_must_belong_to_invoice_driver(db_session):
+    station, _, _, driver, owner, charging = await create_fixture(db_session)
+    _, _, _, _, other, _ = await create_fixture(db_session)
+    invoice = make_invoice(charging, station, driver, total_vnd=35_000)
+    db_session.add(invoice)
+    await db_session.flush()
+
+    with pytest.raises(WalletOwnershipError):
+        await tru_vi(db_session, invoice=invoice, wallet_id=other.id)
+    for wallet in (owner, other):
+        await db_session.refresh(wallet)
+        assert wallet.balance_vnd == 100_000
+    assert (
+        await db_session.scalar(
+            select(func.count())
+            .select_from(WalletLedger)
+            .where(WalletLedger.entry_type == "charging_debit")
+            .where(WalletLedger.wallet_id.in_([owner.id, other.id]))
+        )
+        == 0
+    )
+
+    with pytest.raises(WalletNotFoundError):
+        await tru_vi(db_session, invoice=invoice, wallet_id=uuid4())
+    # The caller transaction remains usable after both domain errors.
+    entry = await tru_vi(db_session, invoice=invoice, wallet_id=owner.id)
+    assert entry is not None
+    assert entry.wallet_id == owner.id
+    assert entry.balance_after_vnd == 65_000
+
+
+@pytest.mark.asyncio
+async def test_zero_balance_becomes_debt(db_session):
+    station, _, _, driver, wallet, charging = await create_fixture(
+        db_session, initial_balance=0
+    )
+    assert wallet.balance_vnd == 0
+    invoice = make_invoice(charging, station, driver, total_vnd=15_000)
+    db_session.add(invoice)
+    await db_session.flush()
+    entry = await tru_vi(db_session, invoice=invoice)
+    assert entry is not None
+    assert entry.balance_after_vnd == -15_000
+    await db_session.refresh(wallet)
+    total, issues = await wallet_issues(db_session, wallet)
+    assert total == wallet.balance_vnd == -15_000
+    assert issues == []
+
+
+@pytest.mark.asyncio
+async def test_mismatched_session_and_invalid_money_rejected(db_session):
+    station, _, _, driver, wallet, charging = await create_fixture(db_session)
+    invoice = make_invoice(charging, station, driver, total_vnd=10_000)
+    with pytest.raises(ValueError, match="cùng phiên"):
+        await tru_vi(db_session, invoice=invoice, session_id=charging.id + 1)
+    for amount in (True, Decimal("1.5"), 2**63):
+        invalid = make_invoice(charging, station, driver, total_vnd=amount)
+        with pytest.raises(WalletAmountError):
+            await tru_vi(db_session, invoice=invalid)
+    await db_session.refresh(wallet)
+    assert wallet.balance_vnd == 100_000
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("same_session", [True, False])
+async def test_concurrent_debits_use_separate_connections(
+    isolated_wallet_db, same_session
+):
+    factory = isolated_wallet_db
+    async with factory() as session:
+        station, charger, connector, driver, wallet, charging = await create_fixture(
+            session, initial_balance=50_000
+        )
+        first = make_invoice(charging, station, driver, total_vnd=35_000)
+        session.add(first)
+        await session.flush()
+        session_ids = [charging.id, charging.id]
+        if not same_session:
+            second = ChargingSession(
+                charge_point_id=charger.id,
+                connector_id=connector.id,
+                driver_id=driver.id,
+                tag_tail="ABCD",
+                authorization_status="Accepted",
+                started_at=STAMP + timedelta(hours=2),
+                ended_at=STAMP + timedelta(hours=3),
+                meter_start_wh=Decimal(10_000),
+                meter_stop_wh=Decimal(15_000),
+                review_reasons=[],
+                billing_lifecycle_version=0,
+            )
+            session.add(second)
+            await session.flush()
+            session.add(make_invoice(second, station, driver, total_vnd=20_000))
+            session_ids[1] = second.id
+        wallet_id = wallet.id
+        await session.commit()
+    ready = asyncio.Barrier(2)
+
+    async def worker(session_id):
+        async with factory() as session:
+            pid = await session.scalar(text("SELECT pg_backend_pid()"))
+            await ready.wait()
+            entry = await tru_vi(session, session_id=session_id)
+            assert entry is not None
+            entry_id = entry.id
+            await session.commit()
+            return pid, entry_id
+
+    results = await asyncio.wait_for(
+        asyncio.gather(*(worker(identifier) for identifier in session_ids)), 30
+    )
+    assert len({pid for pid, _ in results}) == 2
+    assert len({entry_id for _, entry_id in results}) == (1 if same_session else 2)
+    async with factory() as session:
+        wallet = await session.scalar(
+            select(Wallet).where(Wallet.id == wallet_id).with_for_update()
+        )
+        assert wallet is not None
+        assert wallet.balance_vnd == (15_000 if same_session else -5_000)
+        assert await session.scalar(
+            select(func.count())
+            .select_from(WalletLedger)
+            .where(
+                WalletLedger.wallet_id == wallet_id,
+                WalletLedger.entry_type == "charging_debit",
+            )
+        ) == (1 if same_session else 2)
+        total, issues = await wallet_issues(session, wallet)
+        assert total == wallet.balance_vnd
+        assert issues == []
+
+
+@pytest.mark.asyncio
+async def test_outer_rollback_removes_invoice_debit_and_balance_change(
+    isolated_wallet_db,
+):
+    factory = isolated_wallet_db
+    async with factory() as session:
+        station, _, _, driver, wallet, charging = await create_fixture(
+            session, initial_balance=50_000
+        )
+        charging_id, wallet_id = charging.id, wallet.id
+        station_id, driver_id = station.id, driver.id
+        await session.commit()
+    async with factory() as writer, factory() as observer:
+        invoice = Invoice(
+            session_id=charging_id,
+            station_id=station_id,
+            driver_id=driver_id,
+            total_vnd=20_000,
+            rounding_rule="half_up",
+        )
+        writer.add(invoice)
+        await writer.flush()
+        await tru_vi(writer, invoice=invoice)
+        # No internal commit: a different connection still sees the old state.
+        assert (await observer.get(Wallet, wallet_id)).balance_vnd == 50_000
+        assert (
+            await observer.scalar(
+                select(Invoice.id).where(Invoice.session_id == charging_id)
+            )
+            is None
+        )
+        await writer.rollback()
+    async with factory() as observer:
+        assert (await observer.get(Wallet, wallet_id)).balance_vnd == 50_000
+        assert (
+            await observer.scalar(
+                select(Invoice.id).where(Invoice.session_id == charging_id)
+            )
+            is None
+        )
+        assert (
+            await observer.scalar(
+                select(WalletLedger.id).where(
+                    WalletLedger.entry_type == "charging_debit",
+                    WalletLedger.reference_id == str(charging_id),
+                )
+            )
+            is None
+        )

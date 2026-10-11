@@ -17,6 +17,7 @@ from src.modules.wallet.exceptions import (
     WalletLedgerConflictError,
     WalletLockedError,
     WalletNotFoundError,
+    WalletOwnershipError,
 )
 from src.modules.wallet.models import Wallet, WalletAudit, WalletLedger
 from src.modules.wallet.provisioning import ensure_driver_wallet
@@ -262,6 +263,11 @@ async def tru_vi(
         if invoice is None:
             raise LookupError(f"Không tìm thấy hoá đơn cho phiên sạc {session_id}")
 
+    if session_id is not None and session_id != invoice.session_id:
+        raise ValueError("invoice và session_id phải thuộc cùng phiên sạc")
+
+    _integer_vnd(invoice.total_vnd)
+
     # Hoá đơn 0 đồng thì bỏ qua, không ghi dòng
     if invoice.total_vnd == 0:
         return None
@@ -277,6 +283,10 @@ async def tru_vi(
         if wallet is None:
             wallet = await ensure_driver_wallet(session, invoice.driver_id)
         wallet_id = wallet.id
+    else:
+        wallet = await _lock_wallet(session, wallet_id)
+        if wallet.driver_id != invoice.driver_id:
+            raise WalletOwnershipError("Ví phải thuộc tài xế trên hoá đơn")
 
     # Gọi ghi_so_cai ghi nhận biến động trừ tiền sạc
     return await ghi_so_cai(
@@ -288,4 +298,3 @@ async def tru_vi(
         reference_id=str(invoice.session_id),
         actor_id=actor_id,
     )
-

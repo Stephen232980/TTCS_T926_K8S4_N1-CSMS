@@ -13,6 +13,10 @@ class WalletLockedError(WalletError):
     pass
 
 
+class WalletOwnershipError(WalletError):
+    pass
+
+
 class WalletLedgerConflictError(WalletError):
     pass
 
