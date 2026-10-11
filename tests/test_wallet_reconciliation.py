@@ -297,6 +297,10 @@ async def test_application_lifespan_starts_and_cancels_wallet_job(monkeypatch):
     async def ocpp(app):
         yield
 
+    @asynccontextmanager
+    async def billing():
+        yield
+
     async def loop():
         entered.set()
         try:
@@ -305,6 +309,7 @@ async def test_application_lifespan_starts_and_cancels_wallet_job(monkeypatch):
             cancelled.set()
 
     monkeypatch.setattr(lifecycle, "ocpp_lifespan", ocpp)
+    monkeypatch.setattr(lifecycle, "closure_lifespan", billing)
     monkeypatch.setattr(lifecycle, "reconciliation_loop", loop)
     async with lifecycle.application_lifespan(None):
         await asyncio.wait_for(entered.wait(), 1)
