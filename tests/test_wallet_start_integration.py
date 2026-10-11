@@ -40,7 +40,7 @@ async def wallet_case(session, data, balance):
 
 @pytest.mark.parametrize("balance", [12499, 12500])
 async def test_real_wallet_authorize_and_start_boundaries(db_session, fixture, balance):
-    _, _, _, _, _, conn, tag = fixture
+    _, charger, _, _, _, conn, tag = fixture
     await wallet_case(db_session, fixture, balance)
     expected = "Accepted" if balance == 12500 else "Blocked"
     authorized = await call(db_session, conn, "Authorize", {"idTag": tag})
@@ -48,7 +48,9 @@ async def test_real_wallet_authorize_and_start_boundaries(db_session, fixture, b
     begun = await start(db_session, conn, tag)
     assert begun.payload["idTagInfo"]["status"] == expected
     assert await db_session.scalar(
-        select(func.count()).select_from(ChargingSession)
+        select(func.count())
+        .select_from(ChargingSession)
+        .where(ChargingSession.charge_point_id == charger.id)
     ) == int(balance == 12500)
 
 
@@ -80,9 +82,10 @@ async def test_real_wallet_api_boundaries(db_session, fixture, balance):
 async def test_wallet_changes_reject_durable_request_without_session(
     db_session, fixture, before_reply, reason
 ):
-    _, _, connector, driver, _, conn, _ = fixture
+    _, charger, connector, driver, _, conn, _ = fixture
     wallet = await wallet_case(db_session, fixture, 12500)
     driver_id = driver.id
+    charger_id = charger.id
     key = uuid4()
 
     async def deny_start(raw):
@@ -138,7 +141,12 @@ async def test_wallet_changes_reject_durable_request_without_session(
     assert snapshot["start_request"]["status"] == "Rejected"
     assert snapshot["start_request"]["rejection_reason"] == reason
     assert (
-        await db_session.scalar(select(func.count()).select_from(ChargingSession)) == 0
+        await db_session.scalar(
+            select(func.count())
+            .select_from(ChargingSession)
+            .where(ChargingSession.charge_point_id == charger_id)
+        )
+        == 0
     )
     conn.websocket.send_text.assert_awaited_once()
 
