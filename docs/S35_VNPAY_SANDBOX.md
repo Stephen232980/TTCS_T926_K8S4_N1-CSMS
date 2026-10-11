@@ -7,7 +7,7 @@ không làm một adapter trùng ở S-67. FakeGateway vẫn dành cho local/CI.
 ## Luồng
 
 T-93 tạo đơn pending trước khi tạo URL. Chế độ `sandbox` chọn VNPAY và dùng
-order_id `topup-vnpay-<uuid>`; IPN không chấp nhận đơn FakeGateway cũ.
+order_id `vnpay<uuid>`; IPN không chấp nhận đơn FakeGateway cũ.
 Backend ký query đã sắp xếp/form-encode bằng HMAC-SHA512, tiền VND nhân 100,
 thời gian Asia/Ho_Chi_Minh, hết hạn mặc định 15 phút. IP khách lấy từ peer
 đã được Uvicorn xác minh, không đọc X-Forwarded-For tùy ý trong handler.

@@ -63,7 +63,7 @@ def callback(order, **changes):
 async def test_payment_url_wire_format():
     payment = await adapter().create_payment(
         PaymentRequest(
-            order_id="topup-vnpay-" + "a" * 32,
+            order_id="vnpay" + "a" * 32,
             amount_vnd=50000,
             return_url="https://frontend.example/wallet/topup/return",
             client_ip="203.0.113.5",
@@ -106,11 +106,11 @@ async def test_payment_url_wire_format():
 )
 def test_authenticated_invalid_result(changes):
     with pytest.raises(InvalidWebhookPayload):
-        adapter().verify_query(callback("topup-vnpay-" + "a" * 32, **changes))
+        adapter().verify_query(callback("vnpay" + "a" * 32, **changes))
 
 
 def test_tampered_missing_and_duplicated_signatures():
-    items = callback("topup-vnpay-" + "a" * 32)
+    items = callback("vnpay" + "a" * 32)
     for invalid in [
         items[:-1],
         items + [items[-1]],
@@ -240,7 +240,7 @@ async def test_bad_signature_unknown_order_and_amount_mismatch(flow, caplog):
     assert result.json()["RspCode"] == "97"
     assert "client_ip=" in caplog.text and SECRET not in caplog.text
     assert await state(driver, order) == ("pending", 0, 0)
-    result = await client.get(IPN, params=callback("topup-vnpay-" + uuid4().hex))
+    result = await client.get(IPN, params=callback("vnpay" + uuid4().hex))
     assert result.json()["RspCode"] == "01"
     result = await client.get(IPN, params=callback(order, vnp_Amount="4000000"))
     assert result.json()["RspCode"] == "04"

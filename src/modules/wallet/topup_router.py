@@ -107,7 +107,7 @@ async def create_topup(
     topup = WalletTopup(
         driver_id=wallet.driver_id,
         amount_vnd=body.amount_vnd,
-        order_id=("topup-vnpay-" if isinstance(gateway, VnpayGateway) else "topup-")
+        order_id=("vnpay" if isinstance(gateway, VnpayGateway) else "topup-")
         + uuid4().hex,
         status="pending",
     )

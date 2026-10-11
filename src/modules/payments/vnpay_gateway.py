@@ -116,7 +116,7 @@ class VnpayGateway:
             if succeeded and int(transaction) == 0:
                 raise ValueError("Missing successful transaction ID")
             order = params["vnp_TxnRef"]
-            if not re.fullmatch(r"topup-vnpay-[0-9a-f]{32}", order):
+            if not re.fullmatch(r"vnpay[0-9a-f]{32}", order):
                 raise ValueError("Invalid order reference")
             # Unsuccessful attempts may carry TransactionNo=0; do not make all
             # failed orders collide on that sentinel in the database.
