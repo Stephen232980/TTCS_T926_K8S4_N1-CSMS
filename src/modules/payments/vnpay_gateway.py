@@ -50,7 +50,13 @@ class VnpayGateway:
             client_ip = str(ipaddress.ip_address(request.client_ip))
         except ValueError as exc:
             raise PaymentGatewayUnavailable("Payment client IP unavailable") from exc
-        now = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
+        if request.created_at is not None and request.created_at.tzinfo is None:
+            raise PaymentGatewayUnavailable(
+                "Payment creation time must be timezone aware"
+            )
+        now = (
+            request.created_at or datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
+        ).astimezone(ZoneInfo("Asia/Ho_Chi_Minh"))
         params = {
             "vnp_Version": "2.1.0",
             "vnp_Command": "pay",

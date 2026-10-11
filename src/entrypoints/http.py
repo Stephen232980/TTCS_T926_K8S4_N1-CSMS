@@ -20,6 +20,7 @@ from src.modules.ocpp.control_router import router as control_router
 from src.modules.ocpp.monitor_router import router as monitor_router
 from src.modules.ocpp.router import router as ocpp_router
 from src.modules.payments.fake_router import router as fake_payment_router
+from src.modules.payments.reconciliation_router import router as reconciliation_router
 from src.modules.payments.vnpay_router import router as vnpay_router
 from src.modules.payments.webhook_router import router as payment_webhook_router
 from src.modules.pricing.router import router as tariff_router
@@ -67,6 +68,7 @@ app.include_router(control_router)
 app.include_router(health_router)
 app.include_router(payment_webhook_router)
 app.include_router(vnpay_router)
+app.include_router(reconciliation_router)
 app.include_router(fake_payment_router)
 app.include_router(
     scoped_routes(

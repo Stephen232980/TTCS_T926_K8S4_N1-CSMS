@@ -1,6 +1,7 @@
 """T-90 contract shared by gateway adapters, topup creation and webhook handling."""
 
 from collections.abc import Mapping
+from datetime import datetime
 from typing import Annotated, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
@@ -20,6 +21,7 @@ class PaymentRequest(PaymentContractModel):
     amount_vnd: AmountVnd
     return_url: HttpUrl
     client_ip: str = "127.0.0.1"
+    created_at: datetime | None = None
 
     @field_validator("order_id")
     @classmethod
