@@ -20,10 +20,8 @@ from src.entrypoints.http import app
 from src.modules.billing.closure import chot_phien
 from src.modules.billing.invoicing import lap_hoa_don
 from src.modules.billing.models import Invoice, InvoiceLine
-from src.modules.charging.models import ChargingSession
 from src.modules.identity.authorization import CurrentActor
 from src.modules.identity.dependencies import get_current_actor
-from src.modules.pricing.models import Tariff
 from src.modules.pricing.service import (
     TariffImmutableError,
     kiem_bieu_gia_co_the_sua,
@@ -32,6 +30,48 @@ from tests.test_ocpp_control import db_session as isolated_session
 from tests.test_t80_invoicing import STAMP, lines, seed, tariff
 
 db_session = isolated_session
+
+
+async def invoice_snapshot(session, invoice_id):
+    """Read every persisted evidence column without relying on ORM identity cache."""
+    invoice = (
+        (
+            await session.execute(
+                select(Invoice.__table__).where(Invoice.id == invoice_id)
+            )
+        )
+        .mappings()
+        .one()
+    )
+    detail = (
+        (
+            await session.execute(
+                select(InvoiceLine.__table__)
+                .where(InvoiceLine.invoice_id == invoice_id)
+                .order_by(InvoiceLine.id)
+            )
+        )
+        .mappings()
+        .all()
+    )
+    return {"invoice": dict(invoice), "lines": [dict(row) for row in detail]}
+
+
+async def driver_invoice(driver_id, session_id):
+    app.dependency_overrides[get_current_actor] = lambda: CurrentActor(
+        user_id=driver_id, roles=frozenset({"driver"})
+    )
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.get(
+                f"/api/v1/driver/charging/sessions/{session_id}/invoice"
+            )
+        assert response.status_code == 200
+        return response.json()
+    finally:
+        app.dependency_overrides.pop(get_current_actor, None)
 
 
 async def test_t83_lap_hoa_don_hai_lan_cho_mot_phien_thi_mot_hoa_don(db_session):
@@ -46,7 +86,7 @@ async def test_t83_lap_hoa_don_hai_lan_cho_mot_phien_thi_mot_hoa_don(db_session)
     - API tài xế (GET /api/v1/driver/charging/sessions/{id}/invoice và /api/v1/driver/invoices)
       trả về đúng 1 hoá đơn ở trạng thái 'ready' với số tiền và dòng nguyên vẹn.
     """
-    charging, station, driver, version = await seed(
+    charging, _station, driver, _version = await seed(
         db_session,
         stamp=STAMP,
         duration=timedelta(hours=1),
@@ -67,6 +107,7 @@ async def test_t83_lap_hoa_don_hai_lan_cho_mot_phien_thi_mot_hoa_don(db_session)
     original_lines = await lines(db_session, first_result.invoice)
     assert len(original_lines) == 1
     original_line_ids = [line.id for line in original_lines]
+    original_snapshot = await invoice_snapshot(db_session, original_invoice_id)
 
     # Lập hoá đơn lần 2 bằng lap_hoa_don
     second_result = await lap_hoa_don(db_session, session_id)
@@ -93,6 +134,7 @@ async def test_t83_lap_hoa_don_hai_lan_cho_mot_phien_thi_mot_hoa_don(db_session)
     current_lines = await lines(db_session, second_result.invoice)
     assert len(current_lines) == 1
     assert [line.id for line in current_lines] == original_line_ids
+    assert await invoice_snapshot(db_session, original_invoice_id) == original_snapshot
 
     # Xác minh qua API tài xế theo đúng hợp đồng T-82 và giao diện DriverInvoicePage
     app.dependency_overrides[get_current_actor] = lambda: CurrentActor(
@@ -154,6 +196,11 @@ async def test_t83_doi_bieu_gia_sau_do_thi_hoa_don_cu_khong_doi(db_session):
     res_1 = await lap_hoa_don(db_session, session_1.id)
     assert res_1.status == "ready"
     assert res_1.invoice.total_vnd == 30000
+    original_invoice_id = res_1.invoice.id
+    original_session_id = session_1.id
+    driver_id = driver.id
+    original_snapshot = await invoice_snapshot(db_session, original_invoice_id)
+    original_api = await driver_invoice(driver_id, original_session_id)
 
     lines_1 = await lines(db_session, res_1.invoice)
     assert len(lines_1) == 1
@@ -185,7 +232,9 @@ async def test_t83_doi_bieu_gia_sau_do_thi_hoa_don_cu_khong_doi(db_session):
 
     recheck_lines_1 = await lines(db_session, recheck_res_1.invoice)
     assert len(recheck_lines_1) == 1
-    assert recheck_lines_1[0].rate_vnd == 3000  # Vẫn là đơn giá 3.000 đ/kWh của Biểu giá A
+    assert (
+        recheck_lines_1[0].rate_vnd == 3000
+    )  # Vẫn là đơn giá 3.000 đ/kWh của Biểu giá A
     assert recheck_lines_1[0].amount_vnd == 30000
     assert recheck_lines_1[0].tariff_id == tariff_a.id  # Không bị trỏ sang tariff_b.id
 
@@ -206,6 +255,7 @@ async def test_t83_doi_bieu_gia_sau_do_thi_hoa_don_cu_khong_doi(db_session):
             assert data["lines"][0]["rate_vnd"] == "3000"
             assert data["lines"][0]["amount_vnd"] == "30000"
             assert data["lines"][0]["tariff_id"] == str(tariff_a.id)
+            assert data == original_api
     finally:
         app.dependency_overrides.pop(get_current_actor, None)
 
@@ -235,8 +285,11 @@ async def test_t83_doi_bieu_gia_sau_do_thi_hoa_don_cu_khong_doi(db_session):
 
     # Khẳng định lại lần cuối: Session 1 vẫn không thay đổi
     db_session.expire_all()
-    saved_invoice_1 = await db_session.get(Invoice, res_1.invoice.id)
+    saved_invoice_1 = await db_session.get(Invoice, original_invoice_id)
+    assert saved_invoice_1 is not None
     assert saved_invoice_1.total_vnd == 30000
+    assert await invoice_snapshot(db_session, original_invoice_id) == original_snapshot
+    assert await driver_invoice(driver_id, original_session_id) == original_api
 
 
 async def test_t83_update_hoac_delete_bang_tai_khoan_ung_dung_bi_tu_choi(db_session):
@@ -257,6 +310,29 @@ async def test_t83_update_hoac_delete_bang_tai_khoan_ung_dung_bi_tu_choi(db_sess
     assert result.status == "ready"
     invoice = result.invoice
     invoice_line = (await lines(db_session, invoice))[0]
+    invoice_id = invoice.id
+    line_id = invoice_line.id
+    original_snapshot = await invoice_snapshot(db_session, invoice_id)
+    fk_deletions = [
+        ("charging_sessions", "id", charging.id),
+        ("stations", "id", station.id),
+        ("users", "id", driver.id),
+        ("tariffs", "id", version.id),
+    ]
+
+    # A separate valid invoice/line exercises INSERT privileges under the app role.
+    extra_charging, extra_station, extra_driver, extra_tariff = await seed(db_session)
+    insert_invoice = original_snapshot["invoice"] | {
+        "id": uuid4(),
+        "session_id": extra_charging.id,
+        "station_id": extra_station.id,
+        "driver_id": extra_driver.id,
+    }
+    insert_line = original_snapshot["lines"][0] | {
+        "id": uuid4(),
+        "invoice_id": insert_invoice["id"],
+        "tariff_id": extra_tariff.id,
+    }
 
     # 1. Kiểm tra Trigger ngăn chặn UPDATE / DELETE / TRUNCATE
     mutation_statements = [
@@ -279,59 +355,64 @@ async def test_t83_update_hoac_delete_bang_tai_khoan_ung_dung_bi_tu_choi(db_sess
         text(f'CREATE ROLE "{role}" NOLOGIN NOSUPERUSER NOINHERIT')
     )
     script_path = Path("scripts/grant_invoice_evidence.sql")
-    if script_path.exists():
-        script_content = script_path.read_text(encoding="utf-8")
-        for stmt in (
-            "\n".join(s for s in script_content.splitlines() if not s.startswith(("--", "\\")))
-            .replace(':"app_role"', f'"{role}"')
-            .split(";")
-        ):
-            if stmt.strip() and stmt.strip() not in ("BEGIN", "COMMIT"):
-                await db_session.execute(text(stmt))
+    script_content = script_path.read_text(encoding="utf-8")
+    for stmt in (
+        "\n".join(
+            s for s in script_content.splitlines() if not s.startswith(("--", "\\"))
+        )
+        .replace(':"app_role"', f'"{role}"')
+        .split(";")
+    ):
+        if stmt.strip() and stmt.strip() not in ("BEGIN", "COMMIT"):
+            await db_session.execute(text(stmt))
 
-        # Chuyển sang app role
+    try:
         await db_session.execute(text(f'SET LOCAL ROLE "{role}"'))
+        assert await db_session.scalar(text("SELECT current_user")) == role
 
         # SELECT thành công dưới quyền app role
         app_read_total = await db_session.scalar(
-            select(Invoice.total_vnd).where(Invoice.id == invoice.id)
+            select(Invoice.total_vnd).where(Invoice.id == invoice_id)
         )
-        assert app_read_total == invoice.total_vnd
+        assert app_read_total == original_snapshot["invoice"]["total_vnd"]
+        await db_session.execute(Invoice.__table__.insert().values(**insert_invoice))
+        await db_session.execute(InvoiceLine.__table__.insert().values(**insert_line))
+        assert (await invoice_snapshot(db_session, insert_invoice["id"])) == {
+            "invoice": insert_invoice,
+            "lines": [insert_line],
+        }
 
         # UPDATE / DELETE dưới quyền app role bị từ chối
         for table in ("invoices", "invoice_lines"):
-            with pytest.raises(DBAPIError):
-                async with db_session.begin_nested():
-                    await db_session.execute(text(f"UPDATE {table} SET id=id"))
-
-            with pytest.raises(DBAPIError):
-                async with db_session.begin_nested():
-                    await db_session.execute(text(f"DELETE FROM {table}"))
-
+            for stmt in (
+                f"UPDATE {table} SET id=id",
+                f"DELETE FROM {table}",
+                f"TRUNCATE {table} CASCADE",
+            ):
+                with pytest.raises(DBAPIError) as denied:
+                    async with db_session.begin_nested():
+                        await db_session.execute(text(stmt))
+                assert denied.value.orig.sqlstate == "42501"
+    finally:
         await db_session.execute(text("RESET ROLE"))
 
     # 3. Kiểm tra bảo vệ toàn vẹn tham chiếu khoá ngoại (Foreign Key RESTRICT)
     # Không thể xoá các thực thể cha đang được hoá đơn hoặc dòng hoá đơn tham chiếu
-    fk_deletions = [
-        ("charging_sessions", "id", charging.id),
-        ("stations", "id", station.id),
-        ("users", "id", driver.id),
-        ("tariffs", "id", version.id),
-    ]
-
     for table, column, target_id in fk_deletions:
-        with pytest.raises(IntegrityError):
+        with pytest.raises(IntegrityError) as restricted:
             async with db_session.begin_nested():
                 await db_session.execute(
                     text(f"DELETE FROM {table} WHERE {column}=:target_id"),
                     {"target_id": target_id},
                 )
+        assert restricted.value.orig.sqlstate == "23503"
 
     # 4. Xác nhận dữ liệu hoá đơn vẫn nguyên vẹn sau toàn bộ các thao tác trên
     db_session.expire_all()
-    surviving_invoice = await db_session.get(Invoice, invoice.id)
+    surviving_invoice = await db_session.get(Invoice, invoice_id)
     assert surviving_invoice is not None
-    assert surviving_invoice.total_vnd == invoice.total_vnd
+    assert surviving_invoice.total_vnd == original_snapshot["invoice"]["total_vnd"]
     surviving_lines = await lines(db_session, surviving_invoice)
     assert len(surviving_lines) == 1
-    assert surviving_lines[0].id == invoice_line.id
+    assert surviving_lines[0].id == line_id
+    assert await invoice_snapshot(db_session, invoice_id) == original_snapshot
