@@ -22,6 +22,15 @@ class Settings(BaseSettings):
     payment_return_url: HttpUrl = HttpUrl("http://localhost:5173/wallet/topup/return")
     payment_fake_base_url: HttpUrl = HttpUrl("http://localhost:8000")
     vnpay_tmn_code: str = ""
+    vnpay_query_ip: str = ""
+
+    @field_validator("vnpay_query_ip")
+    @classmethod
+    def validate_query_ip(cls, value: str) -> str:
+        from ipaddress import ip_address
+
+        return str(ip_address(value)) if value else ""
+
     vnpay_return_url: HttpUrl | None = None
     vnpay_payment_url: Literal["https://sandbox.vnpayment.vn/paymentv2/vpcpay.html"] = (
         "https://sandbox.vnpayment.vn/paymentv2/vpcpay.html"

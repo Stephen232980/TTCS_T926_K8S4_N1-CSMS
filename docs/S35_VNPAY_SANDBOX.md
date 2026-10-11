@@ -53,8 +53,8 @@ DNS và Caddy HTTPS đã được người dùng kiểm tra; không cần chuy�
 80, không đổi workflow/build/deploy. Caddy nằm cùng mạng Docker, /api/ chuyển
 thẳng đến csms-app:8000. Chứng chỉ lưu volume riêng, không xóa khi deploy app.
 
-Đã kiểm tra read-only VM ngày 11/10/2026: tệp cấu hình tồn tại tại
-`/home/deploy/.env`, backend đang PAYMENT_GATEWAY=disabled và cookie Secure=false.
+Tệp cấu hình staging đã được kiểm tra tại `/home/deploy/.env` ngày 11/10/2026.
+Sau merge PR #125, backend đã deploy chế độ sandbox và cookie Secure=true.
 Không tạo .env trong /home/azureadmin hoặc bỏ mất DATABASE_URL hiện có.
 Sau khi PR merge, lấy scripts/configure_vnpay_staging.py từ commit đã review
 vào /tmp/configure_vnpay_staging.py và chạy bằng deploy để giữ quyền sở hữu:
@@ -75,13 +75,23 @@ kiểm tra candidate/readiness, login HTTPS, và POST tạo đơn trước mở 
 Không tái sử dụng đơn pending FakeGateway để test VNPAY. Không chạy bộ pytest
 trên DB staging. QueryDR/refund, đối soát tự động và production không thuộc PR.
 
-Chưa có khóa thật trong repository, chưa kích hoạt VNPAY trên VM và chưa có
-bằng chứng SIT. Không chuyển S-35 Done chỉ dựa trên CI xanh.
+Khóa thật không nằm trong repository. Ngày 11/10/2026, ảnh SIT ghi nhận 5/6
+ca đạt; ví hiển thị đúng một dòng +50.000 VND với tham chiếu vnpay:15701350.
+Ca không tìm thấy đơn trả 99 thay vì 01 do kiểm tra mã theo mẫu UUID nội bộ.
+Bản sửa xác thực chữ ký trước, nhận mã ASCII alphanumeric dài 1–100 theo
+giao thức VNPAY, rồi tra cứu để trả 01 nếu không có đơn. Mã không đúng định
+dạng vẫn trả 99. Không đổi cách sinh mã đơn hoặc quy tắc cộng tiền.
+Sau deploy bản sửa phải chạy lại SIT; không chuyển S-35 Done chỉ dựa trên CI.
 
 ## Nghiệm thu với VNPAY
 
 1. Đăng ký IPN HTTPS trên với VNPAY/SIT theo email merchant, dùng tài khoản
    SIT riêng; không gửi mật khẩu vào chat.
+   Theo hướng dẫn SIT, tạo hai đơn mới: chọn thẻ nội địa/ATM → NCB, nhập dữ
+   liệu thẻ TEST, dừng tại màn hình OTP rồi đóng cửa sổ, không thanh toán/hủy.
+   Dùng các phiên ẩn danh riêng cho dữ liệu SIT khi giao diện giữ đơn pending;
+   không xóa hoặc sửa trạng thái đơn cũ. Chọn đúng terminal trên SIT, chọn một
+   đơn cho ca thành công và đơn còn lại cho ca thất bại, chạy Tiến hành kiểm tra.
 2. Đăng nhập tài xế thử; nạp 50.000 VND, kiểm tra chuyển đúng sandbox và order
    pending, ví chưa tăng trước IPN.
 3. Thanh toán bằng dữ liệu thử chính thức VNPAY; Return hiển thị trạng thái
@@ -92,7 +102,16 @@ bằng chứng SIT. Không chuyển S-35 Done chỉ dựa trên CI xanh.
    cancelled, quay về trước IPN và IPN đồng thời. Xác nhận không cộng sai.
 6. Sau một lần deploy tiếp theo, HTTPS/login/IPN vẫn hoạt động.
 
+Đơn 100.000 VND tạo trước khi chuẩn bị SIT vẫn pending theo ảnh ngày
+11/10/2026; nó khác hai đơn SIT. Không suy ra thất bại từ timeout hoặc suy ra
+thành công từ Return. Cần IPN hợp lệ hoặc quy trình đối soát với VNPAY trước
+khi chốt trạng thái; bản sửa SIT không cập nhật thủ công đơn này.
+
 ## Tài liệu chính thức
+
+Đơn thiếu IPN có thể được quản trị viên xử lý theo
+[quy trình QueryDR có kiểm toán](S35_VNPAY_RECONCILIATION.md), là phần bổ sung
+được Đào Minh Tâm đồng ý ngày 11/10/2026. Return vẫn không cộng tiền.
 
 - [PAY/IPN/Return và mã phản hồi](https://sandbox.vnpayment.vn/apis/docs/thanh-toan-pay/pay.html)
 - [Mã lỗi](https://sandbox.vnpayment.vn/apis/docs/bang-ma-loi/)

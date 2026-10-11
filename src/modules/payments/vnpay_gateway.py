@@ -50,7 +50,13 @@ class VnpayGateway:
             client_ip = str(ipaddress.ip_address(request.client_ip))
         except ValueError as exc:
             raise PaymentGatewayUnavailable("Payment client IP unavailable") from exc
-        now = datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
+        if request.created_at is not None and request.created_at.tzinfo is None:
+            raise PaymentGatewayUnavailable(
+                "Payment creation time must be timezone aware"
+            )
+        now = (
+            request.created_at or datetime.now(ZoneInfo("Asia/Ho_Chi_Minh"))
+        ).astimezone(ZoneInfo("Asia/Ho_Chi_Minh"))
         params = {
             "vnp_Version": "2.1.0",
             "vnp_Command": "pay",
@@ -116,7 +122,9 @@ class VnpayGateway:
             if succeeded and int(transaction) == 0:
                 raise ValueError("Missing successful transaction ID")
             order = params["vnp_TxnRef"]
-            if not re.fullmatch(r"vnpay[0-9a-f]{32}", order):
+            # Validate the provider's wire format, not our generated UUID shape.
+            # SIT signs altered references; settlement must report missing orders.
+            if not re.fullmatch(r"[A-Za-z0-9]{1,100}", order):
                 raise ValueError("Invalid order reference")
             # Unsuccessful attempts may carry TransactionNo=0; do not make all
             # failed orders collide on that sentinel in the database.

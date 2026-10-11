@@ -16,6 +16,7 @@ GET,/api/v1/admin/charging/sessions/{transaction_id}/samples,user,admin.charging
 POST,/api/v1/admin/drivers/{driver_id}/wallet/manual-topups,user,admin.wallet.manual_topup,all,admin,
 GET,/api/v1/admin/ocpp/connections,user,admin.monitor.read,all,admin,
 GET,/api/v1/admin/ocpp/connections/events,user,admin.monitor.read,all,admin,
+POST,/api/v1/admin/payments/vnpay/topups/{order_id}/reconcile,user,admin.wallet.topup.reconcile,all,admin,
 GET,/api/v1/admin/roles,user,admin.list_roles,all,admin,
 GET,/api/v1/admin/stations,user,admin.stations.list_stations,all,admin,
 GET,/api/v1/admin/stations/{station_id},user,admin.stations.get_station,all,admin,
