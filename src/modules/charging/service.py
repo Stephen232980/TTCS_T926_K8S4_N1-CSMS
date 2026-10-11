@@ -313,6 +313,9 @@ async def start_transaction(
         raise ValueError("Connector is not registered")
     result, card, wallet_reason = await authorize(session, charger, payload.idTag)
     if wallet_reason is not None:
+        from src.modules.charging.driver import reject_remote_start
+
+        await reject_remote_start(session, connector, card, wallet_reason)
         pending(session, charger, frame, wallet_reason)
         return {"transactionId": 0, "idTagInfo": {"status": "Blocked"}}
     old = await session.scalar(

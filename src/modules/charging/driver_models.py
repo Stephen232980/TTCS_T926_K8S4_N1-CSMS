@@ -49,6 +49,7 @@ class DriverStartRequest(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     status: Mapped[str] = mapped_column(String(30))
     reply_status: Mapped[str] = mapped_column(String(30))
+    rejection_reason: Mapped[str | None] = mapped_column(String(32))
     reply_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     lease_until: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     session_id: Mapped[int | None] = mapped_column(

@@ -76,6 +76,7 @@ def start_result(request: DriverStartRequest) -> dict[str, object]:
         "id": request.id,
         "status": status,
         "reply_status": request.reply_status,
+        "rejection_reason": request.rejection_reason,
         "session_id": request.session_id,
         "deadline": request.lease_until if status == "Accepted" else None,
     }
@@ -234,7 +235,7 @@ async def remote_start(
             outcome = await control.command_status(session, request_id)
             completed.reply_status = outcome
             completed.reply_at = received
-            if completed.status != "Started":
+            if completed.status not in ("Started", "Rejected"):
                 completed.status = outcome
                 completed.lease_until = (
                     received + timedelta(seconds=START_CONFIRMATION_SECONDS)
@@ -242,6 +243,41 @@ async def remote_start(
                     else received
                 )
         return start_result(completed)
+
+
+async def reject_remote_start(
+    session: AsyncSession, connector: Connector, card: ChargingCard | None, reason: str
+) -> None:
+    """A wallet denial terminates only the matching virtual-tag start request.
+
+    The OCPP dispatcher already holds charger/connector locks. Keep the command
+    reply separate: a charger may accept RemoteStart but fail authorization later.
+    """
+    if card is None:
+        return
+    tag = await session.scalar(
+        select(DriverVirtualTag).where(DriverVirtualTag.card_id == card.id)
+    )
+    if tag is None:
+        return
+    request = await session.scalar(
+        select(DriverStartRequest)
+        .where(
+            DriverStartRequest.driver_id == card.driver_id,
+            DriverStartRequest.connector_id == connector.id,
+            DriverStartRequest.session_id.is_(None),
+            DriverStartRequest.status.in_(
+                ["Pending", "Accepted", "StartNotConfirmed", "Timeout", "Disconnected"]
+            ),
+        )
+        .order_by(DriverStartRequest.created_at.desc())
+        .limit(1)
+        .with_for_update()
+    )
+    if request is not None:
+        request.status = "Rejected"
+        request.rejection_reason = reason
+        request.lease_until = datetime.now(UTC)
 
 
 async def attach_remote_start(
