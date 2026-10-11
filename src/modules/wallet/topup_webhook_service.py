@@ -49,9 +49,14 @@ async def _review(session: AsyncSession, topup: WalletTopup, reason: str) -> Non
         topup.status = "needs_review"
         topup.reason = reason
         await session.flush()
-        logger.warning(
-            "Payment settlement needs review topup_id=%s reason=%s", topup.id, reason
-        )
+
+    # Emit a warning for every anomalous callback, even if the status
+    # was already succeeded or needs_review. Do not log payloads or secrets.
+    logger.warning(
+        "Payment settlement needs review topup_id=%s reason=%s",
+        topup.id,
+        reason,
+    )
 
 
 async def process_topup_webhook(
