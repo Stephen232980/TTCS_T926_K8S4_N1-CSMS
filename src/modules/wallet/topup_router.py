@@ -120,6 +120,7 @@ async def create_topup(
         amount_vnd=topup.amount_vnd,
         return_url=settings.payment_return_url,
         client_ip=request.client.host if request.client else "127.0.0.1",
+        created_at=topup.created_at,
     )
     try:
         async with asyncio.timeout(PAYMENT_CREATE_TIMEOUT_SECONDS):

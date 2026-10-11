@@ -109,6 +109,10 @@ khi chốt trạng thái; bản sửa SIT không cập nhật thủ công đơn 
 
 ## Tài liệu chính thức
 
+Đơn thiếu IPN có thể được quản trị viên xử lý theo
+[quy trình QueryDR có kiểm toán](S35_VNPAY_RECONCILIATION.md), là phần bổ sung
+được Đào Minh Tâm đồng ý ngày 11/10/2026. Return vẫn không cộng tiền.
+
 - [PAY/IPN/Return và mã phản hồi](https://sandbox.vnpayment.vn/apis/docs/thanh-toan-pay/pay.html)
 - [Mã lỗi](https://sandbox.vnpayment.vn/apis/docs/bang-ma-loi/)
 - [SIT](https://sandbox.vnpayment.vn/vnpaygw-sit-testing/user/login)
