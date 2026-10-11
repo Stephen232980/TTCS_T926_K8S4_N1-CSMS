@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import random
 import socket
 import subprocess
@@ -10,7 +11,10 @@ from uuid import uuid4
 
 import httpx
 import pytest
-from sqlalchemy import delete, func, select
+import pytest_asyncio
+from sqlalchemy import delete, func, select, text
+from sqlalchemy.engine import make_url
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from websockets.asyncio.client import connect
 
 from src.config import settings
@@ -30,12 +34,54 @@ from src.modules.identity.authorization import (
 )
 from src.modules.identity.dependencies import get_current_actor
 from src.modules.identity.models import User
+from src.modules.ocpp import dispatcher
 from src.modules.ocpp.dispatcher import dispatch_call
 from src.modules.ocpp.frames import Frame, decode_frame
 from src.modules.stations.models import ChargePoint, Connector, Station
 from src.platform.database.session import SessionFactory, get_db_session
 from tests.test_charging_sessions import call, meter_payload, setup, start
 from tests.test_ocpp_foundation import charger_fixture, connection
+
+
+@pytest_asyncio.fixture
+async def isolated_recovery_database(monkeypatch):
+    # This race commits on two independent connections. Its immutable audit
+    # prevents deleting the actor, so dispose the entire test-owned DB instead.
+    name = "t57b_race_" + uuid4().hex
+    url = make_url(settings.database_url).set(database=name)
+    admin_engine = create_async_engine(
+        make_url(settings.database_url).set(database="postgres"),
+        isolation_level="AUTOCOMMIT",
+    )
+    test_engine = create_async_engine(url)
+    created = False
+    try:
+        async with admin_engine.connect() as connection:
+            await connection.execute(text(f'CREATE DATABASE "{name}"'))
+            created = True
+        environment = {
+            **os.environ,
+            "DATABASE_URL": url.render_as_string(hide_password=False),
+        }
+        await asyncio.to_thread(
+            subprocess.run,
+            [sys.executable, "-m", "alembic", "upgrade", "head"],
+            env=environment,
+            capture_output=True,
+            check=True,
+            timeout=60,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+        )
+        factory = async_sessionmaker(test_engine, expire_on_commit=False)
+        monkeypatch.setattr(sys.modules[__name__], "SessionFactory", factory)
+        monkeypatch.setattr(dispatcher, "SessionFactory", factory)
+        yield
+    finally:
+        await test_engine.dispose()
+        if created:
+            async with admin_engine.connect() as connection:
+                await connection.execute(text(f'DROP DATABASE "{name}" WITH (FORCE)'))
+        await admin_engine.dispose()
 
 
 async def reconnect(session, charger, station):
@@ -375,7 +421,9 @@ async def test_manual_close_rejects_missing_invalid_or_normal_session(db_session
 
 
 @pytest.mark.asyncio
-async def test_manual_close_and_late_stop_serialize_without_overwrite():
+async def test_manual_close_and_late_stop_serialize_without_overwrite(
+    isolated_recovery_database,
+):
     from fastapi import HTTPException
 
     stamp = datetime.now(UTC) - timedelta(minutes=10)
@@ -409,67 +457,53 @@ async def test_manual_close_and_late_stop_serialize_without_overwrite():
                 unit="Wh",
             )
         )
-    try:
 
-        async def close():
-            async with SessionFactory() as session, session.begin():
-                try:
-                    await close_session(
-                        AuthorizationEvidence("ops.sessions.close", ("operator",)),
-                        tid,
-                        ManualCloseRequest(reason="Kiểm tra"),
-                        CurrentActor(owner_id, frozenset({"operator"})),
-                        ActorScope(owner_id, None),
-                        session,
-                    )
-                    return 200
-                except HTTPException as error:
-                    return error.status_code
-
-        conn = connection(charger_id, station_id)
-        conn.boot_accepted = True
-        result, _ = await asyncio.gather(
-            close(),
-            dispatch_call(
-                conn,
-                Frame(
-                    2,
-                    str(uuid4()),
-                    {
-                        "transactionId": tid,
-                        "meterStop": 4000,
-                        "timestamp": (stamp + timedelta(minutes=5)).isoformat(),
-                    },
-                    action="StopTransaction",
-                ),
-            ),
-        )
-        async with SessionFactory() as session:
-            tx = await session.get(ChargingSession, tid)
-            assert tx.ended_at is not None and tx.abnormal_since is None
-            assert tx.energy_kwh == (Decimal("2.5") if result == 200 else Decimal(3))
-            assert result in (200, 409)
-            assert (
-                await session.scalar(
-                    select(func.count())
-                    .select_from(ChargingSessionEvent)
-                    .where(ChargingSessionEvent.session_id == tid)
-                )
-                == 1
-            )
-    finally:
+    async def close():
         async with SessionFactory() as session, session.begin():
-            await session.execute(
-                delete(ChargingSession).where(ChargingSession.id == tid)
+            try:
+                await close_session(
+                    AuthorizationEvidence("ops.sessions.close", ("operator",)),
+                    tid,
+                    ManualCloseRequest(reason="Kiểm tra"),
+                    CurrentActor(owner_id, frozenset({"operator"})),
+                    ActorScope(owner_id, None),
+                    session,
+                )
+                return 200
+            except HTTPException as error:
+                return error.status_code
+
+    conn = connection(charger_id, station_id)
+    conn.boot_accepted = True
+    result, _ = await asyncio.gather(
+        close(),
+        dispatch_call(
+            conn,
+            Frame(
+                2,
+                str(uuid4()),
+                {
+                    "transactionId": tid,
+                    "meterStop": 4000,
+                    "timestamp": (stamp + timedelta(minutes=5)).isoformat(),
+                },
+                action="StopTransaction",
+            ),
+        ),
+    )
+    async with SessionFactory() as session:
+        tx = await session.get(ChargingSession, tid)
+        assert tx.ended_at is not None and tx.abnormal_since is None
+        assert tx.energy_kwh == (Decimal("2.5") if result == 200 else Decimal(3))
+        assert result in (200, 409)
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(ChargingSessionEvent)
+                .where(ChargingSessionEvent.session_id == tid)
             )
-            await session.execute(
-                delete(Connector).where(Connector.charge_point_id == charger_id)
-            )
-            await session.execute(
-                delete(ChargePoint).where(ChargePoint.id == charger_id)
-            )
-            await session.execute(delete(Station).where(Station.id == station_id))
-            await session.execute(delete(User).where(User.id == owner_id))
+            == 1
+        )
 
 
 @pytest.mark.asyncio

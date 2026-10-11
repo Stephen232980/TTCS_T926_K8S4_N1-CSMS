@@ -1,0 +1,58 @@
+import { afterEach, expect, it, vi } from 'vitest'
+import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { DriverWorkspace } from './DriverWorkspace'
+import { WalletTopUpApiError, createWalletTopUp, getWalletTopUp } from './walletTopUpApi'
+vi.mock('./DriverCharging', () => ({ DriverCharging: () => null }))
+vi.mock('./DriverMapPage', () => ({ DriverMapPage: () => null }))
+vi.mock('./DriverWalletPage', () => ({ DriverWalletPage: () => <div>Wallet</div> }))
+vi.mock('./walletTopUpApi', async original => ({ ...await original<typeof import('./walletTopUpApi')>(), createWalletTopUp: vi.fn(), getWalletTopUp: vi.fn(), refreshDriverWallet: vi.fn().mockResolvedValue(undefined) }))
+afterEach(() => { cleanup(); vi.clearAllMocks(); sessionStorage.clear(); window.history.replaceState(null, '', '/') })
+it('keeps uncertain order locked across navigation and remount', async () => {
+  window.history.replaceState(null, '', '/#driver-wallet')
+  vi.mocked(createWalletTopUp).mockRejectedValue(new WalletTopUpApiError('uncertain', 'Unknown result', 500, 'existing-order'))
+  vi.mocked(getWalletTopUp).mockResolvedValue({status:'pending'})
+  const user = userEvent.setup()
+  const view = render(<DriverWorkspace currentUser={{id:'d',email:'d@test',roles:['driver']}} onLogout={vi.fn()} navigateToPayment={vi.fn()} />)
+  await user.click(screen.getByRole('button', {name:'Nạp tiền'}))
+  await screen.findByText('Unknown result')
+  expect(screen.getByRole('button', {name:'Nạp tiền'})).toBeDisabled()
+  await user.click(screen.getByRole('link', {name:'Tìm trạm'}))
+  await user.click(screen.getByRole('link', {name:'Ví của bạn'}))
+  expect(screen.getByRole('button', {name:'Nạp tiền'})).toBeDisabled()
+  view.unmount()
+  render(<DriverWorkspace currentUser={{id:'d',email:'d@test',roles:['driver']}} onLogout={vi.fn()} />)
+  expect(screen.getByRole('button', {name:'Nạp tiền'})).toBeDisabled()
+  expect(createWalletTopUp).toHaveBeenCalledTimes(1)
+  expect(sessionStorage.getItem('csms:topup:d')).toBe('existing-order')
+})
+it('keeps polling after returning to wallet', async () => {
+  window.history.replaceState(null, '', '/?order_code=pending-order')
+  vi.mocked(getWalletTopUp).mockResolvedValue({status:'pending'})
+  const user = userEvent.setup()
+  render(<DriverWorkspace currentUser={{id:'d',email:'d@test',roles:['driver']}} onLogout={vi.fn()} />)
+  await waitFor(() => expect(getWalletTopUp).toHaveBeenCalledTimes(1))
+  await user.click(screen.getByRole('button', {name:'Về Ví của tôi'}))
+  expect(window.location.search).toBe('')
+  expect(screen.getAllByText(/Mã đơn/).length).toBeGreaterThan(0)
+  expect(screen.getByRole('button', {name:'Nạp tiền'})).toBeDisabled()
+  await new Promise(resolve => setTimeout(resolve, 3200))
+  expect(getWalletTopUp).toHaveBeenCalledTimes(2)
+})
+
+it('preserves an unknown order without an id after reload', () => {
+  sessionStorage.setItem('csms:topup:d', '')
+  window.history.replaceState(null, '', '/#driver-wallet')
+  render(<DriverWorkspace currentUser={{id:'d',email:'d@test',roles:['driver']}} onLogout={vi.fn()} />)
+  expect(screen.getByRole('button', {name:'Nạp tiền'})).toBeDisabled()
+  expect(screen.getByText(/Chưa có mã đơn để tra cứu/)).toBeTruthy()
+})
+it('releases the lock only after backend confirms failure', async () => {
+  sessionStorage.setItem('csms:topup:d', 'failed-order')
+  window.history.replaceState(null, '', '/#driver-wallet')
+  vi.mocked(getWalletTopUp).mockResolvedValue({status:'failed', reason:'Declined'})
+  render(<DriverWorkspace currentUser={{id:'d',email:'d@test',roles:['driver']}} onLogout={vi.fn()} />)
+  await screen.findByText(/Nạp tiền thất bại/)
+  await waitFor(() => expect(screen.getByRole('button', {name:'Nạp tiền'})).toBeEnabled())
+  expect(sessionStorage.getItem('csms:topup:d')).toBeNull()
+})

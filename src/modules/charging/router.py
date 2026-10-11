@@ -101,8 +101,12 @@ class SampleResponse(BaseModel):
     measurand: str
     phase: str
     location: str
-    value: Decimal
-    unit: str
+    value: Decimal = Field(
+        description="Canonical sample value; energy counters are Wh, not kWh."
+    )
+    unit: str = Field(
+        description="Canonical unit stored at ingestion; do not convert again on read."
+    )
 
 
 class SessionPage(BaseModel):

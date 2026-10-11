@@ -32,9 +32,10 @@ from src.platform.database.session import SessionFactory, get_db_session
 
 
 @pytest.mark.asyncio
-async def test_concurrent_duplicates_are_committed_once_and_replay_in_new_session() -> (
-    None
-):
+@pytest.mark.parametrize("record_seen", [False, True])
+async def test_concurrent_duplicates_are_committed_once_and_replay_in_new_session(
+    record_seen,
+) -> None:
     async with SessionFactory() as session, session.begin():
         station, charger = await charger_fixture(session)
         station_id, charger_id, owner_id = station.id, charger.id, station.owner_id
@@ -46,12 +47,16 @@ async def test_concurrent_duplicates_are_committed_once_and_replay_in_new_sessio
             action="BootNotification",
         )
         first, second = await asyncio.gather(
-            dispatch_call(connection(charger_id, station_id), frame),
-            dispatch_call(connection(charger_id, station_id), frame),
+            dispatch_call(
+                connection(charger_id, station_id), frame, record_seen=record_seen
+            ),
+            dispatch_call(
+                connection(charger_id, station_id), frame, record_seen=record_seen
+            ),
         )
         assert first == second
         fresh = connection(charger_id, station_id)
-        assert await dispatch_call(fresh, frame) == first
+        assert await dispatch_call(fresh, frame, record_seen=record_seen) == first
         assert fresh.boot_accepted
         async with SessionFactory() as session:
             replies = (
@@ -388,7 +393,7 @@ async def test_unsupported_action_is_logged_at_default_level_after_boot(
         status_updated_at=None,
     )
     session = AsyncMock(spec=AsyncSession)
-    cast(AsyncMock, session.scalar).side_effect = [charger, station, charger]
+    cast(AsyncMock, session.scalar).side_effect = [station]
     cast(AsyncMock, session.get).return_value = None
     conn = connection(charge_point_id, station_id)
     conn.charge_point_code = charge_point_code
@@ -402,7 +407,9 @@ async def test_unsupported_action_is_logged_at_default_level_after_boot(
 
     monkeypatch.setattr(transport, "record_contact", AsyncMock())
     monkeypatch.setattr(transport, "dispatch_call", dispatch_with_test_session)
-    monkeypatch.setattr(ocpp_dispatcher, "mark_seen", AsyncMock())
+    monkeypatch.setattr(
+        ocpp_dispatcher, "lock_and_mark_seen", AsyncMock(return_value=charger)
+    )
     monkeypatch.setattr(ocpp_dispatcher, "note_reconnection", AsyncMock())
 
     ocpp_logger = logging.getLogger("csms.ocpp")

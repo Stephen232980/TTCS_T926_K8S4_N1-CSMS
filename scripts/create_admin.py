@@ -1,4 +1,5 @@
 import asyncio
+import selectors
 
 from sqlalchemy import select
 
@@ -44,8 +45,6 @@ async def main():
 
         print("Admin user created successfully.")
 
-
-import selectors
 
 if __name__ == "__main__":
     asyncio.run(

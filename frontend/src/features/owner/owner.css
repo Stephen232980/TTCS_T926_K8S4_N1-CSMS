@@ -1205,3 +1205,48 @@ dl.owner-review div {
   .owner-detail-failed .charging-chart { overflow: auto; }
 }
 @media (max-width: 1000px) { .owner-session-data .charging-chart svg { height: 240px; } }
+/* T-62: Cho phép cuộn form biểu giá trong bố cục Owner. */
+.owner-tariff-values { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 16px 0 24px; }
+.owner-tariff-values dt { color: var(--muted); font-size: 13px; }
+.owner-tariff-values dd { margin: 6px 0 0; font-weight: 650; overflow-wrap: anywhere; }
+.owner-tariff-panel form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; }
+.owner-tariff-panel form > p, .owner-tariff-panel form > button { grid-column: 1 / -1; }
+.owner-tariff-panel form > button { justify-self: start; }
+@media (max-width: 800px) {
+  .owner-tariff-values { grid-template-columns: 1fr; gap: 10px; }
+  .owner-tariff-panel form { grid-template-columns: 1fr; }
+}
+.owner-tariff-scroll {
+  min-height: 0;
+  max-height: 55dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.owner-tariff-bands { grid-column: 1 / -1; min-width: 0; border: 0; padding: 0; margin: 12px 0 24px; }
+.owner-tariff-bands legend { font-weight: 700; font-size: 18px; margin-bottom: 8px; }
+.owner-band-row { padding: 16px 0; border-bottom: 1px solid var(--field-border, #b9cdd6); }
+.owner-band-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 12px; align-items: end; margin-top: 8px; }
+.owner-band-fields .owner-field { margin: 0; min-width: 0; }
+.owner-band-fields input { width: 100%; min-width: 0; box-sizing: border-box; }
+.owner-band-fields button { margin-bottom: 4px; }
+.owner-band-row input[aria-invalid="true"] { border-color: #a3382c; }
+.owner-band-preview { margin-top: 24px; }
+.owner-band-preview svg { display: block; width: 100%; height: 36px; }
+.owner-band-covered { fill: #14795e; }
+.owner-band-gap { fill: #e7b947; }
+.owner-band-overlap { fill: #a3382c; }
+.owner-band-axis { display: flex; justify-content: space-between; font-size: 12px; font-variant-numeric: tabular-nums; margin-top: 4px; }
+@media (max-width: 600px) {
+  .owner-band-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .owner-band-fields .owner-field:nth-child(3) { grid-column: 1 / -1; }
+  .owner-band-fields button { justify-self: start; }
+}
+.owner-tariff-history-list { list-style: none; padding: 0; margin: 16px 0; }
+.owner-tariff-history-list > li { padding: 16px 0; border-bottom: 1px solid #b9cdd6; }
+.owner-tariff-history-list > li:first-child { padding-top: 0; }
+.owner-tariff-version-title { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+.owner-tariff-version-title h3 { margin: 0; font-size: 17px; }
+.owner-tariff-version-title span { font-weight: 650; color: var(--accent); }
+.owner-tariff-history-list ul { padding-left: 20px; margin: 12px 0; }
+.owner-tariff-history-list p { overflow-wrap: anywhere; }
+.owner-tariff-history-pages { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }

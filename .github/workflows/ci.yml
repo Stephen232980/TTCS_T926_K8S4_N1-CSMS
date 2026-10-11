@@ -7,6 +7,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.event_name == 'push' && github.ref == 'refs/heads/develop' && 'csms-staging' || format('{0}-{1}-{2}', github.workflow, github.event_name, github.ref) }}
+  cancel-in-progress: false
+
 jobs:
   quality:
     name: Lint, typecheck and test
@@ -59,18 +63,25 @@ jobs:
       - name: Apply database migrations
         run: alembic upgrade head
 
-      # Keep the latency gate mandatory, but isolate its Python process and
-      # run it before the functional suite changes caches/DB workload.
+      # Keep both latency gates mandatory in separate Python processes,
+      # before the functional suite changes caches/DB workload.
       - name: Run MeterValues latency check
         run: >-
           pytest
           tests/test_charging_sessions.py::test_committed_replay_and_twenty_concurrent_meter_replies_under_200ms
           -q -s
 
+      - name: Run real OCPP socket latency check
+        run: >-
+          pytest
+          tests/test_s19_meter_latency.py::test_twenty_real_sockets_periodic_meter_replies_under_200ms
+          -q -s
+
       - name: Run functional tests
         run: >-
           pytest
           --deselect=tests/test_charging_sessions.py::test_committed_replay_and_twenty_concurrent_meter_replies_under_200ms
+          --deselect=tests/test_s19_meter_latency.py::test_twenty_real_sockets_periodic_meter_replies_under_200ms
 
   frontend-quality:
     name: Frontend lint, test and build
@@ -203,12 +214,14 @@ jobs:
           docker tag csms:test "ghcr.io/${IMAGE_LOWER}:latest"
 
       - name: Push image to GitHub Container Registry
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
         run: |
           IMAGE_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           docker push "ghcr.io/${IMAGE_LOWER}:${{ github.sha }}"
-          docker push "ghcr.io/${IMAGE_LOWER}:latest"
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            docker push "ghcr.io/${IMAGE_LOWER}:latest"
+          fi
 
   frontend-build:
     name: Build frontend Docker image
@@ -230,17 +243,19 @@ jobs:
           docker tag csms-frontend:test "ghcr.io/${IMAGE_LOWER}-frontend:latest"
 
       - name: Push frontend image to GitHub Container Registry
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
         run: |
           IMAGE_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           docker push "ghcr.io/${IMAGE_LOWER}-frontend:${{ github.sha }}"
-          docker push "ghcr.io/${IMAGE_LOWER}-frontend:latest"
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            docker push "ghcr.io/${IMAGE_LOWER}-frontend:latest"
+          fi
 
   deploy:
     name: Deploy to Staging
     needs: [quality, build, simulator-scenario]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -292,7 +307,7 @@ jobs:
   frontend-deploy:
     name: Deploy frontend to Staging
     needs: [frontend-quality, frontend-build, deploy]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: read

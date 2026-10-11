@@ -15,6 +15,7 @@ from src.modules.identity.models import User
 from src.modules.ocpp.connection_registry import OcppConnection, ocpp_connections
 from src.modules.ocpp.control_models import ControlRequest, ControlResult
 from src.modules.stations.models import ChargePoint, Station
+from src.platform.audit.service import ghi_nhat_ky
 from src.platform.database.session import SessionFactory
 
 COMMAND_TIMEOUT = 30.0
@@ -114,6 +115,16 @@ async def execute_command(
             )
         )
         await session.flush()
+        await ghi_nhat_ky(
+            session,
+            actor_id=actor_id,
+            action="ocpp.reset" if action == "Reset" else "ocpp.remote_stop",
+            object_type="charge_point" if action == "Reset" else "charging_session",
+            object_id=str(charger_id if action == "Reset" else transaction_id),
+            data={"request_id": str(command_id)},
+            permission=authorization.permission if authorization else None,
+            actor_roles=authorization.roles if authorization else None,
+        )
         connection = await ocpp_connections.get(charger.code.strip().lower())
         live = (
             charger.last_seen_at is not None

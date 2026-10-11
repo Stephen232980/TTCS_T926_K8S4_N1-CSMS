@@ -10,6 +10,8 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.entrypoints.http import app
+from src.modules.charging.driver_models import DriverVirtualTag
+from src.modules.charging.models import ChargingCard
 from src.modules.identity.models import (
     AccountAudit,
     LoginIpAttempt,
@@ -23,6 +25,7 @@ from src.modules.identity.security import (
     hash_session_token,
     verify_password,
 )
+from src.modules.wallet.models import Wallet
 
 PASSWORD = "Admin-api-test-2026"
 BASE = "/api/v1/admin/accounts"
@@ -64,6 +67,14 @@ async def accounts(db_session: AsyncSession) -> AsyncIterator[dict[str, str]]:
     finally:
         await db_session.rollback()
         ids = select(User.id).where(User.email.startswith(prefix))
+        # Remove only empty fixture resources; financial FK retention stays enabled.
+        await db_session.execute(
+            delete(DriverVirtualTag).where(DriverVirtualTag.driver_id.in_(ids))
+        )
+        await db_session.execute(
+            delete(ChargingCard).where(ChargingCard.driver_id.in_(ids))
+        )
+        await db_session.execute(delete(Wallet).where(Wallet.driver_id.in_(ids)))
         await db_session.execute(
             delete(AccountAudit).where(AccountAudit.target_id.in_(ids))
         )

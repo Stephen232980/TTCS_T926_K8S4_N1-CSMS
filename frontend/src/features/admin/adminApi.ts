@@ -125,9 +125,17 @@ export async function adminRequest<T>(
             : 'Không tải hoặc lưu được dữ liệu. Hãy thử lại.'))
     throw new AdminApiError(
       response.status,
-      body.error?.code ?? '',
+      body.error?.code ?? (typeof body.detail === 'string' ? body.detail : ''),
       message,
-      body.error?.fields ?? [],
+      body.error?.fields ??
+        (Array.isArray(body.detail)
+          ? body.detail.map(
+              (item: { loc?: (string | number)[]; msg?: string }) => ({
+                field: item.loc?.slice(1).join('.') ?? '',
+                message: item.msg ?? 'Dữ liệu không hợp lệ',
+              }),
+            )
+          : []),
     )
   }
   return response.status === 204

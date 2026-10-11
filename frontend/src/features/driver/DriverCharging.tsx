@@ -38,19 +38,64 @@ export function DriverCharging({ stationId, stationName, showSession = true, sho
   const [requestKey, setRequestKey] = useState<{ id: string; connector: string } | null>(null)
   const [revision, setRevision] = useState(0)
   const [clock, setClock] = useState(() => Date.now())
+  const [receivedAt, setReceivedAt] = useState(() => Date.now())
   const notifiedRequest = useRef<string | null>(null)
   useEffect(() => {
     const controller = new AbortController()
-    let timer: number
-    async function poll() {
-      try {
-        const data = await read<Current>('/api/v1/driver/charging/current', controller.signal)
-        if (!controller.signal.aborted) { setCurrent(data); setError(''); setClock(Date.now()) }
-      } catch { if (!controller.signal.aborted) setError('Không cập nhật được phiên sạc. Dữ liệu bên dưới có thể đã cũ; đang kết nối lại.') }
-      if (!controller.signal.aborted) timer = window.setTimeout(() => { void poll() }, 1000)
+    let source: EventSource | undefined
+    let timer: number | undefined
+    let stopped = false
+    let denied = false
+    let version = 0
+    const stale = 'Không cập nhật được phiên sạc. Dữ liệu bên dưới có thể đã cũ; đang kết nối lại.'
+    const accept = (data: Current, clearError = true) => {
+      setCurrent(data); setClock(Date.now()); setReceivedAt(Date.now())
+      if (clearError) setError('')
     }
-    timer = window.setTimeout(() => { void poll() }, 0)
-    return () => { controller.abort(); window.clearTimeout(timer) }
+    const deny = () => {
+      denied = true; source?.close(); controller.abort()
+      setCurrent(null); setCommand(null); setError('Bạn không còn quyền theo dõi phiên sạc. Vui lòng đăng nhập lại.')
+      notifySessionUnauthorized()
+    }
+    async function load(keepStreamError = false) {
+      const issuedVersion = version
+      try {
+        const response = await fetch(`${base}/api/v1/driver/charging/current`, { credentials: 'include', signal: controller.signal })
+        if (stopped || denied) return
+        if (response.status === 401 || response.status === 403) { deny(); return }
+        if (!response.ok) throw new Error(stale)
+        const data = await response.json() as Current
+        if (!stopped && !denied && issuedVersion === version) accept(data, !keepStreamError)
+      } catch { if (!stopped && !denied && !controller.signal.aborted && issuedVersion === version) setError(stale) }
+    }
+    function connect() {
+      if (stopped || denied) return
+      const opened = new EventSource(`${base}/api/v1/driver/charging/current/events`, { withCredentials: true })
+      source = opened
+      opened.onmessage = event => {
+        if (stopped || denied || source !== opened) return
+        try {
+          const data = JSON.parse(event.data) as Current
+          if (!data || typeof data !== 'object' || !('session' in data) || !('start_request' in data)) throw new Error(stale)
+          version++; accept(data)
+        } catch {
+          setError(stale); opened.close(); source = undefined
+          timer = window.setTimeout(connect, 1000)
+        }
+      }
+      opened.onerror = () => { if (!stopped && !denied && source === opened) { setError(stale); void load(true) } }
+      opened.addEventListener('access-denied', () => { if (!stopped && !denied && source === opened) deny() })
+    }
+    async function poll() {
+      await load()
+      if (!stopped && !denied) timer = window.setTimeout(() => { void poll() }, 1000)
+    }
+    timer = window.setTimeout(() => {
+      if (typeof EventSource !== 'undefined') { void load(); connect() }
+      else void poll()
+    }, 0)
+    const clockTimer = window.setInterval(() => setClock(Date.now()), 1000)
+    return () => { stopped = true; controller.abort(); source?.close(); window.clearTimeout(timer); window.clearInterval(clockTimer) }
   }, [])
   useEffect(() => {
     const controller = new AbortController()
@@ -88,6 +133,7 @@ export function DriverCharging({ stationId, stationName, showSession = true, sho
     finally { setSending(false) }
   }
   const live = current?.session
+  const elapsedSeconds = live ? live.elapsed_seconds + Math.max(0, Math.floor((clock - receivedAt) / 1000)) : 0
   const selectedConnector = connectors.find(connector => connector.id === selected)
   const connectorGroups = new Map<string, Connector[]>()
   for (const connector of connectors) connectorGroups.set(connector.charge_point_code, [...(connectorGroups.get(connector.charge_point_code) ?? []), connector])
@@ -101,8 +147,8 @@ export function DriverCharging({ stationId, stationName, showSession = true, sho
       {!current && !error && <p role="status">Đang kiểm tra phiên sạc…</p>}
       {live ? <>
         <div className="driver-session-location"><ChargerDrawing /><div><span className="driver-session-badge"><Icon name="charger" />Phiên đang mở</span><h2>{live.station_name}</h2><p>{live.charge_point_code} · <span className="driver-session-connector"><ConnectorSymbol status="Charging" />Đầu nối {live.connector_number}</span></p></div></div>
-        <dl className="driver-session-values"><div><dt>Điện năng đã sạc</dt><dd>{live.latest_meter_at ? Number(live.energy_kwh).toLocaleString('vi-VN', { maximumFractionDigits: 3 }) : '—'} <span>kWh</span></dd></div><div><dt>Thời gian sạc</dt><dd>{Math.floor(live.elapsed_seconds / 3600)} <span>giờ</span> {Math.floor(live.elapsed_seconds % 3600 / 60)} <span>phút</span></dd></div></dl>
-        <dl className="driver-session-facts"><div><dt>Bắt đầu lúc</dt><dd>{new Date(live.started_at).toLocaleString('vi-VN')}</dd></div><div><dt>Số đo gần nhất</dt><dd>{live.latest_meter_at ? new Date(live.latest_meter_at).toLocaleString('vi-VN') : 'Đang chờ số đo đầu tiên từ trụ.'}</dd></div><div><dt>Mã phiên</dt><dd>#{live.id}</dd></div><div><dt>Thời gian chi tiết</dt><dd>{Math.floor(live.elapsed_seconds / 60)} phút {live.elapsed_seconds % 60} giây</dd></div></dl>
+        <dl className="driver-session-values"><div><dt>Điện năng đã sạc</dt><dd>{live.latest_meter_at ? Number(live.energy_kwh).toLocaleString('vi-VN', { maximumFractionDigits: 3 }) : '—'} <span>kWh</span></dd></div><div><dt>Thời gian sạc</dt><dd>{Math.floor(elapsedSeconds / 3600)} <span>giờ</span> {Math.floor(elapsedSeconds % 3600 / 60)} <span>phút</span></dd></div></dl>
+        <dl className="driver-session-facts"><div><dt>Bắt đầu lúc</dt><dd>{new Date(live.started_at).toLocaleString('vi-VN')}</dd></div><div><dt>Số đo gần nhất</dt><dd>{live.latest_meter_at ? new Date(live.latest_meter_at).toLocaleString('vi-VN') : 'Đang chờ số đo đầu tiên từ trụ.'}</dd></div><div><dt>Mã phiên</dt><dd>#{live.id}</dd></div><div><dt>Thời gian chi tiết</dt><dd>{Math.floor(elapsedSeconds / 60)} phút {elapsedSeconds % 60} giây</dd></div></dl>
         {live.latest_meter_at && <p className="driver-reading-age">{clock - Date.parse(live.latest_meter_at) > 30000 ? 'Số đo đã hơn 30 giây chưa cập nhật. Kiểm tra kết nối tại trạm.' : 'Số liệu cập nhật từ trụ, không cần tải lại trang.'}</p>}
         {live.needs_attention && <p role="alert">Phiên sạc cần kiểm tra. Nếu trụ ngừng sạc hoặc mất kết nối, hãy liên hệ vận hành viên.</p>}
       </> : current && <div className="driver-empty"><ChargerDrawing /><h2>Bạn chưa có phiên sạc đang diễn ra.</h2><p>Chọn trạm đang hoạt động và đối chiếu đầu nối tại trụ để bắt đầu.</p>{findStations}</div>}
