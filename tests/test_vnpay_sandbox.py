@@ -100,7 +100,9 @@ async def test_payment_url_wire_format():
         {"vnp_TmnCode": "OTHER123"},
         {"vnp_ResponseCode": "00", "vnp_TransactionStatus": "02"},
         {"vnp_TransactionNo": "0"},
-        {"vnp_TxnRef": "other"},
+        {"vnp_TxnRef": ""},
+        {"vnp_TxnRef": "a" * 101},
+        {"vnp_TxnRef": "đơn"},
         {"vnp_TxnRef": "topup-" + "a" * 32},
     ],
 )
@@ -245,6 +247,28 @@ async def test_bad_signature_unknown_order_and_amount_mismatch(flow, caplog):
     result = await client.get(IPN, params=callback(order, vnp_Amount="4000000"))
     assert result.json()["RspCode"] == "04"
     assert await state(driver, order) == ("needs_review", 0, 0)
+
+
+@pytest.mark.parametrize("reference", ["other", "A" * 100, "sit"])
+@pytest.mark.parametrize("confirmed", [False, True])
+async def test_signed_provider_reference_not_found_without_credit(
+    flow, reference, confirmed
+):
+    client, driver, order = flow
+    if confirmed:
+        result = await client.get(IPN, params=callback(order))
+        assert result.json()["RspCode"] == "00"
+    before = await state(driver, order)
+    if reference == "sit":
+        # VNPAY SIT prepends 22 and appends 88 to the real merchant reference.
+        reference = "22" + order + "88"
+    params = callback(order, vnp_TxnRef=reference)
+    result = await client.get(IPN, params=params[:-1])
+    assert result.json()["RspCode"] == "97"
+    result = await client.get(IPN, params=params)
+    assert result.json()["RspCode"] == "01"
+    assert result.json()["Message"] == "Order not found"
+    assert await state(driver, order) == before
 
 
 async def test_invalid_return_and_protocol_conflict_do_not_mutate(flow):
