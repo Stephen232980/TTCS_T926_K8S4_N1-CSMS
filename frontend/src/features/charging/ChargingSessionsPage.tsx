@@ -1,3 +1,4 @@
+import { occupationReviewLabels, occupationHistoryLabels } from './occupationLabels'
 import { useCallback, useEffect, useState } from 'react'
 import type { FormEvent } from 'react'
 import { MeterChart } from './MeterChart'
@@ -19,6 +20,7 @@ interface Pending { id: string; charge_point_code: string; action: string; reaso
 const clock = (value: string | null) => value ? new Date(value).toLocaleString('vi-VN') : '—'
 const number = (value: string | number | null) => value === null ? '—' : Number(value).toLocaleString('vi-VN', { maximumFractionDigits: 3 })
 const reviews: Record<string, string> = {
+  ...occupationReviewLabels,
   authorization_blocked: 'Thẻ hoặc tài khoản bị khóa, hoặc trạm không hoạt động', authorization_invalid: 'Thẻ không hợp lệ', authorization_expired: 'Thẻ hết hạn',
   replaced_open_session: 'Đầu nối nhận phiên mới khi phiên cũ chưa đóng', stop_meter_below_start: 'Số đo cuối nhỏ hơn số đo đầu',
   meter_regression: 'Số đo điện năng giảm', conflicting_meter_timestamp: 'Hai số đo khác nhau cùng mốc thời gian', stop_before_start: 'Thời điểm kết thúc trước lúc bắt đầu', reservation_not_verified: 'Mã đặt chỗ chưa được đối chiếu',
@@ -43,7 +45,7 @@ async function scopedRequest<T>(area: string, path: string, signal?: AbortSignal
 }
 
 interface SessionEvent { id: string; action: string; actor: string | null; details: { reason?: string; energy_kwh?: string }; occurred_at: string }
-const eventNames: Record<string, string> = { reconnected: 'Trụ nối lại — giữ nguyên phiên', offline_timeout: 'Đánh dấu bất thường do ngoại tuyến', available_with_open_session: 'Đầu nối sẵn sàng nhưng chưa có tin kết thúc', charging_resumed: 'Đầu nối báo đang sạc trở lại', late_stop: 'Đã nhận tin kết thúc sau gián đoạn', manual_closure: 'Đóng tay bằng số đo cuối' }
+const eventNames: Record<string, string> = { ...occupationHistoryLabels, reconnected: 'Trụ nối lại — giữ nguyên phiên', offline_timeout: 'Đánh dấu bất thường do ngoại tuyến', available_with_open_session: 'Đầu nối sẵn sàng nhưng chưa có tin kết thúc', charging_resumed: 'Đầu nối báo đang sạc trở lại', late_stop: 'Đã nhận tin kết thúc sau gián đoạn', manual_closure: 'Đóng tay bằng số đo cuối' }
 
 function useScopedRequest(area: string) { return useCallback(<T,>(path: string, signal?: AbortSignal, options?: RequestInit) => scopedRequest<T>(area, path, signal, options), [area]) }
 
