@@ -57,6 +57,11 @@ jobs:
       - name: Run mypy
         run: mypy src
 
+      - name: Verify S-32 answers and rounding mutation within one minute
+        run: >-
+          timeout 60s bash -c
+          'pytest tests/test_t78_billing_answers.py -q && python scripts/verify_t78_mutation.py'
+
       - name: Validate staging deployment script
         run: bash -n scripts/deploy_staging.sh scripts/deploy_frontend_staging.sh
 
