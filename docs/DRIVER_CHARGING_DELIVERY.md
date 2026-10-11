@@ -29,9 +29,28 @@ Tất cả endpoint dưới đây yêu cầu session đăng nhập và role driv
 - `GET /api/v1/driver/stations/{station_id}/connectors`: đầu nối chưa archive tại trạm active, không trả owner/card data.
 - `POST /api/v1/driver/charging/start`: chỉ `{request_id: UUID, connector_id: UUID}`; từ chối trường bổ sung như id_tag hoặc driver_id.
 
+Trước khi lưu/gửi yêu cầu bắt đầu, API kiểm tra điều kiện ví; nếu không đạt, trả HTTP 409
+với `{"detail": "<mã lý do>"}` (`wallet_low`, `wallet_missing`, `wallet_locked` hoặc
+`tariff_unavailable`) và không tạo yêu cầu OCPP.
+
 Request ID là khóa chống gửi trùng. Gửi lại cùng ID/driver/connector trả kết quả đã lưu,
 không gửi thêm OCPP; đổi chủ thể/đầu nối với cùng ID trả 409. Mất phản hồi mạng ở UI
 giữ nguyên ID khi thử lại. Server không gửi lại lệnh sau khởi động lại.
+
+Nếu ví trở nên không đủ điều kiện sau khi gửi RemoteStart nhưng trước StartTransaction,
+yêu cầu khớp driver/đầu nối/thẻ ảo chuyển ngay thành `Rejected`, kết thúc lease và lưu
+`rejection_reason` (`wallet_low`, `wallet_missing`, `wallet_locked`, `tariff_unavailable`).
+API start khi retry cùng ID, API current và SSE đều trả lý do này sau reload.
+`reply_status` vẫn phản ánh phản hồi lệnh RemoteStart của trụ (có thể là `Accepted`);
+phản hồi lệnh đến muộn không ghi đè `Rejected`. Không tạo phiên sạc khi ví bị từ chối.
+Thẻ vật lý không kết thúc một yêu cầu dùng thẻ ảo. T-106 dùng `rejection_reason` để
+hiển thị thông báo/nạp tiền; PR T-105 chỉ bổ sung backend và contract.
+
+Migration `d180018a2026` nối sau `d170017a2026`, thêm cột nullable
+`driver_start_requests.rejection_reason`; phải upgrade trước khi chạy phiên bản mới.
+Kiểm thử tích hợp: `pytest tests/test_wallet_start_integration.py -q` với PostgreSQL
+đã migrate. Bao phủ ngưỡng 12.499/12.500 VND (5 kWh × 2.500), thay đổi ví/biểu giá
+giữa API và StartTransaction, và cả hai thứ tự phản hồi lệnh/từ chối phiên.
 
 Trạng thái: Pending, Accepted, Started, Rejected, StartNotConfirmed, Offline,
 Timeout, Disconnected, ProtocolError. Accepted có deadline; Started có session_id thật.
