@@ -1,9 +1,9 @@
 """T-95 settlement and T-96 database idempotency; caller owns the transaction."""
 
-import logging
+import hashlib
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,8 +12,18 @@ from src.modules.wallet.exceptions import WalletError, WalletNotFoundError
 from src.modules.wallet.models import Wallet
 from src.modules.wallet.service import ghi_so_cai
 from src.modules.wallet.topup_models import WalletTopup
+from src.platform.audit.models import AuditLog
+from src.platform.audit.service import ghi_nhat_ky
 
-logger = logging.getLogger(__name__)
+WARNING_REASONS = {
+    "unknown_order": "Payment webhook references an unknown order",
+    "amount_mismatch": "Gateway amount does not match the order",
+    "gateway_conflict": "Order has a different gateway transaction",
+    "late_success": "Success received after failure or cancellation",
+    "late_non_success": "Failure or cancellation received after success",
+    "review_callback": "Callback received for an order awaiting review",
+    "settlement_conflict": "Wallet settlement conflict",
+}
 
 # Rows are existing states; columns are authenticated event statuses.
 TRANSITIONS = {
@@ -38,25 +48,77 @@ TRANSITIONS = {
 
 
 @dataclass(frozen=True)
+class WebhookWarning:
+    order_reference: str
+    code: str
+
+
+@dataclass(frozen=True)
 class SettlementResult:
     status_code: int
     status: str
+    warning: WebhookWarning | None = None
 
 
-async def _review(session: AsyncSession, topup: WalletTopup, reason: str) -> None:
+async def _warn_once(
+    session: AsyncSession, order_id: str, topup: WalletTopup | None, code: str
+) -> WebhookWarning | None:
+    """Persist one warning per order/category in the settlement transaction.
+
+    Existing orders are already row-locked. Unknown orders use a transaction
+    advisory lock so concurrent retries cannot create duplicate audit entries.
+    External identifiers are hashed; only fixed, safe reasons are recorded.
+    """
+    if topup is None:
+        reference = hashlib.sha256(order_id.encode()).hexdigest()
+        await session.execute(
+            text("SELECT pg_advisory_xact_lock(:key)"),
+            {"key": int.from_bytes(bytes.fromhex(reference[:16]), signed=True)},
+        )
+        object_type = "payment_order"
+    else:
+        reference = str(topup.id)
+        object_type = "wallet_topup"
+    action = f"payment_webhook.{code}"
+    # A retry of an anomaly that already marked review is not a new warning.
+    # The original durable evidence also covers callbacks while awaiting review.
+    actions = [action]
+    if code == "review_callback":
+        actions.extend(
+            f"payment_webhook.{previous}"
+            for previous in ("late_success", "settlement_conflict")
+        )
+    found = await session.scalar(
+        select(AuditLog.id)
+        .where(
+            AuditLog.action.in_(actions),
+            AuditLog.object_type == object_type,
+            AuditLog.object_id == reference,
+        )
+        .limit(1)
+    )
+    if found is not None:
+        return None
+    await ghi_nhat_ky(
+        session,
+        actor_id=None,
+        action=action,
+        object_type=object_type,
+        object_id=reference,
+        data={"reason": WARNING_REASONS[code]},
+    )
+    return WebhookWarning(reference, code)
+
+
+async def _review(
+    session: AsyncSession, topup: WalletTopup, code: str
+) -> WebhookWarning | None:
     # Never downgrade a completed credit. Persist only a safe, fixed reason.
     if topup.status not in {"succeeded", "needs_review"}:
         topup.status = "needs_review"
-        topup.reason = reason
+        topup.reason = WARNING_REASONS[code]
         await session.flush()
-
-    # Emit a warning for every anomalous callback, even if the status
-    # was already succeeded or needs_review. Do not log payloads or secrets.
-    logger.warning(
-        "Payment settlement needs review topup_id=%s reason=%s",
-        topup.id,
-        reason,
-    )
+    return await _warn_once(session, topup.order_id, topup, code)
 
 
 async def process_topup_webhook(
@@ -75,27 +137,35 @@ async def process_topup_webhook(
         .execution_options(populate_existing=True)
     )
     if topup is None:
-        logger.warning("Payment webhook references an unknown order")
-        return SettlementResult(404, "not_found")
+        warning = await _warn_once(session, event.order_id, None, "unknown_order")
+        return SettlementResult(404, "not_found", warning)
 
     if topup.amount_vnd != event.amount_vnd:
-        await _review(session, topup, "Gateway amount does not match the order")
-        return SettlementResult(400, topup.status)
+        warning = await _review(session, topup, "amount_mismatch")
+        return SettlementResult(400, topup.status, warning)
 
     if topup.gateway_transaction_id not in {None, event.gateway_transaction_id}:
-        await _review(session, topup, "Order has a different gateway transaction")
-        return SettlementResult(200, topup.status)
+        warning = await _review(session, topup, "gateway_conflict")
+        return SettlementResult(200, topup.status, warning)
 
     next_status = TRANSITIONS[topup.status][event.status]
     # A matching successful replay returns before any ledger/balance/order write.
     if topup.status != "pending":
-        if next_status == "needs_review":
-            await _review(
-                session, topup, "Success received after failure or cancellation"
+        warning = None
+        if topup.status == "needs_review":
+            warning = await _warn_once(
+                session, topup.order_id, topup, "review_callback"
             )
-        return SettlementResult(200, topup.status)
+        elif next_status == "needs_review":
+            warning = await _review(session, topup, "late_success")
+        elif topup.status == "succeeded" and event.status != "succeeded":
+            warning = await _warn_once(
+                session, topup.order_id, topup, "late_non_success"
+            )
+        return SettlementResult(200, topup.status, warning)
 
     topup_id = topup.id
+    warning = None
     try:
         # Roll back BOTH order changes and wallet credit on domain/unique conflicts.
         async with session.begin_nested():
@@ -131,5 +201,5 @@ async def process_topup_webhook(
             raise
         topup = await session.get(WalletTopup, topup_id, populate_existing=True)
         assert topup is not None
-        await _review(session, topup, "Wallet settlement conflict")
-    return SettlementResult(200, topup.status)
+        warning = await _review(session, topup, "settlement_conflict")
+    return SettlementResult(200, topup.status, warning)

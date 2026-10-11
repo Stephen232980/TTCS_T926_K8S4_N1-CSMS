@@ -15,7 +15,10 @@ from src.modules.payments.contracts import (
     InvalidWebhookSignature,
 )
 from src.modules.payments.dependencies import get_payment_gateway
-from src.modules.wallet.topup_webhook_service import process_topup_webhook
+from src.modules.wallet.topup_webhook_service import (
+    WARNING_REASONS,
+    process_topup_webhook,
+)
 from src.platform.database.session import get_db_session
 
 logger = logging.getLogger(__name__)
@@ -87,6 +90,13 @@ async def receive_payment_webhook(
     result = await process_topup_webhook(session, event)
     # Commit before acknowledging delivery, including persisted review on HTTP 400.
     await session.commit()
+    if result.warning is not None:
+        logger.warning(
+            "Payment webhook anomaly order_reference=%s code=%s reason=%s",
+            result.warning.order_reference,
+            result.warning.code,
+            WARNING_REASONS[result.warning.code],
+        )
     return JSONResponse(
         status_code=result.status_code,
         content={"status": result.status, "received": result.status_code == 200},
