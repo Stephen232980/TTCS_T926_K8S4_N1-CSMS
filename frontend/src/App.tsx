@@ -20,6 +20,7 @@ import { WorkspaceChooser } from './features/auth/pages/WorkspaceChooser'
 import { HttpStationApi } from './features/stations/api/httpStationApi'
 import { HttpChargePointApi } from './features/chargePoints/api/httpChargePointApi'
 import { OwnerWorkspace } from './features/owner/OwnerWorkspace'
+import { readTopUpReturn } from './features/driver/walletTopUpReturnUrl'
 const OperatorWorkspace = lazy(() => import('./features/operator/OperatorWorkspace').then(module => ({ default: module.OperatorWorkspace })))
 const DriverWorkspace = lazy(() => import('./features/driver/DriverWorkspace').then(module => ({ default: module.DriverWorkspace })))
 const AdminWorkspace = lazy(() =>
@@ -148,8 +149,10 @@ function App({
     )
   }
 
-  const primaryRole = areaRole && currentUser.roles.includes(areaRole)
-    ? areaRole : getHomeRole(currentUser)
+  const primaryRole = readTopUpReturn(window.location).isReturn && currentUser.roles.includes('driver')
+    ? 'driver'
+    : areaRole && currentUser.roles.includes(areaRole)
+      ? areaRole : getHomeRole(currentUser)
   const chooseArea = () => {
     setAreaRole('')
     setSelectedStationId(null)

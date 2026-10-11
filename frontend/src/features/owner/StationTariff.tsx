@@ -1,3 +1,4 @@
+import { normalizedBands, clockText } from './tariffBands'
 import { useEffect, useRef, useState } from 'react'
 import { TariffForm, type CurrentTariff } from './TariffForm'
 import {
@@ -19,7 +20,15 @@ function formTariff(tariff: TariffDisplay | null): CurrentTariff | null {
   )
 }
 
-export function StationTariff({ stationId }: { stationId: string }) {
+export function StationTariff({
+  stationId,
+  onSaved,
+  refreshKey = 0,
+}: {
+  stationId: string
+  onSaved?: () => void
+  refreshKey?: number
+}) {
   const [context, setContext] = useState<TariffContext | null>(null)
   const [error, setError] = useState('')
   const [retry, setRetry] = useState(0)
@@ -44,7 +53,7 @@ export function StationTariff({ stationId }: { stationId: string }) {
       mounted.current = false
       controller.abort()
     }
-  }, [stationId, retry])
+  }, [stationId, retry, refreshKey])
   return (
     <>
       {error && (
@@ -70,7 +79,7 @@ export function StationTariff({ stationId }: { stationId: string }) {
                 {context.upcoming.bands
                   .map(
                     (band) =>
-                      `${BigInt(band.energy_rate_vnd_per_kwh).toLocaleString('vi-VN')} VNĐ/kWh`,
+                      `${clockText(band.start_min)}–${clockText(band.end_min)}: ${BigInt(band.energy_rate_vnd_per_kwh).toLocaleString('vi-VN')} VNĐ/kWh`,
                   )
                   .join(' · ')}
                 . Phí chiếm trụ:{' '}
@@ -89,19 +98,22 @@ export function StationTariff({ stationId }: { stationId: string }) {
               hasVersions={context.has_versions}
               onSave={async (values) => {
                 await createStationTariff(stationId, values)
+                onSaved?.()
                 if (!mounted.current) return
                 const saved: TariffDisplay = {
                   effective_from: values.effectiveFrom,
                   idle_rate_vnd_per_minute: values.idleFeePerMinute.trim(),
                   grace_minutes: Number(values.graceMinutes),
-                  bands: [
-                    {
-                      start_min: 0,
-                      end_min: 1440,
-                      label: 'Cả ngày',
-                      energy_rate_vnd_per_kwh: values.pricePerKwh.trim(),
-                    },
-                  ],
+                  bands: values.bands
+                    ? normalizedBands(values.bands)
+                    : [
+                        {
+                          start_min: 0,
+                          end_min: 1440,
+                          label: 'Cả ngày',
+                          energy_rate_vnd_per_kwh: values.pricePerKwh.trim(),
+                        },
+                      ],
                 }
                 setContext(
                   (previous) =>
