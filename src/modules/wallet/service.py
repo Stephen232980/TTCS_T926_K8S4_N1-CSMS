@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.modules.billing.models import Invoice
 from src.modules.identity.authorization import AuthorizationEvidence
 from src.modules.identity.models import Role, User, UserRole
 from src.modules.wallet.exceptions import (
@@ -18,6 +19,7 @@ from src.modules.wallet.exceptions import (
     WalletNotFoundError,
 )
 from src.modules.wallet.models import Wallet, WalletAudit, WalletLedger
+from src.modules.wallet.provisioning import ensure_driver_wallet
 from src.platform.audit.service import ghi_nhat_ky
 
 EntryType = Literal["gateway_topup", "manual_topup", "charging_debit", "adjustment"]
@@ -232,3 +234,58 @@ async def phuc_hoi_so_du_cache(
             actor_roles=authorization.roles if authorization else None,
         )
     return wallet
+
+
+async def tru_vi(
+    session: AsyncSession,
+    *,
+    invoice: Invoice | None = None,
+    session_id: int | None = None,
+    wallet_id: UUID | None = None,
+    actor_id: UUID | None = None,
+) -> WalletLedger | None:
+    """Trừ tiền ví theo hoá đơn trong transaction của người gọi (T-101 / S-37).
+
+    - Hoá đơn 0 đồng: bỏ qua, không ghi dòng sổ cái, trả về None.
+    - Gọi ghi_so_cai với entry_type='charging_debit', amount_vnd=-invoice.total_vnd.
+    - Mã tham chiếu là mã phiên sạc: reference_type='charging_session', reference_id=str(session_id).
+    - Unique constraint uq_wallet_ledger_reference ngăn chặn trừ hai lần cho cùng một phiên.
+    - Ví không đủ tiền vẫn trừ bình thường, số dư âm là nợ.
+    - Không commit/rollback transaction của caller; không cập nhật settlement_* trên charging_sessions.
+    """
+    if invoice is None:
+        if session_id is None:
+            raise ValueError("Cần cung cấp invoice hoặc session_id")
+        invoice = await session.scalar(
+            select(Invoice).where(Invoice.session_id == session_id)
+        )
+        if invoice is None:
+            raise LookupError(f"Không tìm thấy hoá đơn cho phiên sạc {session_id}")
+
+    # Hoá đơn 0 đồng thì bỏ qua, không ghi dòng
+    if invoice.total_vnd == 0:
+        return None
+
+    if invoice.total_vnd < 0:
+        raise WalletAmountError("Tổng tiền hoá đơn không được âm")
+
+    # Xác định ví của tài xế
+    if wallet_id is None:
+        wallet = await session.scalar(
+            select(Wallet).where(Wallet.driver_id == invoice.driver_id)
+        )
+        if wallet is None:
+            wallet = await ensure_driver_wallet(session, invoice.driver_id)
+        wallet_id = wallet.id
+
+    # Gọi ghi_so_cai ghi nhận biến động trừ tiền sạc
+    return await ghi_so_cai(
+        session,
+        wallet_id=wallet_id,
+        entry_type="charging_debit",
+        amount_vnd=-invoice.total_vnd,
+        reference_type="charging_session",
+        reference_id=str(invoice.session_id),
+        actor_id=actor_id,
+    )
+
