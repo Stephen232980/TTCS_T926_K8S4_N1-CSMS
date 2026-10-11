@@ -4,7 +4,7 @@
 
 Adapter `FakeGateway`, trang thanh toán và bộ gửi webhook ký HMAC thuộc S-35/T-92. Năm nút gửi trạng thái thành công, thất bại, hủy, lặp năm lần và trễ mười giây đến route `/api/v1/payments/webhook` trên chính ứng dụng ASGI đang chạy.
 
-Endpoint nhận trong PR #106 hiện chỉ kiểm tra chữ ký/schema, chưa ghi `WalletTopup`, chưa cộng ví và chưa có idempotency trong database. T-95/T-96 phải hoàn thiện nghiệp vụ này; các ca T-98 hiện chỉ chứng minh tiếp nhận/xác thực. Không dùng kết quả HTTP 200 hoặc năm lần tiếp nhận làm bằng chứng ví đã được cộng đúng một lần.
+Tại thời điểm PR #106, endpoint nhận chỉ kiểm tra chữ ký/schema. Sau khi tích hợp T-95/T-96/T-97, bộ [acceptance T-98](T98_WEBHOOK_ACCEPTANCE.md) kiểm tra cả trạng thái đơn, số dư, ledger và cảnh báo trong PostgreSQL. HTTP 200 hoặc năm lần tiếp nhận riêng lẻ không chứng minh ví đã được cộng đúng một lần.
 
 ## Cấu hình
 
@@ -27,10 +27,10 @@ Trang standalone dùng nền sáng, teal và typography của CSMS hiện có, h
 ## Kiểm thử
 
 ```powershell
-python -m pytest tests/test_t92_fake_gateway.py tests/test_t92_gateway_hardening.py tests/test_t98_webhook_tests.py tests/test_t90_payment_contract.py tests/test_endpoint_policy_inventory.py -q
+python -m pytest tests/test_t92_fake_gateway.py tests/test_t92_gateway_hardening.py tests/test_t98_webhook_tests.py tests/test_t98_simulator_acceptance.py tests/test_t90_payment_contract.py tests/test_endpoint_policy_inventory.py -q
 python -m ruff check .
 python -m ruff format --check .
 python -m mypy src
 ```
 
-Các regression T-92 kiểm tra base URL khác cổng 8000, callback từ hostname thông thường, tamper/expiry, từ chối URL callback/mã giao dịch tùy ý, số tiền strict, HMAC đúng raw bytes có tiếng Việt, lặp cùng mã/body, delay 10 giây, lỗi HTTP/mạng và không lộ chữ ký. Kiểm thử ví/ledger thật và thứ tự trạng thái vẫn là acceptance của T-95/T-96/T-98.
+Các regression T-92 kiểm tra base URL khác cổng 8000, callback từ hostname thông thường, tamper/expiry, từ chối URL callback/mã giao dịch tùy ý, số tiền strict, HMAC đúng raw bytes có tiếng Việt, lặp cùng mã/body, delay 10 giây, lỗi HTTP/mạng và không lộ chữ ký. T-98 bổ sung acceptance ví/ledger thật và thứ tự trạng thái qua simulator.
