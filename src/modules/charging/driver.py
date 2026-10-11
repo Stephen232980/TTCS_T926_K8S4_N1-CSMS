@@ -20,6 +20,7 @@ from src.modules.ocpp.connection_registry import ocpp_connections
 from src.modules.ocpp.control_models import ControlRequest
 from src.modules.ocpp.monitoring import database_time
 from src.modules.stations.models import ChargePoint, Connector, Station
+from src.modules.wallet.eligibility import du_so_du_de_sac
 from src.platform.database.session import SessionFactory
 
 START_CONFIRMATION_SECONDS = 60
@@ -163,6 +164,13 @@ async def remote_start(
                 409,
                 "Đầu nối đang bận, được đặt chỗ hoặc chưa sẵn sàng. Vui lòng chọn đầu nối khác.",
             )
+        eligibility = await du_so_du_de_sac(
+            session, driver_id=driver_id, station_id=charger.station_id
+        )
+        if not eligibility.allowed:
+            if eligibility.reason is None:
+                raise RuntimeError("Ineligible wallet has no rejection reason")
+            raise HTTPException(status_code=409, detail=eligibility.reason)
         connection = await ocpp_connections.get(charger.code.strip().lower())
         observed_at = await database_time(session)
         online = (

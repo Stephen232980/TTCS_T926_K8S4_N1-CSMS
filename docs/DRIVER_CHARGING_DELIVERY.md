@@ -29,6 +29,10 @@ Tất cả endpoint dưới đây yêu cầu session đăng nhập và role driv
 - `GET /api/v1/driver/stations/{station_id}/connectors`: đầu nối chưa archive tại trạm active, không trả owner/card data.
 - `POST /api/v1/driver/charging/start`: chỉ `{request_id: UUID, connector_id: UUID}`; từ chối trường bổ sung như id_tag hoặc driver_id.
 
+Trước khi lưu/gửi yêu cầu bắt đầu, API kiểm tra điều kiện ví; nếu không đạt, trả HTTP 409
+với `{"detail": "<mã lý do>"}` (`wallet_low`, `wallet_missing`, `wallet_locked` hoặc
+`tariff_unavailable`) và không tạo yêu cầu OCPP.
+
 Request ID là khóa chống gửi trùng. Gửi lại cùng ID/driver/connector trả kết quả đã lưu,
 không gửi thêm OCPP; đổi chủ thể/đầu nối với cùng ID trả 409. Mất phản hồi mạng ở UI
 giữ nguyên ID khi thử lại. Server không gửi lại lệnh sau khởi động lại.

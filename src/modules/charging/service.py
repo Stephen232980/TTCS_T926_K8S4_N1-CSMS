@@ -31,6 +31,7 @@ from src.modules.identity.models import Role, User, UserRole
 from src.modules.ocpp.frames import Frame
 from src.modules.stations.models import ChargePoint, Connector, Station
 from src.modules.stations.repository import StationRepository
+from src.modules.wallet.eligibility import du_so_du_de_sac
 
 logger = logging.getLogger("csms.ocpp")
 
@@ -46,7 +47,7 @@ def review(transaction: ChargingSession, reason: str) -> None:
 
 async def authorize(
     session: AsyncSession, charger: ChargePoint, tag: str
-) -> tuple[str, ChargingCard | None]:
+) -> tuple[str, ChargingCard | None, str | None]:
     row = (
         await session.execute(
             select(ChargingCard, User.status)
@@ -76,6 +77,18 @@ async def authorize(
             result = "Accepted"
     if station is None or station.archived_at is not None or station.status != "active":
         result = "Blocked"
+    wallet_reason = None
+    if result == "Accepted":
+        if card is None:
+            raise RuntimeError("Accepted authorization has no matching card")
+        eligibility = await du_so_du_de_sac(
+            session, driver_id=card.driver_id, station_id=charger.station_id
+        )
+        if not eligibility.allowed:
+            wallet_reason = eligibility.reason
+            if wallet_reason is None:
+                raise RuntimeError("Ineligible wallet has no rejection reason")
+            result = "Blocked"
     session.add(
         AuthorizationAttempt(
             charge_point_id=charger.id, tag_tail=tag[-4:], result=result
@@ -88,7 +101,7 @@ async def authorize(
             tag[-4:],
             result,
         )
-    return result, card
+    return result, card, wallet_reason
 
 
 def pending(
@@ -298,7 +311,10 @@ async def start_transaction(
     )
     if connector is None:
         raise ValueError("Connector is not registered")
-    result, card = await authorize(session, charger, payload.idTag)
+    result, card, wallet_reason = await authorize(session, charger, payload.idTag)
+    if wallet_reason is not None:
+        pending(session, charger, frame, wallet_reason)
+        return {"transactionId": 0, "idTagInfo": {"status": "Blocked"}}
     old = await session.scalar(
         select(ChargingSession)
         .where(
@@ -530,7 +546,7 @@ async def charging_call(
     raw = json.dumps(frame.payload)
     if frame.action == "Authorize":
         payload = AuthorizePayload.model_validate_json(raw)
-        result, _ = await authorize(session, charger, payload.idTag)
+        result, _, _ = await authorize(session, charger, payload.idTag)
         return {"idTagInfo": {"status": result}}
     if frame.action == "StartTransaction":
         return await start_transaction(
