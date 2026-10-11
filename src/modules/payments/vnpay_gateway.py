@@ -116,7 +116,9 @@ class VnpayGateway:
             if succeeded and int(transaction) == 0:
                 raise ValueError("Missing successful transaction ID")
             order = params["vnp_TxnRef"]
-            if not re.fullmatch(r"vnpay[0-9a-f]{32}", order):
+            # Validate the provider's wire format, not our generated UUID shape.
+            # SIT signs altered references; settlement must report missing orders.
+            if not re.fullmatch(r"[A-Za-z0-9]{1,100}", order):
                 raise ValueError("Invalid order reference")
             # Unsuccessful attempts may carry TransactionNo=0; do not make all
             # failed orders collide on that sentinel in the database.
