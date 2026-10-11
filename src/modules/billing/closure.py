@@ -20,7 +20,7 @@ logger = logging.getLogger("csms.billing")
 
 
 async def _chot_phien_in_session(
-    db: AsyncSession, session_id: int, *, settle: bool = True
+    db: AsyncSession, session_id: int, *, settle: bool = False
 ) -> InvoiceResult:
     """Execute lap_hoa_don, and when settle=True, tru_vi and mark settlement.
 
@@ -65,14 +65,14 @@ async def _chot_phien_in_session(
 
 
 async def chot_phien(
-    session_id: int, *, db: AsyncSession | None = None, settle: bool = True
+    session_id: int, *, db: AsyncSession | None = None, settle: bool = False
 ) -> InvoiceResult:
     """Own one transaction, or join the supplied caller transaction.
 
     In a single transaction:
     1. Lock session row with FOR UPDATE.
     2. Generate/fetch invoice via lap_hoa_don.
-    3. If settle=True (default, T-102): debit wallet via tru_vi and mark settlement.
+    3. If settle=True (T-102): debit wallet via tru_vi and mark settlement.
     4. Set settlement_completed_at and settlement_reason ('debited' or 'zero_invoice').
     Any failure rolls back all changes atomically; the recovery scan will retry later.
     """
@@ -92,7 +92,9 @@ class ScanResult:
     failed: int = 0
 
 
-async def scan_unsettled_sessions(*, batch_size: int = 100) -> ScanResult:
+async def scan_unsettled_sessions(
+    *, batch_size: int = 100, settle: bool = False
+) -> ScanResult:
     """Keyset pages include saved invoices and manually closed sessions.
 
     Process each candidate in its own transaction; skip a busy row and retry on
@@ -135,7 +137,7 @@ async def scan_unsettled_sessions(*, batch_size: int = 100) -> ScanResult:
                     if locked is None:
                         result.busy += 1
                         continue
-                    outcome = await chot_phien(session_id, db=db)
+                    outcome = await chot_phien(session_id, db=db, settle=settle)
                 if outcome.status == "ready":
                     result.ready += 1
                 elif outcome.status == "needs_review":

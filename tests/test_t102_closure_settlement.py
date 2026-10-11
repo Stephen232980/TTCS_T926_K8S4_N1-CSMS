@@ -63,7 +63,7 @@ async def counts(factory):
 async def test_t102_chot_phien_thanh_cong_co_phi_tru_vi_va_danh_dau_debited(factory):
     """Phiên sạc có phí: lập hoá đơn + trừ ví + settlement_reason='debited' trong 1 transaction."""
     session_id = await saved(factory)
-    result = await chot_phien(session_id)
+    result = await chot_phien(session_id, settle=True)
     assert result.status == "ready"
     assert result.invoice is not None
     assert result.invoice.total_vnd > 0
@@ -96,7 +96,7 @@ async def test_t102_chot_phien_thanh_cong_co_phi_tru_vi_va_danh_dau_debited(fact
 async def test_t102_chot_phien_zero_dong_danh_dau_zero_invoice_khong_tru_vi(factory):
     """Hoá đơn 0 đồng: đặt settlement_reason='zero_invoice', không ghi dòng sổ cái."""
     session_id = await saved(factory, last=0)
-    result = await chot_phien(session_id)
+    result = await chot_phien(session_id, settle=True)
     assert result.status == "ready"
     assert result.invoice.total_vnd == 0
 
@@ -130,7 +130,7 @@ async def test_t102_loi_giua_chung_sau_lap_hoa_don_rollback_toan_bo_khong_mo_coi
     async with factory() as db:
         with pytest.raises(SQLAlchemyError):
             async with db.begin():
-                await chot_phien(session_id, db=db)
+                await chot_phien(session_id, db=db, settle=True)
 
     # Kiểm tra DB: không có hoá đơn nào và phiên chưa chốt
     async with factory() as db:
@@ -153,7 +153,7 @@ async def test_t102_loi_giua_chung_sau_lap_hoa_don_rollback_toan_bo_khong_mo_coi
     # Khôi phục tru_vi: lần sau chốt thành công trọn vẹn
     monkeypatch.undo()
     async with factory() as db, db.begin():
-        retry_result = await chot_phien(session_id, db=db)
+        retry_result = await chot_phien(session_id, db=db, settle=True)
     assert retry_result.status == "ready"
     async with factory() as db:
         charging = await db.get(ChargingSession, session_id)
@@ -176,7 +176,7 @@ async def test_t102_phien_da_co_hoa_don_nhung_chua_tru_vi_duoc_tru_bu_khong_trun
 
     # Chốt phiên
     async with factory() as db, db.begin():
-        result = await chot_phien(session_id, db=db)
+        result = await chot_phien(session_id, db=db, settle=True)
     assert result.status == "ready"
     assert result.invoice.id == invoice_outcome.invoice.id
 
@@ -195,7 +195,7 @@ async def test_t102_chot_phien_idempotent_nhieu_lan_khong_sinh_them_dong(factory
 
     async def run_once():
         async with factory() as db, db.begin():
-            return await chot_phien(session_id, db=db)
+            return await chot_phien(session_id, db=db, settle=True)
 
     results = await asyncio.gather(*(run_once() for _ in range(3)))
     assert {r.invoice.id for r in results} == {results[0].invoice.id}
@@ -206,7 +206,7 @@ async def test_t102_needs_review_khong_tru_vi_va_khong_settle(factory):
     """Phiên sạc needs_review (ví dụ thiếu biểu giá): không trừ ví, không đặt settlement."""
     session_id = await saved(factory, with_tariff=False)
     async with factory() as db, db.begin():
-        result = await chot_phien(session_id, db=db)
+        result = await chot_phien(session_id, db=db, settle=True)
     assert result.status == "needs_review"
 
     async with factory() as db:
@@ -221,7 +221,7 @@ async def test_t102_scan_unsettled_sessions_processes_and_marks_settled(factory)
     id1 = await saved(factory)
     id2 = await saved(factory, last=0)
 
-    scan_res = await scan_unsettled_sessions()
+    scan_res = await scan_unsettled_sessions(settle=True)
     assert scan_res.scanned >= 2
     assert scan_res.ready >= 2
 
@@ -232,7 +232,7 @@ async def test_t102_scan_unsettled_sessions_processes_and_marks_settled(factory)
         assert c2.settlement_reason == "zero_invoice"
 
     # Lần quét thứ hai không còn phiên nào cần chốt
-    scan_res_2 = await scan_unsettled_sessions()
+    scan_res_2 = await scan_unsettled_sessions(settle=True)
     assert scan_res_2.scanned == 0
 
 
