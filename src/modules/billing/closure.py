@@ -53,9 +53,7 @@ async def _chot_phien_in_session(
 
     now = datetime.now(UTC)
     charging.settlement_completed_at = now
-    charging.settlement_reason = (
-        "zero_invoice" if invoice.total_vnd == 0 else "debited"
-    )
+    charging.settlement_reason = "zero_invoice" if invoice.total_vnd == 0 else "debited"
     await db.flush()
     logger.info(
         "charging_session_settled session=%s reason=%s total_vnd=%s",

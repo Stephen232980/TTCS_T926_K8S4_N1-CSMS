@@ -302,7 +302,11 @@ async def test_t102_migration_legacy_exempt_logic(factory):
                   )
                 """
             ),
-            {"c2_id": id2, "past_cutoff": past_cutoff, "completed_at": datetime.now(UTC)},
+            {
+                "c2_id": id2,
+                "past_cutoff": past_cutoff,
+                "completed_at": datetime.now(UTC),
+            },
         )
 
     async with factory() as db:
