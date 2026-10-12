@@ -19,6 +19,7 @@ APP_PORT="${APP_PORT:-8001}"
 CANDIDATE_PORT="${CANDIDATE_PORT:-8002}"
 NETWORK_NAME="${NETWORK_NAME:-ttcs_t926_k8s4_n1-csms-main_default}"
 ENV_FILE="${ENV_FILE:-.env}"
+MIGRATION_ENV_FILE="${MIGRATION_ENV_FILE:-${ENV_FILE}.migrations}"
 
 container_exists() {
   docker ps -a --format '{{.Names}}' | grep -Fxq "$1"
@@ -46,7 +47,12 @@ fi
 
 # 1. Kéo image mới
 echo "[1/6] Kéo Docker image mới..."
-docker pull "${IMAGE_NAME}"
+if [ "${SKIP_IMAGE_PULL:-0}" = "1" ]; then
+  # Explicit maintenance mode: use only an image already present on this host.
+  docker image inspect "${IMAGE_NAME}" >/dev/null
+else
+  docker pull "${IMAGE_NAME}"
+fi
 
 # Candidate cũ có thể xóa, nhưng backup cũ phải được kiểm tra thủ công.
 if container_exists "${CANDIDATE_CONTAINER}"; then
@@ -78,7 +84,31 @@ docker run -d \
 
 # 3. Chạy migration trên candidate
 echo "[3/6] Thực thi database migration..."
-if ! docker exec "${CANDIDATE_CONTAINER}" alembic upgrade head; then
+run_migrations() {
+  if [ -f "${MIGRATION_ENV_FILE}" ]; then
+    # Migration credentials exist only in this short-lived container, not in
+    # either runtime backend. The image's migration script uses its own URL.
+    docker run --rm --network "${NETWORK_NAME}" \
+      --env-file "${MIGRATION_ENV_FILE}" "${IMAGE_NAME}" alembic upgrade head || return 1
+    RUNTIME_DB_ROLE=$(docker exec "${CANDIDATE_CONTAINER}" python -c \
+      'from sqlalchemy.engine import make_url; from src.config import settings; print(make_url(settings.database_url).username)') || return 1
+    GRANT_PARAMETERS=()
+    if ! docker run --rm "${IMAGE_NAME}" test -f /app/scripts/grant_runtime_permissions.py; then
+      # Support a hardened host switching an older image during rollback.
+      GRANT_SCRIPT="${GRANT_SCRIPT:-$(dirname "${ENV_FILE}")/grant_runtime_permissions.py}"
+      [ -f "${GRANT_SCRIPT}" ] || return 1
+      GRANT_SCRIPT=$(realpath "${GRANT_SCRIPT}")
+      GRANT_PARAMETERS=(-v "${GRANT_SCRIPT}:/app/scripts/grant_runtime_permissions.py:ro")
+    fi
+    docker run --rm --network "${NETWORK_NAME}" \
+      --env-file "${MIGRATION_ENV_FILE}" "${GRANT_PARAMETERS[@]}" "${IMAGE_NAME}" \
+      python scripts/grant_runtime_permissions.py --role "${RUNTIME_DB_ROLE}"
+  else
+    # Compatibility for environments not yet configured with separated roles.
+    docker exec "${CANDIDATE_CONTAINER}" alembic upgrade head
+  fi
+}
+if ! run_migrations; then
   echo "[ERROR] Migration thất bại! Dừng và xóa candidate, container cũ (${APP_CONTAINER}) vẫn chạy nguyên vẹn."
   docker rm -f "${CANDIDATE_CONTAINER}" || true
   exit 1
