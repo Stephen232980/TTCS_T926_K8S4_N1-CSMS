@@ -87,3 +87,10 @@ cd C:\Users\LENOVO\CSMS\frontend
 $env:CSMS_DEV_API_TARGET = 'http://127.0.0.1:8015'
 npm.cmd run dev -- --host 127.0.0.1 --port 5173
 ```
+
+
+## Đặt mật khẩu mới
+
+Trong chi tiết tài khoản active/suspended, admin có nút Đổi mật khẩu với bước
+xác nhận email. Phiên cũ bị thu hồi; thao tác xuất hiện trong Nhật ký tài khoản.
+Xem [hợp đồng và kiểm chứng](ADMIN_ACCOUNT_PASSWORD.md).

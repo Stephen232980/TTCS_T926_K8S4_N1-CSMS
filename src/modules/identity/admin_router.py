@@ -11,6 +11,7 @@ from src.modules.identity.admin_schemas import (
     AccountCreateRequest,
     AccountListQuery,
     AccountListResponse,
+    AccountPasswordRequest,
     AccountResponse,
     AccountUpdateRequest,
     RoleResponse,
@@ -130,5 +131,19 @@ async def update_account(
     db_session: DatabaseSession,
 ) -> AccountResponse:
     return await AdminAccountService(db_session).change(
+        user_id, payload, actor, authorization
+    )
+
+
+@router.post("/accounts/{user_id}/password", response_model=AccountResponse)
+@user_policy("admin.accounts.manage", "all", "admin")
+async def reset_account_password(
+    user_id: UUID,
+    payload: AccountPasswordRequest,
+    actor: CurrentActorDependency,
+    authorization: AuditEvidence,
+    db_session: DatabaseSession,
+) -> AccountResponse:
+    return await AdminAccountService(db_session).reset_password(
         user_id, payload, actor, authorization
     )

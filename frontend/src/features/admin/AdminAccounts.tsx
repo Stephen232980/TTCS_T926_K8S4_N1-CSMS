@@ -15,6 +15,7 @@ import {
 } from './adminApi'
 import { ErrorNotice, Pagination } from './AdminShared'
 import { useResource } from './useResource'
+import { AccountPasswordForm } from './AccountPasswordForm'
 
 export function AdminAccounts({
   currentUser,
@@ -506,6 +507,7 @@ function AccountDetail({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<unknown>()
   const [savedAccount, setSavedAccount] = useState<Account>()
+  const [resettingPassword, setResettingPassword] = useState(false)
   const a = savedAccount ?? detail.data
   const self = id === currentUser.id
   const mutable = a?.status === 'active' || a?.status === 'suspended'
@@ -556,6 +558,13 @@ function AccountDetail({
               <dt>Cập nhật</dt>
               <dd>{dateTime(a.updated_at)}</dd>
             </dl>
+            {mutable && currentUser.roles.includes('admin') && !editing && !confirming && (
+              resettingPassword ? <AccountPasswordForm account={a} self={self}
+                onCancel={() => setResettingPassword(false)}
+                onConflict={() => { setSavedAccount(undefined); setResettingPassword(false); setError(new Error('Tài khoản đã thay đổi. Thông tin đang được tải lại.')); detail.reload() }}
+                onSaved={result => { setSavedAccount(result); setResettingPassword(false); onSaved(result) }}
+              /> : <button disabled={busy} onClick={() => setResettingPassword(true)}>Đổi mật khẩu</button>
+            )}
             {editing ? (
               <>
                 <RoleChoices
@@ -595,7 +604,7 @@ function AccountDetail({
                 </div>
                 {mutable && roles.length > 0 && (
                   <button
-                    disabled={busy || confirming}
+                    disabled={busy || confirming || resettingPassword}
                     onClick={() => {
                       setError(undefined)
                       setSelected(a.roles)
@@ -613,6 +622,7 @@ function AccountDetail({
               </p>
             ) : (
               mutable &&
+              !resettingPassword &&
               !editing && (
                 <div className="admin-account-access">
                   {confirming ? (

@@ -61,6 +61,19 @@ class AccountResponse(BaseModel):
     updated_at: datetime
 
 
+class AccountPasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    expected_updated_at: AwareDatetime
+    password: SecretStr = Field(min_length=12, max_length=1024)
+    confirm_password: SecretStr = Field(min_length=12, max_length=1024)
+
+    @model_validator(mode="after")
+    def matching_passwords(self) -> Self:
+        if self.password.get_secret_value() != self.confirm_password.get_secret_value():
+            raise ValueError("Mật khẩu nhập lại không khớp")
+        return self
+
+
 class AccountListQuery(BaseModel):
     model_config = ConfigDict(extra="forbid")
     page: int = Field(default=1, ge=1)
