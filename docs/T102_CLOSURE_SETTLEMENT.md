@@ -98,6 +98,12 @@ sequenceDiagram
 6. Khởi động lại worker sau khi kiểm tra. Đối chiếu invoice, balance, ledger,
    settlement và xác nhận lần quét kế tiếp không trừ thêm.
 
+Deploy chạy preflight bằng môi trường migration, rồi migrate/cấp quyền trước khi
+khởi động candidate. Lần chuyển đổi đầu bị chặn nếu backend cũ còn chạy, cutoff
+thiếu/sai timezone hoặc nằm trong tương lai. Các lần deploy sau khi revision đã áp dụng
+không yêu cầu dừng backend hay đặt lại mốc. Người vận hành vẫn phải xác nhận tất cả
+nguồn tạo invoice khác đã dừng; preflight chỉ nhận diện container backend chính.
+
 Nếu revision này từng được chạy trước khi bổ sung kiểm tra, `upgrade head` không
 chạy lại revision đã áp dụng. Phải rà soát trạng thái dữ liệu và có kế hoạch chuyển đổi
 riêng được trưởng nhóm duyệt; không tự downgrade để chạy lại trên dữ liệu tài chính.

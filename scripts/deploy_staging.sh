@@ -68,29 +68,36 @@ fi
 # Đảm bảo network docker tồn tại
 docker network inspect "${NETWORK_NAME}" >/dev/null 2>&1 || docker network create "${NETWORK_NAME}" || true
 
-# 2. Khởi chạy container candidate trên cổng thử nghiệm
-echo "[2/6] Khởi động container candidate trên cổng ${CANDIDATE_PORT}..."
+# Never start the new runtime/closure workers before migration and permission checks.
 ENV_PARAM=""
 if [ -f "${ENV_FILE}" ]; then
   ENV_PARAM="--env-file ${ENV_FILE}"
 fi
 
-docker run -d \
-  --name "${CANDIDATE_CONTAINER}" \
-  --network "${NETWORK_NAME}" \
-  ${ENV_PARAM} \
-  -p "${CANDIDATE_PORT}:8000" \
-  "${IMAGE_NAME}"
-
-# 3. Chạy migration trên candidate
-echo "[3/6] Thực thi database migration..."
+# 2. Migrate before candidate runtime can produce or settle invoices.
+echo "[2/6] Thực thi database migration trước khi khởi động candidate..."
 run_migrations() {
+  MIGRATION_PARAMETERS=()
+  if [ -f "${MIGRATION_ENV_FILE}" ]; then
+    MIGRATION_PARAMETERS=(--env-file "${MIGRATION_ENV_FILE}")
+  elif [ -f "${ENV_FILE}" ]; then
+    MIGRATION_PARAMETERS=(--env-file "${ENV_FILE}")
+  fi
+  if docker run --rm "${IMAGE_NAME}" test -f /app/scripts/verify_settlement_transition.py; then
+    RUNTIME_RUNNING=false
+    if [ "$(docker inspect -f '{{.State.Running}}' "${APP_CONTAINER}" 2>/dev/null || true)" = "true" ]; then
+      RUNTIME_RUNNING=true
+    fi
+    docker run --rm --network "${NETWORK_NAME}" "${MIGRATION_PARAMETERS[@]}" \
+      "${IMAGE_NAME}" python scripts/verify_settlement_transition.py \
+      --runtime-running "${RUNTIME_RUNNING}" || return 1
+  fi
+  docker run --rm --network "${NETWORK_NAME}" "${MIGRATION_PARAMETERS[@]}" \
+    "${IMAGE_NAME}" alembic upgrade head || return 1
   if [ -f "${MIGRATION_ENV_FILE}" ]; then
     # Migration credentials exist only in this short-lived container, not in
     # either runtime backend. The image's migration script uses its own URL.
-    docker run --rm --network "${NETWORK_NAME}" \
-      --env-file "${MIGRATION_ENV_FILE}" "${IMAGE_NAME}" alembic upgrade head || return 1
-    RUNTIME_DB_ROLE=$(docker exec "${CANDIDATE_CONTAINER}" python -c \
+    RUNTIME_DB_ROLE=$(docker run --rm ${ENV_PARAM} "${IMAGE_NAME}" python -c \
       'from sqlalchemy.engine import make_url; from src.config import settings; print(make_url(settings.database_url).username)') || return 1
     GRANT_PARAMETERS=()
     if ! docker run --rm "${IMAGE_NAME}" test -f /app/scripts/grant_runtime_permissions.py; then
@@ -103,16 +110,21 @@ run_migrations() {
     docker run --rm --network "${NETWORK_NAME}" \
       --env-file "${MIGRATION_ENV_FILE}" "${GRANT_PARAMETERS[@]}" "${IMAGE_NAME}" \
       python scripts/grant_runtime_permissions.py --role "${RUNTIME_DB_ROLE}"
-  else
-    # Compatibility for environments not yet configured with separated roles.
-    docker exec "${CANDIDATE_CONTAINER}" alembic upgrade head
   fi
 }
 if ! run_migrations; then
-  echo "[ERROR] Migration thất bại! Dừng và xóa candidate, container cũ (${APP_CONTAINER}) vẫn chạy nguyên vẹn."
-  docker rm -f "${CANDIDATE_CONTAINER}" || true
+  echo "[ERROR] Migration/preflight thất bại. Không khởi động candidate; giữ trạng thái container cũ."
   exit 1
 fi
+
+# 3. Candidate starts only after migration and runtime grants finish.
+echo "[3/6] Khởi động container candidate trên cổng ${CANDIDATE_PORT}..."
+docker run -d \
+  --name "${CANDIDATE_CONTAINER}" \
+  --network "${NETWORK_NAME}" \
+  ${ENV_PARAM} \
+  -p "${CANDIDATE_PORT}:8000" \
+  "${IMAGE_NAME}"
 
 # 4. Kiểm tra sức khỏe container candidate trên cổng thử nghiệm
 echo "[4/6] Kiểm tra sức khỏe container candidate (Cổng ${CANDIDATE_PORT})..."
