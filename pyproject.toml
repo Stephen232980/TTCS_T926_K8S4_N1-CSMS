@@ -22,6 +22,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+acceptance = ["openpyxl>=3.1,<4", "websockets>=14,<17"]
 dev = [
     "pytest",
     "pytest-asyncio",
