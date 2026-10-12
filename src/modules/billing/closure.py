@@ -5,30 +5,111 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
 from src.modules.billing.invoicing import InvoiceResult, lap_hoa_don
 from src.modules.charging.models import ChargingSession
+from src.modules.wallet.models import Wallet, WalletLedger
+from src.modules.wallet.service import tru_vi
 from src.platform.database.session import SessionFactory
 
 logger = logging.getLogger("csms.billing")
 
 
+async def _chot_phien_in_session(
+    db: AsyncSession, session_id: int, *, settle: bool = False
+) -> InvoiceResult:
+    """Execute lap_hoa_don, and when settle=True, tru_vi and mark settlement.
+
+    Lock the session row (with_for_update) to prevent concurrent settlement races.
+    If already settled, return idempotent success.
+    If lap_hoa_don yields needs_review or pending, return without debiting wallet.
+    When ready and settle=True, debit wallet via tru_vi and record settlement fields atomically.
+    """
+    charging = await db.scalar(
+        select(ChargingSession)
+        .where(ChargingSession.id == session_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if charging is None:
+        return await lap_hoa_don(db, session_id)
+
+    if charging.settlement_completed_at is not None:
+        return await lap_hoa_don(db, session_id)
+
+    outcome = await lap_hoa_don(db, session_id)
+    if outcome.status != "ready" or outcome.invoice is None:
+        return outcome
+
+    if not settle:
+        return outcome
+
+    invoice = outcome.invoice
+    wallet = await db.scalar(
+        select(Wallet).where(Wallet.driver_id == invoice.driver_id).with_for_update()
+    )
+    entries = list(
+        await db.scalars(
+            select(WalletLedger).where(
+                WalletLedger.reference_id == str(session_id),
+                or_(
+                    WalletLedger.entry_type == "charging_debit",
+                    WalletLedger.reference_type == "charging_session",
+                ),
+            )
+        )
+    )
+    if entries and (
+        len(entries) != 1
+        or wallet is None
+        or entries[0].wallet_id != wallet.id
+        or entries[0].entry_type != "charging_debit"
+        or entries[0].reference_type != "charging_session"
+        or entries[0].amount_vnd != -invoice.total_vnd
+        or invoice.total_vnd == 0
+    ):
+        reason = "settlement_ledger_mismatch"
+        charging.review_reasons = [*charging.review_reasons, reason]
+        await db.flush()
+        logger.warning("charging_settlement_needs_review session=%s", session_id)
+        return InvoiceResult("needs_review", reason=reason)
+    if not entries:
+        await tru_vi(db, invoice=invoice)
+
+    now = datetime.now(UTC)
+    charging.settlement_completed_at = now
+    charging.settlement_reason = "zero_invoice" if invoice.total_vnd == 0 else "debited"
+    await db.flush()
+    logger.info(
+        "charging_session_settled session=%s reason=%s total_vnd=%s",
+        session_id,
+        charging.settlement_reason,
+        invoice.total_vnd,
+    )
+    return outcome
+
+
 async def chot_phien(
-    session_id: int, *, db: AsyncSession | None = None
+    session_id: int, *, db: AsyncSession | None = None, settle: bool = False
 ) -> InvoiceResult:
     """Own one transaction, or join the supplied caller transaction.
 
-    Commit review reasons as well as invoices. No wallet debit or settlement
-    completion is performed until T-102 implements that step.
+    In a single transaction:
+    1. Lock session row with FOR UPDATE.
+    2. Generate/fetch invoice via lap_hoa_don.
+    3. If settle=True (T-102): debit wallet via tru_vi and mark settlement.
+    4. Set settlement_completed_at and settlement_reason ('debited' or 'zero_invoice').
+    Any failure rolls back all changes atomically; the recovery scan will retry later.
     """
     if db is not None:
-        return await lap_hoa_don(db, session_id)
+        return await _chot_phien_in_session(db, session_id, settle=settle)
     async with SessionFactory() as session, session.begin():
-        return await lap_hoa_don(session, session_id)
+        return await _chot_phien_in_session(session, session_id, settle=settle)
 
 
 @dataclass
@@ -41,7 +122,9 @@ class ScanResult:
     failed: int = 0
 
 
-async def scan_unsettled_sessions(*, batch_size: int = 100) -> ScanResult:
+async def scan_unsettled_sessions(
+    *, batch_size: int = 100, settle: bool = False
+) -> ScanResult:
     """Keyset pages include saved invoices and manually closed sessions.
 
     Process each candidate in its own transaction; skip a busy row and retry on
@@ -84,7 +167,7 @@ async def scan_unsettled_sessions(*, batch_size: int = 100) -> ScanResult:
                     if locked is None:
                         result.busy += 1
                         continue
-                    outcome = await chot_phien(session_id, db=db)
+                    outcome = await chot_phien(session_id, db=db, settle=settle)
                 if outcome.status == "ready":
                     result.ready += 1
                 elif outcome.status == "needs_review":
@@ -99,7 +182,7 @@ async def scan_unsettled_sessions(*, batch_size: int = 100) -> ScanResult:
 async def closure_scan_loop() -> None:
     while True:
         try:
-            await scan_unsettled_sessions()
+            await scan_unsettled_sessions(settle=True)
         except Exception:  # noqa: BLE001 - supervise recovery without logging SQL data.
             logger.error("charging_closure_scan_failed")
         await asyncio.sleep(settings.charging_closure_scan_interval_seconds)
@@ -108,9 +191,10 @@ async def closure_scan_loop() -> None:
 class ClosureRunner:
     """A bounded hint queue; the persisted ended session is the recovery source."""
 
-    def __init__(self, capacity: int = 256) -> None:
+    def __init__(self, capacity: int = 256, *, settle: bool = False) -> None:
         self.queue: asyncio.Queue[int] = asyncio.Queue(maxsize=capacity)
         self.pending: set[int] = set()
+        self.settle = settle
 
     def schedule(self, session_id: int) -> bool:
         if session_id in self.pending:
@@ -126,7 +210,10 @@ class ClosureRunner:
         while True:
             session_id = await self.queue.get()
             try:
-                await chot_phien(session_id)
+                if self.settle:
+                    await chot_phien(session_id, settle=True)
+                else:
+                    await chot_phien(session_id)
             except Exception:  # noqa: BLE001 - keep workers alive for later sessions.
                 logger.error("charging_closure_failed session=%s", session_id)
             finally:
@@ -145,7 +232,7 @@ def schedule_closure(session_id: int) -> bool:
 @asynccontextmanager
 async def closure_lifespan() -> AsyncIterator[None]:
     global _runner
-    runner = ClosureRunner()
+    runner = ClosureRunner(settle=True)
     _runner = runner
     tasks = [asyncio.create_task(runner.worker()) for _ in range(2)]
     tasks.append(asyncio.create_task(closure_scan_loop()))
