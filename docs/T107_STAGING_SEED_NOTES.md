@@ -1,5 +1,19 @@
 # T-107 — Staging seed (implementation checkpoint)
 
+## Current entry point after manifest integration
+
+Use `python -m scripts.t107_manifest_run --manifest <run.json>` with `--apply
+--admin-email <existing-test-admin>` or `--cleanup`, plus `--confirm-test-environment`
+and `T107_ALLOW_STAGING_SEED=YES`. See `T107_T108_MANIFEST.md` for the current contract.
+The shared modules are included in #133 and in the Docker backend. T-108 prepares
+fresh station/chargers/tariff first; T-107 validates the saved manifest and funds
+exactly its participants via T-88. Same-run retry never tops up again.
+
+The phase descriptions and fixed-fixture commands below are historical context.
+The `t107_staging_seed --apply/--cleanup` CLI is blocked; do not use those commands
+for the current staging acceptance. Tests for the old helpers are retained to
+preserve the contributor's work. Logical cleanup keeps financial/audit history.
+
 ## Verified scope (Sprint 4–5 assignment, row 38)
 
 - S-37, owner TV2, reviewer TV6; dependencies T-59, T-84, T-55, T-88.

@@ -1,13 +1,15 @@
 """T-107 boundary tests: no station creation if T-108 fixture is absent."""
 
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
+from pydantic import ValidationError
 
 from scripts.t107_manifest_run import apply_run, cleanup_run, verify_prepared_run
-from simulator.t108_contract import new_manifest
+from simulator.t108_contract import RunManifest, new_manifest
 
 
 def test_manifest_generates_distinct_run_scoped_receipts():
@@ -63,3 +65,24 @@ async def test_validation_refuses_wrong_station_marker():
     session = SimpleNamespace(get=AsyncMock(return_value=station))
     with pytest.raises(ValueError, match="station not prepared"):
         await verify_prepared_run(session, manifest)
+
+
+def test_staging_contract_requires_twenty_run_scoped_identities():
+    now = datetime(2026, 10, 12, 3, tzinfo=UTC)
+    run = new_manifest(revision="test", now=now)
+    assert len(run.participants) == 20
+    assert len({p.driver_id for p in run.participants}) == 20
+    assert len({p.card_tag for p in run.participants}) == 20
+    assert len({p.seed_receipt_code for p in run.participants}) == 20
+    assert run.boundary_seconds == 180
+    with pytest.raises(ValidationError, match="20 chargers"):
+        new_manifest(revision="test", count=2, now=now)
+
+
+@pytest.mark.parametrize("field", ["driver_email", "card_tag", "seed_receipt_code"])
+def test_saved_contract_rejects_identity_tampering(field):
+    run = new_manifest(revision="test", now=datetime(2026, 10, 12, 3, tzinfo=UTC))
+    payload = run.model_dump(mode="json")
+    payload["participants"][9][field] = "not-owned-by-run"
+    with pytest.raises(ValidationError, match="identity mismatch"):
+        RunManifest.model_validate(payload)
