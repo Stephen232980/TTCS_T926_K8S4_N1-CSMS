@@ -4,7 +4,11 @@
 - **Story**: S-37 - Ví bị trừ tự động khi phiên kết thúc, có bản ghi giao dịch.
 - **Task**: T-103 - Viết test tích hợp đồng thời (concurrency integration test) sử dụng kết nối cơ sở dữ liệu thật (PostgreSQL real sessions).
 - **Tiêu chuẩn nghiệm thu**: *"Bốn test xanh, lặp 50 lần không lần nào lệch"*.
-- **Vị trí file test**: [`tests/test_t103_concurrency.py`](file:///c:/Folder/CSMS/tests/test_t103_concurrency.py).
+- **Vị trí file test**: `tests/test_t103_concurrency.py`.
+- PR #136 được cập nhật theo `develop` bằng merge commit, giữ lịch sử đóng góp.
+- Các worker là asyncio task có transaction/kết nối PostgreSQL riêng, không phải
+  tiến trình hệ điều hành. Barrier chỉ mở khi tất cả đã kết nối; backend PID được
+  đối chiếu để chứng minh kết nối độc lập, có timeout phát hiện treo/deadlock.
 
 ---
 
@@ -57,6 +61,14 @@
 ---
 
 ## 3. Nghiệm thu Stress Test 50 lần liên tục
+- **Cổng nghiệm thu đủ bốn ca**: `test_t103_all_four_acceptance_cases_repeat_50_times`.
+  Mỗi vòng chạy lại bốn ca gốc với session/wallet mới trên cùng database test riêng:
+  hai phiên cùng tài xế, bốn worker cùng phiên, ví âm và rollback + retry.
+  Rollback được thử cả trước debit và sau debit flush, mỗi nhánh 50 lần.
+  Kiểm tra số tiền độc lập theo 3.000 đ/kWh, số dư, ví/tham chiếu/số tiền ledger,
+  trạng thái settlement, invoice/lines không lưu khi lỗi và retry đúng một lần.
+  JUnit ghi số lần hoàn tất cho từng ca; test in counts khi chạy với `-s`.
+- **Giữ bài stress phối hợp của thành viên** làm bằng chứng bổ sung:
 - **Hàm test**: `test_t103_nghiem_thu_50_lan_dong_thoi_khong_sai_lech`
 - **Thiết kế kiểm thử**:
   - Chạy lặp lại 50 chu kỳ kiểm thử liên tiếp trên kết nối PostgreSQL thực.
@@ -70,14 +82,16 @@
 
 ---
 
-## 4. Bằng chứng Thực thi (Test Execution Evidence)
+## 4. Chạy và lưu bằng chứng
 
 ```powershell
 # Chạy bộ kiểm thử đồng thời T-103
 .venv\Scripts\python.exe -m pytest tests/test_t103_concurrency.py -v
+# Lưu số lần nghiệm thu từng ca trong JUnit:
+.venv\Scripts\python.exe -m pytest tests/test_t103_concurrency.py -q -s -o junit_family=legacy --junitxml=t103-tests.xml
 ```
 
-**Kết quả thực tế:**
+**Kết quả ban đầu của thành viên, trước bổ sung cổng đủ bốn ca:**
 ```text
 tests/test_t103_concurrency.py::test_t103_hai_phien_cung_tai_xe_chot_dong_thoi PASSED [ 20%]
 tests/test_t103_concurrency.py::test_t103_hai_tien_trinh_cung_chot_mot_phien_race_condition PASSED [ 40%]
@@ -92,3 +106,8 @@ tests/test_t103_concurrency.py::test_t103_nghiem_thu_50_lan_dong_thoi_khong_sai_
 - `ruff check .` -> *All checks passed!*
 - `ruff format --check .` -> *359 files already formatted*
 - `mypy src` -> *Success: no issues found in 114 source files*
+
+Kết quả ban đầu phía trên không thay cho kết quả của head bổ sung. Cổng mới được
+pytest tự thu thập trong functional suite CI hiện có; không gọi settlement thủ công
+trên staging, không đổi source nghiệp vụ/DB schema. T-102 đã merge là dependency
+thực thi; T-108 vẫn chịu trách nhiệm ba lượt đối chiếu 20 trụ trên staging.

@@ -14,12 +14,12 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.modules.billing import closure
 from src.modules.billing.closure import chot_phien
-from src.modules.billing.models import Invoice
+from src.modules.billing.models import Invoice, InvoiceLine
 from src.modules.charging.models import ChargingSession
 from src.modules.pricing.models import Tariff, TariffBand
 from src.modules.wallet.models import Wallet, WalletLedger
@@ -106,6 +106,24 @@ async def create_driver_with_sessions(
         return driver.id, wallet.id, session_ids
 
 
+async def close_together(factory, *session_ids):
+    """Start after every worker has an independent live PostgreSQL connection."""
+    barrier = asyncio.Barrier(len(session_ids))
+    backend_pids = set()
+
+    async def worker(session_id):
+        async with factory() as db, db.begin():
+            backend_pids.add(await db.scalar(text("SELECT pg_backend_pid()")))
+            await asyncio.wait_for(barrier.wait(), timeout=15)
+            return await chot_phien(session_id, db=db, settle=True)
+
+    outcomes = await asyncio.wait_for(
+        asyncio.gather(*(worker(session_id) for session_id in session_ids)), timeout=30
+    )
+    assert len(backend_pids) == len(session_ids)
+    return outcomes
+
+
 # ---------------------------------------------------------------------------
 # Kịch bản 1: Hai phiên của một tài xế chốt cùng lúc
 # ---------------------------------------------------------------------------
@@ -125,16 +143,14 @@ async def test_t103_hai_phien_cung_tai_xe_chot_dong_thoi(factory):
     )
 
     # Chốt 2 phiên đồng thời qua 2 kết nối độc lập
-    res1, res2 = await asyncio.gather(
-        chot_phien(s1, settle=True),
-        chot_phien(s2, settle=True),
-    )
+    res1, res2 = await close_together(factory, s1, s2)
 
     assert res1.status == "ready" and res1.invoice is not None
     assert res2.status == "ready" and res2.invoice is not None
 
     inv1_total = res1.invoice.total_vnd
     inv2_total = res2.invoice.total_vnd
+    assert (inv1_total, inv2_total) == (15_000, 30_000)
     expected_final_balance = initial_balance - (inv1_total + inv2_total)
 
     async with factory() as db:
@@ -193,15 +209,18 @@ async def test_t103_hai_tien_trinh_cung_chot_mot_phien_race_condition(factory):
     async with factory() as db, db.begin():
         charging, *_ = await seed(db, last=5000)
         session_id = charging.id
+        wallet = await db.scalar(
+            select(Wallet).where(Wallet.driver_id == charging.driver_id)
+        )
+        wallet_id, opening_balance = wallet.id, wallet.balance_vnd
 
     # 4 worker cùng gọi chot_phien song song
-    outcomes = await asyncio.gather(
-        *(chot_phien(session_id, settle=True) for _ in range(4))
-    )
+    outcomes = await close_together(factory, *(session_id for _ in range(4)))
 
     assert all(o.status == "ready" for o in outcomes)
     invoice_ids = {o.invoice.id for o in outcomes if o.invoice is not None}
     assert len(invoice_ids) == 1
+    assert all(o.invoice.total_vnd == 15_000 for o in outcomes)
 
     async with factory() as db:
         invoice_count = await db.scalar(
@@ -220,6 +239,18 @@ async def test_t103_hai_tien_trinh_cung_chot_mot_phien_race_condition(factory):
             )
         )
         assert ledger_count == 1
+        ledger = await db.scalar(
+            select(WalletLedger).where(
+                WalletLedger.entry_type == "charging_debit",
+                WalletLedger.reference_id == str(session_id),
+            )
+        )
+        wallet = await db.get(Wallet, wallet_id)
+        assert wallet.balance_vnd == opening_balance - 15_000
+        assert ledger.wallet_id == wallet_id
+        assert ledger.reference_type == "charging_session"
+        assert ledger.amount_vnd == -15_000
+        assert ledger.balance_after_vnd == wallet.balance_vnd
 
         charging = await db.get(ChargingSession, session_id)
         assert charging.settlement_reason == "debited"
@@ -244,15 +275,13 @@ async def test_t103_vi_thieu_tien_van_tru_de_so_du_am(factory):
         session_kwh_list=[5, 5],  # 5 kWh = 15.000đ mỗi phiên
     )
 
-    res1, res2 = await asyncio.gather(
-        chot_phien(s1, settle=True),
-        chot_phien(s2, settle=True),
-    )
+    res1, res2 = await close_together(factory, s1, s2)
 
     assert res1.status == "ready" and res2.status == "ready"
     inv1_total = res1.invoice.total_vnd
     inv2_total = res2.invoice.total_vnd
     assert inv1_total + inv2_total > initial_balance
+    assert (inv1_total, inv2_total) == (15_000, 15_000)
 
     async with factory() as db:
         wallet = await db.get(Wallet, wallet_id)
@@ -270,6 +299,19 @@ async def test_t103_vi_thieu_tien_van_tru_de_so_du_am(factory):
             )
         )
         assert len(ledgers) == 2
+        assert {row.reference_id for row in ledgers} == {str(s1), str(s2)}
+        assert all(
+            row.reference_type == "charging_session" and row.amount_vnd == -15_000
+            for row in ledgers
+        )
+        assert (
+            await db.scalar(
+                select(func.sum(WalletLedger.amount_vnd)).where(
+                    WalletLedger.wallet_id == wallet_id
+                )
+            )
+            == wallet.balance_vnd
+        )
 
         # Cả 2 phiên đều đánh dấu debited thành công
         c1 = await db.get(ChargingSession, s1)
@@ -285,7 +327,12 @@ async def test_t103_vi_thieu_tien_van_tru_de_so_du_am(factory):
 # ---------------------------------------------------------------------------
 # Kịch bản 4: Lỗi giữa chừng rollback toàn bộ, không mồ côi hoá đơn
 # ---------------------------------------------------------------------------
-async def test_t103_loi_giua_chung_khong_de_lai_hoa_don_mo_coi(factory, monkeypatch):
+@pytest.mark.parametrize(
+    "after_debit", [False, True], ids=["before-debit", "after-debit-flush"]
+)
+async def test_t103_loi_giua_chung_khong_de_lai_hoa_don_mo_coi(
+    factory, monkeypatch, after_debit
+):
     """Khi có lỗi bất ngờ ở bước trừ ví / commit:
 
     - Toàn bộ transaction rollback sạch sẽ.
@@ -296,11 +343,17 @@ async def test_t103_loi_giua_chung_khong_de_lai_hoa_don_mo_coi(factory, monkeypa
     async with factory() as db, db.begin():
         charging, *_ = await seed(db, last=5000)
         session_id = charging.id
+        wallet = await db.scalar(
+            select(Wallet).where(Wallet.driver_id == charging.driver_id)
+        )
+        wallet_id, opening_balance = wallet.id, wallet.balance_vnd
 
     original_tru_vi = closure.tru_vi
 
     # Giả lập lỗi ở bước trừ ví
     async def fail_tru_vi(*args, **kwargs):
+        if after_debit:
+            await original_tru_vi(*args, **kwargs)
         raise SQLAlchemyError("Giả lập lỗi database bất ngờ trong giao dịch")
 
     monkeypatch.setattr(closure, "tru_vi", fail_tru_vi)
@@ -314,6 +367,16 @@ async def test_t103_loi_giua_chung_khong_de_lai_hoa_don_mo_coi(factory, monkeypa
     async with factory() as db:
         inv = await db.scalar(select(Invoice).where(Invoice.session_id == session_id))
         assert inv is None
+        assert (
+            await db.scalar(
+                select(func.count())
+                .select_from(InvoiceLine)
+                .join(Invoice)
+                .where(Invoice.session_id == session_id)
+            )
+            == 0
+        )
+        assert (await db.get(Wallet, wallet_id)).balance_vnd == opening_balance
 
         ledger = await db.scalar(
             select(WalletLedger).where(WalletLedger.reference_id == str(session_id))
@@ -333,6 +396,24 @@ async def test_t103_loi_giua_chung_khong_de_lai_hoa_don_mo_coi(factory, monkeypa
         cs = await db.get(ChargingSession, session_id)
         assert cs.settlement_reason == "debited"
         assert cs.settlement_completed_at is not None
+        invoice = await db.scalar(
+            select(Invoice).where(Invoice.session_id == session_id)
+        )
+        assert invoice.total_vnd == 15_000
+        ledger = list(
+            await db.scalars(
+                select(WalletLedger).where(
+                    WalletLedger.entry_type == "charging_debit",
+                    WalletLedger.reference_id == str(session_id),
+                )
+            )
+        )
+        assert len(ledger) == 1
+        assert ledger[0].wallet_id == wallet_id
+        assert ledger[0].reference_type == "charging_session"
+        assert ledger[0].amount_vnd == -15_000
+        assert (await db.get(Wallet, wallet_id)).balance_vnd == opening_balance - 15_000
+        assert ledger[0].balance_after_vnd == opening_balance - 15_000
 
 
 # ---------------------------------------------------------------------------
@@ -427,11 +508,7 @@ async def test_t103_nghiem_thu_50_lan_dong_thoi_khong_sai_lech(factory):
 
         # Kiểm tra 1: Đồng thời chốt s1 qua 2 connection (race double closure)
         # Kiểm tra 2: Đồng thời chốt s2 song song với s1 (concurrent sessions for driver)
-        res_s1_a, res_s1_b, res_s2 = await asyncio.gather(
-            chot_phien(s1_id, settle=True),
-            chot_phien(s1_id, settle=True),
-            chot_phien(s2_id, settle=True),
-        )
+        res_s1_a, res_s1_b, res_s2 = await close_together(factory, s1_id, s1_id, s2_id)
 
         assert res_s1_a.status == "ready" and res_s1_b.status == "ready"
         assert res_s2.status == "ready"
@@ -457,3 +534,40 @@ async def test_t103_nghiem_thu_50_lan_dong_thoi_khong_sai_lech(factory):
         w = await db.get(Wallet, wallet_id)
         assert total_ledger == w.balance_vnd
         assert w.balance_vnd == current_expected_balance
+
+
+async def test_t103_all_four_acceptance_cases_repeat_50_times(
+    factory, monkeypatch, record_property
+):
+    """Repeat every original acceptance case, including debt and rollback, 50 times.
+
+    Each case creates fresh session/wallet IDs in one isolated PostgreSQL database.
+    Each concurrent closure opens its own real connection/transaction.
+    Retain the contributor's mixed-race stress test as additional evidence.
+    """
+    cases = (
+        ("two_sessions", test_t103_hai_phien_cung_tai_xe_chot_dong_thoi),
+        ("same_session", test_t103_hai_tien_trinh_cung_chot_mot_phien_race_condition),
+        ("negative_balance", test_t103_vi_thieu_tien_van_tru_de_so_du_am),
+        ("rollback_retry", test_t103_loi_giua_chung_khong_de_lai_hoa_don_mo_coi),
+    )
+    completed = dict.fromkeys((name for name, _ in cases), 0)
+    for iteration in range(50):
+        for name, test_case in cases:
+            try:
+                if name == "rollback_retry":
+                    with monkeypatch.context() as patch:
+                        await test_case(factory, patch, after_debit=False)
+                        await test_case(factory, patch, after_debit=True)
+                else:
+                    await test_case(factory)
+            except AssertionError as error:
+                raise AssertionError(
+                    f"T-103 {name} iteration {iteration + 1}/50: {error}"
+                ) from error
+            completed[name] += 1
+    assert set(completed.values()) == {50}
+    for name, count in completed.items():
+        record_property(f"t103_{name}_iterations", count)
+    record_property("t103_after_debit_rollback_iterations", 50)
+    print(f"T-103 acceptance counts: {completed}")
