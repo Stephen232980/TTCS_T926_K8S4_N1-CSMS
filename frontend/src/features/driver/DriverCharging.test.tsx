@@ -64,6 +64,30 @@ it('explains rejected starts and allows another attempt', async () => {
   expect(screen.getByRole('button', { name: 'Bắt đầu sạc' })).toBeEnabled()
 })
 
+it.each([
+  ['wallet_low', 'Số dư ví hiện tại chưa đạt mức tối thiểu', true],
+  ['wallet_missing', 'Chưa tìm thấy ví của bạn', false],
+  ['wallet_locked', 'Ví của bạn hiện đang bị khóa', false],
+  ['tariff_unavailable', 'Chưa có thông tin giá sạc hợp lệ', false],
+] as const)('shows the %s wallet eligibility reason', async (reason, message, canTopUp) => {
+  const fetchMock = mockApi()
+  fetchMock.mockImplementation(async (url: string, options?: RequestInit) => options?.method === 'POST'
+    ? { ok: false, json: async () => ({ detail: reason }) }
+    : { ok: true, json: async () => url.includes('/connectors') ? connectors : empty })
+  const user = userEvent.setup()
+  render(<DriverCharging stationId="station-one" />)
+  await user.selectOptions(await screen.findByLabelText('Trụ và đầu nối'), 'connector-one')
+  await user.click(screen.getByRole('checkbox'))
+  await user.click(screen.getByRole('button', { name: 'Bắt đầu sạc' }))
+  const alert = await screen.findByRole('alert')
+  expect(alert).toHaveTextContent(message)
+  if (canTopUp) {
+    expect(screen.getByRole('link', { name: 'Nạp tiền' })).toHaveAttribute('href', '#driver-wallet')
+  } else {
+    expect(screen.queryByRole('link', { name: 'Nạp tiền' })).not.toBeInTheDocument()
+  }
+})
+
 it('opens the session view only after current confirms the matching started session', async () => {
   let current: object = empty
   const accepted = { id: 'request-one', status: 'Accepted', deadline: new Date(Date.now() + 60000).toISOString() }

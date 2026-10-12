@@ -125,6 +125,9 @@
 .driver-shell .driver-plug-confirm { min-height: 44px; font-size: 14px; margin: 8px 0; }
 .driver-shell .driver-connectors .driver-start-footer > button { width: 100%; }
 .driver-shell .driver-start-status { padding: 14px; border-radius: 10px; background: #eaf2f5; color: #244e60; font-size: 14px; }
+.driver-start-reason { display: grid; gap: 10px; }
+.driver-shell .driver-start-reason p { margin: 0; color: #a3382c; }
+.driver-start-reason .driver-primary-link { justify-self: start; }
 .driver-shell [hidden] { display: none !important; }
 @media (min-width: 700px) {
   .driver-shell { display: grid; grid-template-columns: 88px minmax(0, 1fr); height: 100dvh; overflow: hidden; }
