@@ -91,6 +91,7 @@ class Settings(BaseSettings):
     charging_abnormal_offline_seconds: int = Field(default=21600, gt=0)
     charging_recovery_scan_interval_seconds: int = Field(default=60, gt=0)
     charging_closure_scan_interval_seconds: int = Field(default=60, gt=0)
+    legacy_settlement_cutoff: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",

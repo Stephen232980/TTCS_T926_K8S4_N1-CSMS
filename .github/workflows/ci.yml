@@ -17,6 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DATABASE_URL: postgresql+psycopg://csms:ci_password@localhost:5432/csms
+      # Explicit cutoff for this empty, disposable CI database only.
+      LEGACY_SETTLEMENT_CUTOFF: "1970-01-01T00:00:00+00:00"
 
     services:
       postgres:
@@ -128,6 +130,7 @@ jobs:
       POSTGRES_DB: csms_s26
       POSTGRES_USER: csms
       POSTGRES_PASSWORD: ci_simulator_only
+      LEGACY_SETTLEMENT_CUTOFF: "1970-01-01T00:00:00+00:00"
       SIMULATOR_OPERATOR_PASSWORD: ci_simulator_only
       SIMULATOR_COUNT: 20
       SIMULATOR_CODE_PREFIX: SIM-CI-
