@@ -27,8 +27,8 @@ from src.modules.identity.models import Role, User, UserRole
 from src.modules.identity.role_assignment import assign_user_roles
 from src.modules.identity.security import hash_password
 from src.modules.stations.models import ChargePoint, Connector, Station
-from src.modules.wallet.manual_topup import ManualTopupRequest, nap_tay
 from src.modules.wallet.eligibility import du_so_du_de_sac
+from src.modules.wallet.manual_topup import ManualTopupRequest, nap_tay
 from src.modules.wallet.models import Wallet, WalletLedger
 from src.modules.wallet.provisioning import ensure_driver_wallet
 
@@ -96,9 +96,13 @@ async def _seed_user(session: AsyncSession, email: str, roles: tuple[str, ...]) 
             raise RuntimeError(
                 f"Fixture identity {email} is not active (possibly cleaned)"
             )
-        assigned = set((await session.scalars(
-            select(Role.code).join(UserRole).where(UserRole.user_id == user.id)
-        )).all())
+        assigned = set(
+            (
+                await session.scalars(
+                    select(Role.code).join(UserRole).where(UserRole.user_id == user.id)
+                )
+            ).all()
+        )
         if not set(roles) <= assigned:
             raise RuntimeError(f"Fixture identity {email} has unexpected roles")
         return user
@@ -114,9 +118,11 @@ async def _seed_user(session: AsyncSession, email: str, roles: tuple[str, ...]) 
 
 
 async def _seed_station(session: AsyncSession, owner: User) -> Station:
-    stations = (await session.scalars(
-        select(Station).where(Station.name == STATION_NAME).with_for_update()
-    )).all()
+    stations = (
+        await session.scalars(
+            select(Station).where(Station.name == STATION_NAME).with_for_update()
+        )
+    ).all()
     if len(stations) > 1:
         raise RuntimeError("Ambiguous T107 station name; refusing to proceed")
     if stations:
@@ -178,13 +184,15 @@ async def _seed_card(
     if card is None:
         if existed:
             raise RuntimeError(f"Existing {driver.email} lacks fixture card")
-        session.add(ChargingCard(
-            tag_hash=tag_hash(tag),
-            tag_tail=tag[-4:],
-            driver_id=driver.id,
-            issuer_id=owner.id,
-            status="active",
-        ))
+        session.add(
+            ChargingCard(
+                tag_hash=tag_hash(tag),
+                tag_tail=tag[-4:],
+                driver_id=driver.id,
+                issuer_id=owner.id,
+                status="active",
+            )
+        )
         await session.flush()
     elif (
         card.driver_id != driver.id
@@ -196,15 +204,22 @@ async def _seed_card(
 
 
 async def _credit_once(
-    session: AsyncSession, *, driver: User, wallet: Wallet,
-    admin: User, index: int, amount_vnd: int
+    session: AsyncSession,
+    *,
+    driver: User,
+    wallet: Wallet,
+    admin: User,
+    index: int,
+    amount_vnd: int,
 ) -> bool:
     """T-88 issues an auditable manual receipt once; never refill on reruns."""
     receipt = receipt_code(index)
-    ledger = await session.scalar(select(WalletLedger).where(
-        WalletLedger.entry_type == "manual_topup",
-        WalletLedger.reference_id == receipt,
-    ))
+    ledger = await session.scalar(
+        select(WalletLedger).where(
+            WalletLedger.entry_type == "manual_topup",
+            WalletLedger.reference_id == receipt,
+        )
+    )
     if ledger is not None:
         if (
             ledger.wallet_id != wallet.id
@@ -217,9 +232,15 @@ async def _credit_once(
         raise RuntimeError(
             f"Refusing to seed nonempty/locked wallet for {driver.email}"
         )
-    admin_roles = tuple(sorted((await session.scalars(
-        select(Role.code).join(UserRole).where(UserRole.user_id == admin.id)
-    )).all()))
+    admin_roles = tuple(
+        sorted(
+            (
+                await session.scalars(
+                    select(Role.code).join(UserRole).where(UserRole.user_id == admin.id)
+                )
+            ).all()
+        )
+    )
     if "admin" not in admin_roles:
         raise RuntimeError("Administrator roles changed before T-88 topup")
     await nap_tay(
@@ -241,9 +262,9 @@ async def _admin(session: AsyncSession, email: str) -> User:
     if admin is None or admin.status != "active":
         raise RuntimeError("Specified administrator does not exist or is disabled")
     role = await session.scalar(
-        select(Role.id).join(UserRole).where(
-            UserRole.user_id == admin.id, Role.code == "admin"
-        )
+        select(Role.id)
+        .join(UserRole)
+        .where(UserRole.user_id == admin.id, Role.code == "admin")
     )
     if role is None:
         raise RuntimeError("Specified account does not have the admin role")
@@ -265,11 +286,13 @@ async def seed_fixture(
     )
     owner = await _seed_user(session, OWNER_EMAIL, ("station_owner", "operator"))
     if original_owner is not None:
-        marker = await session.scalar(select(Station.id).where(
-            Station.name == STATION_NAME,
-            Station.owner_id == owner.id,
-            Station.address == STATION_ADDRESS,
-        ))
+        marker = await session.scalar(
+            select(Station.id).where(
+                Station.name == STATION_NAME,
+                Station.owner_id == owner.id,
+                Station.address == STATION_ADDRESS,
+            )
+        )
         if marker is None:
             raise RuntimeError("Existing T107 owner has no valid fixture station")
     station = await _seed_station(session, owner)
@@ -279,15 +302,18 @@ async def seed_fixture(
         await _seed_charger(session, station, index)
         email = driver_email(index)
         existed = (
-            await session.scalar(select(User.id).where(User.email == email))
-            is not None
+            await session.scalar(select(User.id).where(User.email == email)) is not None
         )
         driver = await _seed_user(session, email, ("driver",))
         await _seed_card(session, driver, owner, index, existed=existed)
         wallet = await ensure_driver_wallet(session, driver.id)
         if await _credit_once(
-            session, driver=driver, wallet=wallet, admin=admin,
-            index=index, amount_vnd=config.amount_vnd,
+            session,
+            driver=driver,
+            wallet=wallet,
+            admin=admin,
+            index=index,
+            amount_vnd=config.amount_vnd,
         ):
             new_receipts += 1
             eligibility = await du_so_du_de_sac(
@@ -313,11 +339,15 @@ async def cleanup_fixture(session: AsyncSession) -> int:
     )
     if owner is None:
         return 0  # Already absent on a new database.
-    station = await session.scalar(select(Station).where(
-        Station.name == STATION_NAME,
-        Station.owner_id == owner.id,
-        Station.address == STATION_ADDRESS,
-    ).with_for_update())
+    station = await session.scalar(
+        select(Station)
+        .where(
+            Station.name == STATION_NAME,
+            Station.owner_id == owner.id,
+            Station.address == STATION_ADDRESS,
+        )
+        .with_for_update()
+    )
     if station is None:
         raise RuntimeError("Cannot verify ownership of T107 fixture station")
     drivers: list[User] = []
@@ -332,29 +362,40 @@ async def cleanup_fixture(session: AsyncSession) -> int:
         charger = await session.scalar(
             select(ChargePoint).where(ChargePoint.code == code)
         )
-        card = await session.scalar(select(ChargingCard).where(
-            ChargingCard.tag_hash == tag_hash(card_tag(index))
-        ))
+        card = await session.scalar(
+            select(ChargingCard).where(
+                ChargingCard.tag_hash == tag_hash(card_tag(index))
+            )
+        )
         if (
-            driver is None or charger is None or card is None
-            or card.driver_id != driver.id or card.issuer_id != owner.id
+            driver is None
+            or charger is None
+            or card is None
+            or card.driver_id != driver.id
+            or card.issuer_id != owner.id
             or charger.station_id != station.id
             or charger.name != f"T107 virtual charger {code}"
         ):
             raise RuntimeError(f"T107 fixture ownership mismatch at index {index}")
-        connector = await session.scalar(select(Connector).where(
-            Connector.charge_point_id == charger.id, Connector.connector_number == 1
-        ))
+        connector = await session.scalar(
+            select(Connector).where(
+                Connector.charge_point_id == charger.id, Connector.connector_number == 1
+            )
+        )
         if connector is None:
             raise RuntimeError(f"T107 connector missing at index {index}")
         # Role assignment also provisions a private virtual charging card for
         # every driver. Validate both cards before disabling either one.
-        driver_cards = (await session.scalars(
-            select(ChargingCard).where(ChargingCard.driver_id == driver.id)
-            .with_for_update()
-        )).all()
+        driver_cards = (
+            await session.scalars(
+                select(ChargingCard)
+                .where(ChargingCard.driver_id == driver.id)
+                .with_for_update()
+            )
+        ).all()
         automatic = [
-            candidate for candidate in driver_cards
+            candidate
+            for candidate in driver_cards
             if candidate.issuer_id == driver.id and candidate.id != card.id
         ]
         if (
@@ -371,7 +412,9 @@ async def cleanup_fixture(session: AsyncSession) -> int:
         connectors.append(connector)
     charger_ids = [c.id for c in chargers]
     unsettled = await session.scalar(
-        select(func.count()).select_from(ChargingSession).where(
+        select(func.count())
+        .select_from(ChargingSession)
+        .where(
             ChargingSession.charge_point_id.in_(charger_ids),
             (
                 ChargingSession.ended_at.is_(None)
@@ -426,6 +469,11 @@ def arguments() -> argparse.Namespace:
 
 async def main() -> None:
     args = arguments()
+    if args.apply or args.cleanup:
+        raise SystemExit(
+            "Legacy T-107 fixed fixture is disabled for CLI writes. "
+            "Use scripts.t107_manifest_run with a T-108 run manifest instead."
+        )
     if args.cleanup:
         if any(
             (args.admin_email, args.boundaries, args.rates, args.amount_vnd is not None)

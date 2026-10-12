@@ -8,7 +8,9 @@ from scripts.t107_tariff_seed import Plan
 def test_three_bands_cover_whole_day_without_overlap():
     bands = Plan(720, 735, (2000, 3000, 2500)).bands()
     assert [(b.start_min, b.end_min) for b in bands] == [
-        (0, 720), (720, 735), (735, 1440)
+        (0, 720),
+        (720, 735),
+        (735, 1440),
     ]
     assert [b.label for b in bands] == ["T107-01", "T107-02", "T107-03"]
 
@@ -28,7 +30,7 @@ def test_price_type_and_seed_prefix_are_strict():
 
 @pytest.mark.asyncio
 async def test_identical_existing_tariff_is_not_inserted_even_when_already_used():
-    from datetime import date, datetime, UTC
+    from datetime import UTC, date, datetime
     from types import SimpleNamespace
     from unittest.mock import AsyncMock
     from uuid import uuid4

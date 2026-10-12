@@ -56,12 +56,18 @@ async def test_initial_credit_calls_t88_once_and_uses_fixed_receipt():
     admin = SimpleNamespace(id=uuid4())
     session = SimpleNamespace(
         scalar=AsyncMock(return_value=None),
-        scalars=AsyncMock(return_value=SimpleNamespace(all=lambda: ["operator", "admin"])),
+        scalars=AsyncMock(
+            return_value=SimpleNamespace(all=lambda: ["operator", "admin"])
+        ),
     )
     with patch("scripts.t107_staging_seed.nap_tay", new_callable=AsyncMock) as topup:
         result = await _credit_once(
-            session, driver=driver, wallet=wallet, admin=admin,
-            index=1, amount_vnd=100_000,
+            session,
+            driver=driver,
+            wallet=wallet,
+            admin=admin,
+            index=1,
+            amount_vnd=100_000,
         )
     assert result is True
     topup.assert_awaited_once()
@@ -85,8 +91,10 @@ async def test_repeat_receipt_is_not_credited_again_even_after_wallet_debit():
         result = await _credit_once(
             session,
             driver=SimpleNamespace(id=uuid4(), email=driver_email(1)),
-            wallet=wallet, admin=SimpleNamespace(id=uuid4()),
-            index=1, amount_vnd=100_000,
+            wallet=wallet,
+            admin=SimpleNamespace(id=uuid4()),
+            index=1,
+            amount_vnd=100_000,
         )
     assert result is False
     topup.assert_not_awaited()
@@ -95,16 +103,25 @@ async def test_repeat_receipt_is_not_credited_again_even_after_wallet_debit():
 @pytest.mark.asyncio
 async def test_existing_receipt_for_wrong_wallet_refuses_to_adopt():
     wallet = SimpleNamespace(id=uuid4(), status="active", balance_vnd=100_000)
-    session = SimpleNamespace(scalar=AsyncMock(return_value=SimpleNamespace(
-        wallet_id=uuid4(), amount_vnd=100_000, reference_type="manual_topup"
-    )))
-    with patch("scripts.t107_staging_seed.nap_tay", new_callable=AsyncMock) as topup:
-        with pytest.raises(RuntimeError, match="Conflicting existing receipt"):
-            await _credit_once(
-                session, driver=SimpleNamespace(id=uuid4(), email=driver_email(1)),
-                wallet=wallet, admin=SimpleNamespace(id=uuid4()),
-                index=1, amount_vnd=100_000,
+    session = SimpleNamespace(
+        scalar=AsyncMock(
+            return_value=SimpleNamespace(
+                wallet_id=uuid4(), amount_vnd=100_000, reference_type="manual_topup"
             )
+        )
+    )
+    with (
+        patch("scripts.t107_staging_seed.nap_tay", new_callable=AsyncMock) as topup,
+        pytest.raises(RuntimeError, match="Conflicting existing receipt"),
+    ):
+        await _credit_once(
+            session,
+            driver=SimpleNamespace(id=uuid4(), email=driver_email(1)),
+            wallet=wallet,
+            admin=SimpleNamespace(id=uuid4()),
+            index=1,
+            amount_vnd=100_000,
+        )
     topup.assert_not_awaited()
 
 
@@ -112,13 +129,18 @@ async def test_existing_receipt_for_wrong_wallet_refuses_to_adopt():
 async def test_unknown_nonempty_wallet_is_not_silently_credited():
     wallet = SimpleNamespace(id=uuid4(), status="active", balance_vnd=40_000)
     session = SimpleNamespace(scalar=AsyncMock(return_value=None))
-    with patch("scripts.t107_staging_seed.nap_tay", new_callable=AsyncMock) as topup:
-        with pytest.raises(RuntimeError, match="nonempty/locked wallet"):
-            await _credit_once(
-                session, driver=SimpleNamespace(id=uuid4(), email=driver_email(1)),
-                wallet=wallet, admin=SimpleNamespace(id=uuid4()),
-                index=1, amount_vnd=100_000,
-            )
+    with (
+        patch("scripts.t107_staging_seed.nap_tay", new_callable=AsyncMock) as topup,
+        pytest.raises(RuntimeError, match="nonempty/locked wallet"),
+    ):
+        await _credit_once(
+            session,
+            driver=SimpleNamespace(id=uuid4(), email=driver_email(1)),
+            wallet=wallet,
+            admin=SimpleNamespace(id=uuid4()),
+            index=1,
+            amount_vnd=100_000,
+        )
     topup.assert_not_awaited()
 
 
@@ -127,8 +149,12 @@ def _cleanup_session_fixture(unsettled_count: int = 0):
 
     owner = SimpleNamespace(id=uuid4(), status="active")
     station = SimpleNamespace(
-        id=uuid4(), owner_id=owner.id, name=STATION_NAME,
-        address=STATION_ADDRESS, archived_at=None, status="active",
+        id=uuid4(),
+        owner_id=owner.id,
+        name=STATION_NAME,
+        address=STATION_ADDRESS,
+        archived_at=None,
+        status="active",
     )
     drivers = []
     cards = []
@@ -139,14 +165,22 @@ def _cleanup_session_fixture(unsettled_count: int = 0):
     for idx in range(1, 21):
         driver = SimpleNamespace(id=uuid4(), status="active")
         charger = SimpleNamespace(
-            id=uuid4(), station_id=station.id,
-            name=f"T107 virtual charger {charger_code(idx)}", archived_at=None,
+            id=uuid4(),
+            station_id=station.id,
+            name=f"T107 virtual charger {charger_code(idx)}",
+            archived_at=None,
         )
         card = SimpleNamespace(
-            id=uuid4(), driver_id=driver.id, issuer_id=owner.id, status="active",
+            id=uuid4(),
+            driver_id=driver.id,
+            issuer_id=owner.id,
+            status="active",
         )
         auto_card = SimpleNamespace(
-            id=uuid4(), driver_id=driver.id, issuer_id=driver.id, status="active",
+            id=uuid4(),
+            driver_id=driver.id,
+            issuer_id=driver.id,
+            status="active",
         )
         per_driver_cards.append([card, auto_card])
         connector = SimpleNamespace(archived_at=None)
@@ -157,11 +191,14 @@ def _cleanup_session_fixture(unsettled_count: int = 0):
         responses.extend((driver, charger, card, connector))
     responses.append(unsettled_count)
     session = SimpleNamespace(
-        scalar=AsyncMock(side_effect=responses), execute=AsyncMock(),
-        scalars=AsyncMock(side_effect=[
-            SimpleNamespace(all=lambda members=members: members)
-            for members in per_driver_cards
-        ]),
+        scalar=AsyncMock(side_effect=responses),
+        execute=AsyncMock(),
+        scalars=AsyncMock(
+            side_effect=[
+                SimpleNamespace(all=lambda members=members: members)
+                for members in per_driver_cards
+            ]
+        ),
     )
     return session, owner, station, drivers, cards, chargers, connectors
 
@@ -203,7 +240,7 @@ async def test_cleanup_refuses_open_or_unsettled_session_without_mutating_data()
 async def test_cleanup_is_idempotent_when_fixture_was_already_archived():
     from scripts.t107_staging_seed import cleanup_fixture
 
-    session, owner, station, drivers, cards, chargers, connectors = (
+    session, owner, station, drivers, cards, _chargers, _connectors = (
         _cleanup_session_fixture()
     )
     station.archived_at = "prior cleanup marker"
@@ -220,7 +257,7 @@ async def test_cleanup_is_idempotent_when_fixture_was_already_archived():
 async def test_cleanup_rejects_unexpected_third_card_without_mutation():
     from scripts.t107_staging_seed import cleanup_fixture
 
-    session, owner, station, drivers, cards, chargers, connectors = (
+    session, owner, station, drivers, cards, _chargers, _connectors = (
         _cleanup_session_fixture()
     )
     # A card issued by an unknown account must not be swept into T107 cleanup.

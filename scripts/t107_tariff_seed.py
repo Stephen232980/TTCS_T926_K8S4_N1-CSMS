@@ -40,7 +40,9 @@ class Plan:
         return kiem_khung_gio(
             [
                 BandInput(0, self.first_boundary, self.rates[0], "T107-01"),
-                BandInput(self.first_boundary, self.second_boundary, self.rates[1], "T107-02"),
+                BandInput(
+                    self.first_boundary, self.second_boundary, self.rates[1], "T107-02"
+                ),
                 BandInput(self.second_boundary, 1440, self.rates[2], "T107-03"),
             ]
         )
@@ -66,12 +68,16 @@ async def ensure_first_tariff(
     today = ngay_dia_phuong(station.timezone, datetime.now(UTC))
     tariffs = (
         await session.scalars(
-            select(Tariff).where(Tariff.station_id == station.id).order_by(Tariff.effective_from)
+            select(Tariff)
+            .where(Tariff.station_id == station.id)
+            .order_by(Tariff.effective_from)
         )
     ).all()
     if tariffs:
         if len(tariffs) != 1:
-            raise ValueError("Station already has multiple tariff versions; refusing to alter them")
+            raise ValueError(
+                "Station already has multiple tariff versions; refusing to alter them"
+            )
         existing = tariffs[0]
         rows = (
             await session.scalars(
@@ -92,7 +98,9 @@ async def ensure_first_tariff(
                 for b in bands
             ]
         ):
-            raise ValueError("Existing tariff is not today's exact T107 seed; no changes made")
+            raise ValueError(
+                "Existing tariff is not today's exact T107 seed; no changes made"
+            )
         return existing.id, False
 
     created = await tao_bieu_gia(
@@ -108,11 +116,23 @@ async def ensure_first_tariff(
 
 
 def arguments() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="T-107: seed only the initial 3-band tariff")
-    parser.add_argument("--station-id", type=UUID, help="Explicit ID of a T107- station")
-    parser.add_argument("--boundaries", nargs=2, type=int, required=True, metavar=("FIRST", "SECOND"))
-    parser.add_argument("--rates", nargs=3, type=int, required=True, metavar=("R1", "R2", "R3"))
-    parser.add_argument("--apply", action="store_true", help="Persist after validation; default is plan only")
+    parser = argparse.ArgumentParser(
+        description="T-107: seed only the initial 3-band tariff"
+    )
+    parser.add_argument(
+        "--station-id", type=UUID, help="Explicit ID of a T107- station"
+    )
+    parser.add_argument(
+        "--boundaries", nargs=2, type=int, required=True, metavar=("FIRST", "SECOND")
+    )
+    parser.add_argument(
+        "--rates", nargs=3, type=int, required=True, metavar=("R1", "R2", "R3")
+    )
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Persist after validation; default is plan only",
+    )
     return parser.parse_args()
 
 
@@ -121,18 +141,27 @@ async def main() -> None:
     plan = Plan(args.boundaries[0], args.boundaries[1], tuple(args.rates))
     bands = plan.bands()
     for band in bands:
-        print(f"{band.start_min:04d}-{band.end_min:04d}: {band.energy_rate_vnd_per_kwh} VND/kWh")
+        print(
+            f"{band.start_min:04d}-{band.end_min:04d}: {band.energy_rate_vnd_per_kwh} VND/kWh"
+        )
     if not args.apply:
-        print("DRY RUN: no database changes. Use --apply --station-id UUID for T107- station.")
+        print(
+            "DRY RUN: no database changes. Use --apply --station-id UUID for T107- station."
+        )
         return
     if args.station_id is None:
         raise SystemExit("--station-id is mandatory with --apply")
     from src.platform.database.session import SessionFactory
 
     async with SessionFactory() as session, session.begin():
-        tariff_id, created = await ensure_first_tariff(session, station_id=args.station_id, plan=plan)
+        tariff_id, created = await ensure_first_tariff(
+            session, station_id=args.station_id, plan=plan
+        )
     print(f"{'Created' if created else 'Unchanged'} tariff {tariff_id}")
 
 
 if __name__ == "__main__":
-    asyncio.run(main(), loop_factory=lambda: asyncio.SelectorEventLoop(selectors.SelectSelector()))
+    asyncio.run(
+        main(),
+        loop_factory=lambda: asyncio.SelectorEventLoop(selectors.SelectSelector()),
+    )
