@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, text
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Integer, String, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.platform.database.base import Base
@@ -50,6 +50,8 @@ class DriverStartRequest(Base):
     status: Mapped[str] = mapped_column(String(30))
     reply_status: Mapped[str] = mapped_column(String(30))
     rejection_reason: Mapped[str | None] = mapped_column(String(32))
+    balance_vnd: Mapped[int | None] = mapped_column(BigInteger)
+    minimum_balance_vnd: Mapped[int | None] = mapped_column(BigInteger)
     reply_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     lease_until: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     session_id: Mapped[int | None] = mapped_column(
