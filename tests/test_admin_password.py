@@ -15,16 +15,23 @@ from src.modules.identity.security import (
     verify_password,
 )
 from src.platform.audit.models import AuditLog
-from src.platform.database.session import SessionFactory
+from src.platform.database import session as database
+from tests.test_wallet_service import isolated_wallet_db  # noqa: F401
 
 OLD = "Old-test-only-2026!"
 NEW = "New-test-only-2026!"
 
 
+@pytest_asyncio.fixture(autouse=True)
+async def password_database(isolated_wallet_db, monkeypatch):  # noqa: F811
+    # Real HTTP commits and append-only audit evidence belong to this disposable DB.
+    monkeypatch.setattr(database, "SessionFactory", isolated_wallet_db)
+
+
 @pytest_asyncio.fixture
-async def reset_accounts():
+async def reset_accounts(password_database):
     result = {}
-    async with SessionFactory() as db, db.begin():
+    async with database.SessionFactory() as db, db.begin():
         roles = dict((await db.execute(select(Role.code, Role.id))).all())
         for name, role in [
             ("admin", "admin"),
@@ -51,7 +58,7 @@ async def reset_accounts():
             result[name + "_token"] = token
             result[name + "_email"] = user.email
             result[name + "_updated"] = user.updated_at.isoformat()
-    # This test DB is disposable. Retain audit-linked users instead of deleting immutable evidence.
+    # The isolated DB fixture removes the entire test DB after sessions close.
     return result
 
 
@@ -92,7 +99,7 @@ async def test_admin_reset_revokes_sessions_preserves_roles_and_audits(reset_acc
         )
     async with client(d, "target") as c:
         assert (await c.get("/api/v1/auth/me")).status_code == 401
-    async with SessionFactory() as db:
+    async with database.SessionFactory() as db:
         u = await db.get(User, d["target"])
         assert verify_password(u.password_hash, NEW) and not verify_password(
             u.password_hash, OLD
@@ -156,7 +163,7 @@ async def test_reset_denies_non_admin_stale_and_invalid_data(reset_accounts):
         assert (
             await c.post(f"/api/v1/admin/accounts/{uuid4()}/password", json=body(d))
         ).status_code == 404
-    async with SessionFactory() as db:
+    async with database.SessionFactory() as db:
         u = await db.get(User, d["target"])
         assert verify_password(u.password_hash, OLD)
         assert not await db.scalar(
@@ -178,7 +185,7 @@ async def test_audit_failure_rolls_back_reset_and_revocations(
         assert (
             await c.post(f"/api/v1/admin/accounts/{d['target']}/password", json=body(d))
         ).status_code == 500
-    async with SessionFactory() as db:
+    async with database.SessionFactory() as db:
         u = await db.get(User, d["target"])
         assert verify_password(u.password_hash, OLD)
         s = await db.scalar(select(Session).where(Session.user_id == d["target"]))
@@ -211,7 +218,7 @@ async def test_reset_preserves_status_and_rejects_closed_accounts(
     reset_accounts, target_status, expected
 ):
     d = reset_accounts
-    async with SessionFactory() as db:
+    async with database.SessionFactory() as db:
         u = await db.get(User, d["target"])
         u.status = target_status
         await db.commit()
@@ -222,7 +229,7 @@ async def test_reset_preserves_status_and_rejects_closed_accounts(
         assert r.status_code == expected
         if expected == 200:
             assert r.json()["status"] == target_status
-    async with SessionFactory() as db:
+    async with database.SessionFactory() as db:
         u = await db.get(User, d["target"])
         assert u.status == target_status
         assert verify_password(u.password_hash, NEW if expected == 200 else OLD)

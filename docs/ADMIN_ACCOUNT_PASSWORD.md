@@ -56,3 +56,8 @@ không sửa/xóa audit hoặc đổi nhãn lịch sử để cho downgrade ch�
 
 Browser local dùng API fixtures ở 360px/1280px, không đổi mật khẩu tài khoản thật
 trên staging. Sau merge/deploy, admin có thể kiểm trên tài khoản thử được chỉ định.
+
+Các test HTTP đổi mật khẩu chạy trong DB riêng được tạo/migrate và hủy sau mỗi
+ca. SessionFactory của ứng dụng và test cùng trỏ vào DB đó; không để audit đã
+commit lọt sang bộ test dùng DB chung, không xóa audit để dọn fixture.
+Test chuỗi Alembic kỳ vọng đúng một head f200020a2026.
