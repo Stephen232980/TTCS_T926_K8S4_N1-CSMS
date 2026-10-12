@@ -112,7 +112,8 @@
 .driver-shell .driver-connectors select { max-width: none; font-size: 16px; }
 .driver-connector-groups details { border-bottom: 1px solid var(--line); padding: 12px 0; }
 .driver-connector-groups summary { min-height: 44px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-.driver-connector-groups summary > span { color: var(--muted); font-size: 13px; }
+.driver-connector-groups summary > strong { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.driver-connector-groups summary > span { flex-shrink: 0; max-width: 45%; color: var(--muted); font-size: 13px; }
 .driver-connector-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
 .driver-connector-tile { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 9px 4px; border: 0; border-radius: 9px; background: #eaf2f5; color: #244e60; }
 .driver-connector-tile small { font: inherit; font-size: 11px; }
