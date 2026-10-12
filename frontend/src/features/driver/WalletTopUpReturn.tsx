@@ -95,8 +95,8 @@ export function WalletTopUpReturn({ transactionId, getStatus, onResolved, onSucc
   return <section className="driver-wallet-page" aria-label="Trạng thái nạp tiền">
     <h2>Trạng thái nạp tiền</h2>
     {transactionId ? <p>Mã đơn: <strong>{transactionId}</strong></p> : <p role="alert">URL quay về thiếu mã đơn order_code. Không thể xác minh thanh toán.</p>}
-    {transactionId && result.status === 'pending' && !timedOut && <p role="status">Đang chờ hệ thống xác nhận giao dịch...</p>}
-    {transactionId && timedOut && result.status === 'pending' && <p role="status">Đã hết thời gian chờ tự động (2 phút). Giao dịch chưa được xác nhận, vui lòng kiểm tra lại.</p>}
+    {transactionId && result.status === 'pending' && !timedOut && !error && <p role="status">Đang chờ hệ thống xác nhận giao dịch...</p>}
+    {transactionId && timedOut && result.status === 'pending' && !error && <p role="status">Đã hết thời gian chờ tự động (2 phút). Giao dịch chưa được xác nhận, vui lòng kiểm tra lại.</p>}
     {result.status === 'succeeded' && <p role="status">Backend đã xác nhận nạp tiền thành công.{loadingWallet && ' Đang tải lại thông tin ví...'}</p>}
     {result.status === 'failed' && <p role="alert">Nạp tiền thất bại.{result.reason && ` Lý do: ${result.reason}`}</p>}
     {result.status === 'cancelled' && <p role="status">Giao dịch đã bị huỷ.{result.reason && ` Lý do: ${result.reason}`}</p>}

@@ -120,7 +120,7 @@ describe('DriverWalletPage (S-40 / T-100)', () => {
 
     await waitFor(() => {
       expect(getTransactionsMock).toHaveBeenCalledWith({
-        limit: 10,
+        limit: 50,
         cursor: 1,
       }, expect.any(AbortSignal))
     })
@@ -160,7 +160,7 @@ describe('DriverWalletPage (S-40 / T-100)', () => {
     expect(screen.getAllByText('Mã dòng #2')).toHaveLength(1)
   })
 
-  it('opens the referenced session and explains unavailable topup details', async () => {
+  it('opens the referenced session and preserves topup references', async () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ id: 901, station_name: 'Trạm A', energy_kwh: 12 })))
     try {
       const page = { ...mockLedgerPage1, items: mockLedgerPage1.items.map(tx => tx.id === 2 ? { ...tx, reference_type: 'charging_session', reference_id: '901' } : tx) }
@@ -168,7 +168,7 @@ describe('DriverWalletPage (S-40 / T-100)', () => {
       await userEvent.click(await screen.findByRole('button', { name: 'Xem phiên sạc #901' }))
       expect(fetchMock).toHaveBeenCalledWith('/api/v1/driver/charging/sessions/901', { credentials: 'include', signal: expect.any(AbortSignal) })
       expect(await screen.findByRole('region', { name: 'Chi tiết phiên sạc' })).toHaveTextContent('Trạm A · 12 kWh')
-      expect(screen.getByText(/Chi tiết lần nạp chưa khả dụng/)).toBeInTheDocument()
+      expect(screen.getByText(/Mã tham chiếu: PG-001/)).toBeInTheDocument()
     } finally { fetchMock.mockRestore() }
   })
 
@@ -194,4 +194,26 @@ describe('DriverWalletPage (S-40 / T-100)', () => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
   })
+  it('opens gateway and manual topup details without guessing an order code', async () => {
+    const item = {...mockLedgerPage1.items[1], entry_type: 'gateway_topup', reference_type: 'gateway_transaction', reference_id: 'vnpay:provider-1'}
+    const fetcher = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({...item, topup_order_id: 'real-order', topup_status: 'succeeded', topup_reason: null})))
+    try {
+      render(<DriverWalletPage walletApi={{getWallet: vi.fn().mockResolvedValue(mockWallet), getTransactions: vi.fn().mockResolvedValue({items:[item],next_cursor:null,has_more:false})}} />)
+      await userEvent.click(await screen.findByRole('button', {name:'Xem lần nạp'}))
+      const detail = await screen.findByRole('region', {name:'Chi tiết lần nạp'})
+      expect(detail).toHaveTextContent('real-order')
+      expect(detail).toHaveTextContent('Thành công')
+      expect(fetcher).toHaveBeenCalledWith('/api/v1/driver/wallet/transactions/1', {credentials:'include',signal:expect.any(AbortSignal)})
+      await userEvent.click(screen.getByRole('button', {name:'Đóng chi tiết'}))
+      expect(screen.queryByRole('region', {name:'Chi tiết lần nạp'})).toBeNull()
+    } finally {fetcher.mockRestore()}
+  })
+
+  it('preserves BIGINT money and does not claim a fixed charging minimum', async () => {
+    render(<DriverWalletPage walletApi={{getWallet:vi.fn().mockResolvedValue({...mockWallet,balance:'9007199254740993'}),getTransactions:vi.fn().mockResolvedValue({items:[],next_cursor:null,has_more:false})}} />)
+    expect(await screen.findByText('9.007.199.254.740.993 ₫')).toBeInTheDocument()
+    expect(screen.queryByText(/50.000.*ngưỡng/)).toBeNull()
+    expect(screen.getByText(/Ngưỡng bắt đầu sạc phụ thuộc biểu giá/)).toBeInTheDocument()
+  })
+
 })

@@ -1,7 +1,10 @@
 from datetime import datetime
+from typing import Annotated
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, PlainSerializer
+
+Money = Annotated[int, PlainSerializer(str, return_type=str, when_used="json")]
 
 
 class WalletResponse(BaseModel):
@@ -9,13 +12,13 @@ class WalletResponse(BaseModel):
 
     id: UUID
     driver_id: UUID
-    balance_vnd: int
-    balance: int
+    balance_vnd: Money
+    balance: Money
     currency: str = "VND"
     status: str
     is_negative: bool
-    debt_amount_vnd: int
-    debt_amount: int
+    debt_amount_vnd: Money
+    debt_amount: Money
 
 
 class WalletLedgerItemResponse(BaseModel):
@@ -23,15 +26,21 @@ class WalletLedgerItemResponse(BaseModel):
 
     id: int
     wallet_id: UUID
-    amount_vnd: int
-    amount: int
-    balance_after_vnd: int
-    balance_after: int
+    amount_vnd: Money
+    amount: Money
+    balance_after_vnd: Money
+    balance_after: Money
     entry_type: str
     reference_type: str
     reference_id: str
     description: str
     created_at: datetime
+
+
+class WalletTransactionResponse(WalletLedgerItemResponse):
+    topup_order_id: str | None = None
+    topup_status: str | None = None
+    topup_reason: str | None = None
 
 
 class WalletLedgerListResponse(BaseModel):

@@ -423,6 +423,10 @@ export function OwnerWorkspace({
     setChargerSearch('')
     setError('')
   }
+  useEffect(() => {
+    if (area === 'tariffs' && station) document.getElementById('owner-selected-tariff')?.scrollIntoView?.({block: 'start'})
+  }, [area, station])
+
   async function logout() {
     setLoggingOut(true)
     setLogoutError('')
@@ -465,6 +469,7 @@ export function OwnerWorkspace({
               aria-current={area === item.area ? 'page' : undefined}
               onClick={() => {
                 setArea(item.area)
+                if (item.area === 'tariffs') setStation(null)
                 setForm(null)
                 setError('')
                 setMenu(false)
@@ -501,7 +506,7 @@ export function OwnerWorkspace({
         </header>
         {area === 'charging' ? (
           <OwnerCharging initialSessionId={sessionToOpen} onInitialSessionOpened={initialSessionOpened} />
-        ) : area !== 'stations' ? (
+        ) : area !== 'stations' && area !== 'tariffs' ? (
           <section className="owner-page">
             <header className="owner-heading">
               <div>
@@ -514,9 +519,7 @@ export function OwnerWorkspace({
               <h2>
                 {area === 'power'
                   ? 'Chưa có chức năng cấu hình công suất'
-                  : area === 'tariffs'
-                    ? 'Chưa có chức năng biểu giá'
-                    : 'Chưa có báo cáo doanh thu'}
+                  : 'Chưa có báo cáo doanh thu'}
               </h2>
               <p>
                 {area === 'power'
@@ -575,10 +578,10 @@ export function OwnerWorkspace({
                     Quay lại danh sách trạm
                   </button>
                 )}
-                <h1>{station?.name ?? 'Trạm của tôi'}</h1>
+                <h1>{station?.name ?? (area === 'tariffs' ? 'Biểu giá' : 'Trạm của tôi')}</h1>
                 <p>
                   {station?.address ??
-                    'Nhận diện và quản lý từng trạm của bạn.'}
+                    (area === 'tariffs' ? 'Chọn trạm để xem lịch sử và khai báo biểu giá.' : 'Nhận diện và quản lý từng trạm của bạn.')}
                 </p>
               </div>
               <div className="owner-heading-actions">
@@ -791,7 +794,7 @@ export function OwnerWorkspace({
                     {connectionError}
                   </p>
                 )}
-                <div className="owner-tariff-scroll">
+                <div className="owner-tariff-scroll" id="owner-selected-tariff">
                   <TariffHistoryPanel key={station.id} stationId={String(station.id)} />
                 </div>
 
