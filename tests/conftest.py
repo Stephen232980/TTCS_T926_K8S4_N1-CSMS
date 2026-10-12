@@ -17,6 +17,9 @@ if "DATABASE_URL" not in os.environ:
                 k, v = line.split("=", 1)
                 os.environ.setdefault(k.strip(), v.strip())
 
+# Only disposable test databases use this fixed explicit migration cutoff.
+os.environ.setdefault("LEGACY_SETTLEMENT_CUTOFF", "1970-01-01T00:00:00+00:00")
+
 from src.platform.database.session import SessionFactory
 
 if sys.platform == "win32":

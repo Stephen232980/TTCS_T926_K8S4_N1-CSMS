@@ -7,12 +7,13 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
 from src.modules.billing.invoicing import InvoiceResult, lap_hoa_don
 from src.modules.charging.models import ChargingSession
+from src.modules.wallet.models import Wallet, WalletLedger
 from src.modules.wallet.service import tru_vi
 from src.platform.database.session import SessionFactory
 
@@ -49,7 +50,36 @@ async def _chot_phien_in_session(
         return outcome
 
     invoice = outcome.invoice
-    await tru_vi(db, invoice=invoice)
+    wallet = await db.scalar(
+        select(Wallet).where(Wallet.driver_id == invoice.driver_id).with_for_update()
+    )
+    entries = list(
+        await db.scalars(
+            select(WalletLedger).where(
+                WalletLedger.reference_id == str(session_id),
+                or_(
+                    WalletLedger.entry_type == "charging_debit",
+                    WalletLedger.reference_type == "charging_session",
+                ),
+            )
+        )
+    )
+    if entries and (
+        len(entries) != 1
+        or wallet is None
+        or entries[0].wallet_id != wallet.id
+        or entries[0].entry_type != "charging_debit"
+        or entries[0].reference_type != "charging_session"
+        or entries[0].amount_vnd != -invoice.total_vnd
+        or invoice.total_vnd == 0
+    ):
+        reason = "settlement_ledger_mismatch"
+        charging.review_reasons = [*charging.review_reasons, reason]
+        await db.flush()
+        logger.warning("charging_settlement_needs_review session=%s", session_id)
+        return InvoiceResult("needs_review", reason=reason)
+    if not entries:
+        await tru_vi(db, invoice=invoice)
 
     now = datetime.now(UTC)
     charging.settlement_completed_at = now
