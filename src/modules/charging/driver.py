@@ -20,7 +20,7 @@ from src.modules.ocpp.connection_registry import ocpp_connections
 from src.modules.ocpp.control_models import ControlRequest
 from src.modules.ocpp.monitoring import database_time
 from src.modules.stations.models import ChargePoint, Connector, Station
-from src.modules.wallet.eligibility import du_so_du_de_sac
+from src.modules.wallet.eligibility import ChargingEligibility, du_so_du_de_sac
 from src.platform.database.session import SessionFactory
 
 START_CONFIRMATION_SECONDS = 60
@@ -77,6 +77,9 @@ def start_result(request: DriverStartRequest) -> dict[str, object]:
         "status": status,
         "reply_status": request.reply_status,
         "rejection_reason": request.rejection_reason,
+        "connector_id": request.connector_id,
+        "balance_vnd": request.balance_vnd,
+        "minimum_balance_vnd": request.minimum_balance_vnd,
         "session_id": request.session_id,
         "deadline": request.lease_until if status == "Accepted" else None,
     }
@@ -171,7 +174,14 @@ async def remote_start(
         if not eligibility.allowed:
             if eligibility.reason is None:
                 raise RuntimeError("Ineligible wallet has no rejection reason")
-            raise HTTPException(status_code=409, detail=eligibility.reason)
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "reason": eligibility.reason,
+                    "balance_vnd": eligibility.balance_vnd,
+                    "minimum_balance_vnd": eligibility.minimum_balance_vnd,
+                },
+            )
         connection = await ocpp_connections.get(charger.code.strip().lower())
         observed_at = await database_time(session)
         online = (
@@ -246,7 +256,10 @@ async def remote_start(
 
 
 async def reject_remote_start(
-    session: AsyncSession, connector: Connector, card: ChargingCard | None, reason: str
+    session: AsyncSession,
+    connector: Connector,
+    card: ChargingCard | None,
+    eligibility: ChargingEligibility,
 ) -> None:
     """A wallet denial terminates only the matching virtual-tag start request.
 
@@ -276,7 +289,9 @@ async def reject_remote_start(
     )
     if request is not None:
         request.status = "Rejected"
-        request.rejection_reason = reason
+        request.rejection_reason = eligibility.reason
+        request.balance_vnd = eligibility.balance_vnd
+        request.minimum_balance_vnd = eligibility.minimum_balance_vnd
         request.lease_until = datetime.now(UTC)
 
 

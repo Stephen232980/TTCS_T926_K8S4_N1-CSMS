@@ -199,7 +199,25 @@ async def detail(
     return await owned_session(session, transaction)
 
 
-@router.post("/charging/start")
+@router.post(
+    "/charging/start",
+    responses={
+        409: {
+            "description": "Start refused; wallet failures include the eligibility snapshot.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "detail": {
+                            "reason": "wallet_low",
+                            "balance_vnd": 20000,
+                            "minimum_balance_vnd": 22500,
+                        }
+                    }
+                }
+            },
+        }
+    },
+)
 @user_policy("driver.start", "own", "driver")
 async def start(
     body: StartBody,

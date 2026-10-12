@@ -3,11 +3,12 @@ import { notifySessionUnauthorized } from '../auth/sessionEvents'
 import { ChargerDrawing, ConnectorSymbol } from '../owner/OwnerVisuals'
 import { Icon } from '../../components/icons/Icon'
 
-interface StartResult { id: string; status: string; deadline: string | null; session_id?: number | null }
+interface StartResult { id: string; status: string; deadline: string | null; session_id?: number | null; connector_id?: string; rejection_reason?: string | null; balance_vnd?: number | null; minimum_balance_vnd?: number | null }
 interface Session { id: number; station_name: string; charge_point_code: string; connector_number: number; started_at: string; energy_kwh: string | number; elapsed_seconds: number; latest_meter_at: string | null; needs_attention: boolean }
 interface Current { session: Session | null; start_request: StartResult | null }
 interface Connector { id: string; charge_point_code: string; connector_number: number; status: string }
 type WalletEligibilityReason = 'wallet_low' | 'wallet_missing' | 'wallet_locked' | 'tariff_unavailable'
+interface WalletFailure { reason: WalletEligibilityReason; balance_vnd: number | null; minimum_balance_vnd: number | null }
 const base = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''
 const messages: Record<string, string> = {
   Pending: 'Đang gửi yêu cầu đến trụ. Vui lòng chờ.',
@@ -35,6 +36,13 @@ function walletEligibilityReason(detail: unknown): WalletEligibilityReason | nul
     ? reason as WalletEligibilityReason
     : null
 }
+function walletEligibilityFailure(detail: unknown): WalletFailure | null {
+  const reason = walletEligibilityReason(detail)
+  if (!reason) return null
+  const value = detail && typeof detail === 'object' ? detail as Record<string, unknown> : {}
+  const amount = (field: string) => typeof value[field] === 'number' && Number.isSafeInteger(value[field]) ? value[field] as number : null
+  return { reason, balance_vnd: amount('balance_vnd'), minimum_balance_vnd: amount('minimum_balance_vnd') }
+}
 async function read<T>(path: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`${base}${path}`, { credentials: 'include', signal })
   if (response.status === 401) notifySessionUnauthorized()
@@ -47,7 +55,8 @@ export function DriverCharging({ stationId, stationName, showSession = true, sho
   const [error, setError] = useState('')
   const [connectors, setConnectors] = useState<Connector[]>([])
   const [connectorError, setConnectorError] = useState('')
-  const [walletFailure, setWalletFailure] = useState<WalletEligibilityReason | null>(null)
+  const [walletFailure, setWalletFailure] = useState<(WalletFailure & { stationId?: string; connectorId: string }) | null>(null)
+  const [dismissedRequest, setDismissedRequest] = useState<string | null>(null)
   const [connectorLoading, setConnectorLoading] = useState(false)
   const [selected, setSelected] = useState('')
   const [plugged, setPlugged] = useState(false)
@@ -118,7 +127,7 @@ export function DriverCharging({ stationId, stationName, showSession = true, sho
   useEffect(() => {
     const controller = new AbortController()
     const timer = window.setTimeout(() => {
-      setConnectors([]); setSelected(''); setPlugged(false); setConnectorError('')
+      setConnectors([]); setSelected(''); setPlugged(false); setConnectorError(''); setWalletFailure(null)
       if (!stationId) return
       setConnectorLoading(true)
       read<{ items: Connector[] }>(`/api/v1/driver/stations/${stationId}/connectors`, controller.signal)
@@ -146,8 +155,8 @@ export function DriverCharging({ stationId, stationName, showSession = true, sho
       if (response.status === 401) notifySessionUnauthorized()
       if (!response.ok) {
         const body = await response.json() as { detail?: unknown }
-        const reason = walletEligibilityReason(body.detail)
-        if (reason) { setWalletFailure(reason); return }
+        const failure = walletEligibilityFailure(body.detail)
+        if (failure) { setWalletFailure({ ...failure, stationId, connectorId: selected }); setRequestKey(null); return }
         throw new Error(typeof body.detail === 'string' ? body.detail : 'Không gửi được yêu cầu.')
       }
       const result = await response.json() as StartResult
@@ -161,8 +170,12 @@ export function DriverCharging({ stationId, stationName, showSession = true, sho
   const connectorGroups = new Map<string, Connector[]>()
   for (const connector of connectors) connectorGroups.set(connector.charge_point_code, [...(connectorGroups.get(connector.charge_point_code) ?? []), connector])
   const statusLabels: Record<string, string> = { Available: 'Sẵn sàng', Preparing: 'Đang chuẩn bị', Charging: 'Đang sạc', Reserved: 'Đã đặt chỗ', Faulted: 'Có lỗi', Unavailable: 'Không khả dụng', Finishing: 'Đang kết thúc', SuspendedEV: 'Xe tạm dừng', SuspendedEVSE: 'Trụ tạm dừng' }
-  const startStatus = !live && status && messages[status] ? <p role="status" className="driver-start-status">{messages[status]}{status === 'Accepted' && request?.deadline && ` Còn khoảng ${Math.min(60, Math.max(0, Math.ceil((Date.parse(request.deadline) - clock) / 1000)))} giây.`}</p> : null
-  const walletFailureMessage = walletFailure ? walletEligibilityMessages[walletFailure] : null
+  const failure = walletFailure && walletFailure.stationId === stationId && walletFailure.connectorId === selected ? walletFailure
+    : status === 'Rejected' && request?.connector_id === selected && request.id !== dismissedRequest
+      ? walletEligibilityFailure({ reason: request.rejection_reason, balance_vnd: request.balance_vnd, minimum_balance_vnd: request.minimum_balance_vnd }) : null
+  const startStatus = !live && !failure && status && messages[status] ? <p role="status" className="driver-start-status">{messages[status]}{status === 'Accepted' && request?.deadline && ` Còn khoảng ${Math.min(60, Math.max(0, Math.ceil((Date.parse(request.deadline) - clock) / 1000)))} giây.`}</p> : null
+  const walletFailureMessage = failure ? walletEligibilityMessages[failure.reason] : null
+  function chooseConnector(id: string) { setSelected(id); setPlugged(false); setRequestKey(null); setWalletFailure(null); setDismissedRequest(request?.id ?? null) }
   const findStations = <a className="driver-primary-link" href="#driver-stations" onClick={event => { if (onFindStations) { event.preventDefault(); onFindStations() } }}>Tìm trạm để bắt đầu sạc</a>
   return <>
     <div className="driver-session-layout" hidden={!showSession}>
@@ -187,10 +200,10 @@ export function DriverCharging({ stationId, stationName, showSession = true, sho
       {live && <p role="status">Bạn đang có phiên sạc mở. <a href="#driver-session">Xem phiên hiện tại</a> trước khi bắt đầu phiên mới.</p>}
       {connectorLoading && <p role="status">Đang tải đầu nối…</p>}
       {connectorError && <p role="alert">{connectorError}</p>}
-      {walletFailureMessage && <div className="driver-start-reason" role="alert"><p>{walletFailureMessage}</p>{walletFailure === 'wallet_low' && <a className="driver-primary-link" href="#driver-wallet">Nạp tiền</a>}</div>}
+      {walletFailureMessage && <div className="driver-start-reason" role="alert"><p>{walletFailureMessage}</p>{failure?.reason === 'wallet_low' && <><p>{failure.balance_vnd !== null && <>Số dư lúc kiểm tra: <strong>{failure.balance_vnd.toLocaleString('vi-VN')}đ</strong>. </>}{failure.minimum_balance_vnd !== null && <>Cần tối thiểu: <strong>{failure.minimum_balance_vnd.toLocaleString('vi-VN')}đ</strong>.</>}</p><a className="driver-primary-link" href="#driver-wallet">Nạp tiền</a></>}</div>}
       {!connectorLoading && !connectors.length && <button className="secondary-button" onClick={() => setRevision(value => value + 1)}>Tải lại đầu nối</button>}
-      {!!connectors.length && <><div className="driver-connector-picker"><label htmlFor="driver-connector">Trụ và đầu nối</label><select id="driver-connector" value={selected} disabled={pending || !!live} onChange={event => { setSelected(event.target.value); setPlugged(false); setRequestKey(null) }}><option value="">Chọn đầu nối</option>{connectors.map(connector => <option key={connector.id} value={connector.id} disabled={!['Available', 'Preparing'].includes(connector.status)}>{connector.charge_point_code} · Đầu nối {connector.connector_number} · {['Available', 'Preparing'].includes(connector.status) ? 'Sẵn sàng' : 'Chưa sẵn sàng'}</option>)}</select></div>
-        <div className="driver-connector-groups">{[...connectorGroups].map(([code, items], index) => <details key={code} open={index === 0 || items.some(connector => connector.id === selected)}><summary><strong>{code}</strong><span>{items.filter(connector => ['Available', 'Preparing'].includes(connector.status)).length}/{items.length} đầu nối sẵn sàng</span></summary><div className="driver-connector-grid">{items.map(connector => <button key={connector.id} type="button" className={`driver-connector-tile ${connector.status.toLowerCase()}`} disabled={pending || !!live || !['Available', 'Preparing'].includes(connector.status)} aria-label={`${code} · Đầu nối ${connector.connector_number} · ${statusLabels[connector.status] ?? 'Chưa rõ'}`} aria-pressed={selected === connector.id} onClick={() => { setSelected(connector.id); setPlugged(false); setRequestKey(null) }}><span>{connector.connector_number}</span><ConnectorSymbol status={connector.status} /><small>{statusLabels[connector.status] ?? 'Chưa rõ'}</small></button>)}</div></details>)}</div>
+      {!!connectors.length && <><div className="driver-connector-picker"><label htmlFor="driver-connector">Trụ và đầu nối</label><select id="driver-connector" value={selected} disabled={pending || !!live} onChange={event => chooseConnector(event.target.value)}><option value="">Chọn đầu nối</option>{connectors.map(connector => <option key={connector.id} value={connector.id} disabled={!['Available', 'Preparing'].includes(connector.status)}>{connector.charge_point_code} · Đầu nối {connector.connector_number} · {['Available', 'Preparing'].includes(connector.status) ? 'Sẵn sàng' : 'Chưa sẵn sàng'}</option>)}</select></div>
+        <div className="driver-connector-groups">{[...connectorGroups].map(([code, items], index) => <details key={code} open={index === 0 || items.some(connector => connector.id === selected)}><summary><strong>{code}</strong><span>{items.filter(connector => ['Available', 'Preparing'].includes(connector.status)).length}/{items.length} đầu nối sẵn sàng</span></summary><div className="driver-connector-grid">{items.map(connector => <button key={connector.id} type="button" className={`driver-connector-tile ${connector.status.toLowerCase()}`} disabled={pending || !!live || !['Available', 'Preparing'].includes(connector.status)} aria-label={`${code} · Đầu nối ${connector.connector_number} · ${statusLabels[connector.status] ?? 'Chưa rõ'}`} aria-pressed={selected === connector.id} onClick={() => chooseConnector(connector.id)}><span>{connector.connector_number}</span><ConnectorSymbol status={connector.status} /><small>{statusLabels[connector.status] ?? 'Chưa rõ'}</small></button>)}</div></details>)}</div>
         {selectedConnector && <p className="driver-selected-connector">Đã chọn: <strong>{selectedConnector.charge_point_code}</strong> · Đầu nối {selectedConnector.connector_number} · {['Available', 'Preparing'].includes(selectedConnector.status) ? 'Sẵn sàng' : 'Chưa sẵn sàng'}</p>}
         <div className="driver-start-footer"><label className="driver-plug-confirm"><input type="checkbox" checked={plugged} disabled={pending || !!live} onChange={event => setPlugged(event.target.checked)} /> Tôi đã cắm súng sạc vào xe tại đầu nối đã chọn</label><button className="primary-button" disabled={!selected || !plugged || pending || !!live || !!error || !current || !selectedConnector || !['Available', 'Preparing'].includes(selectedConnector.status)} onClick={() => { void start() }}>{sending ? 'Đang gửi yêu cầu…' : pending ? 'Đang chờ trụ bắt đầu sạc…' : 'Bắt đầu sạc'}</button><button className="secondary-button" disabled={pending || !!live} onClick={() => setRevision(value => value + 1)}>Tải lại trạng thái đầu nối</button></div>
       </>}

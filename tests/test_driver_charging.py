@@ -257,7 +257,13 @@ async def test_start_api_returns_wallet_rejection_without_creating_request(
         )
 
     assert response.status_code == 409
-    assert response.json() == {"detail": reason}
+    assert response.json() == {
+        "detail": {
+            "reason": reason,
+            "balance_vnd": None,
+            "minimum_balance_vnd": None,
+        }
+    }
     assert await db_session.get(DriverStartRequest, request_id) is None
     assert await db_session.get(ControlRequest, request_id) is None
     check_wallet.assert_awaited_once()

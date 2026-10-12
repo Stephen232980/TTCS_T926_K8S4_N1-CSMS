@@ -88,6 +88,58 @@ it.each([
   }
 })
 
+it('shows amounts and clears the denial when choosing a connector or station, then retries with a fresh identity', async () => {
+  let funded = false
+  const requests: string[] = []
+  vi.stubGlobal('fetch', vi.fn(async (url: string, options?: RequestInit) => {
+    if (options?.method === 'POST') {
+      requests.push(JSON.parse(options.body as string).request_id)
+      return funded ? { ok: true, json: async () => ({ id: 'funded', status: 'Accepted', deadline: new Date(Date.now() + 60000).toISOString() }) }
+        : { ok: false, json: async () => ({ detail: { reason: 'wallet_low', balance_vnd: 20000, minimum_balance_vnd: 22500 } }) }
+    }
+    return { ok: true, json: async () => url.includes('/connectors') ? connectors : empty }
+  }))
+  const user = userEvent.setup()
+  const view = render(<DriverCharging stationId="station-one" />)
+  await user.selectOptions(await screen.findByLabelText('Trụ và đầu nối'), 'connector-one')
+  await user.click(screen.getByRole('checkbox'))
+  await user.click(screen.getByRole('button', { name: 'Bắt đầu sạc' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('20.000đ')
+  expect(screen.getByRole('alert')).toHaveTextContent('22.500đ')
+  await user.selectOptions(screen.getByLabelText('Trụ và đầu nối'), '')
+  expect(screen.queryByRole('link', { name: 'Nạp tiền' })).not.toBeInTheDocument()
+  await user.selectOptions(screen.getByLabelText('Trụ và đầu nối'), 'connector-one')
+  await user.click(screen.getByRole('checkbox'))
+  await user.click(screen.getByRole('button', { name: 'Bắt đầu sạc' }))
+  expect(await screen.findByRole('alert')).toBeInTheDocument()
+  view.rerender(<DriverCharging stationId="station-two" />)
+  await waitFor(() => expect(screen.queryByRole('link', { name: 'Nạp tiền' })).not.toBeInTheDocument())
+  funded = true
+  await user.selectOptions(screen.getByLabelText('Trụ và đầu nối'), 'connector-one')
+  await user.click(screen.getByRole('checkbox'))
+  await user.click(screen.getByRole('button', { name: 'Bắt đầu sạc' }))
+  expect(await screen.findByText(/Trụ đã chấp nhận/)).toBeInTheDocument()
+  expect(new Set(requests).size).toBe(3)
+})
+
+it('renders a delayed wallet rejection received over SSE and clears it on selection change', async () => {
+  vi.stubGlobal('EventSource', FakeDriverStream)
+  mockApi()
+  const user = userEvent.setup()
+  render(<DriverCharging stationId="station-one" />)
+  await user.selectOptions(await screen.findByLabelText('Trụ và đầu nối'), 'connector-one')
+  await user.click(screen.getByRole('checkbox'))
+  await user.click(screen.getByRole('button', { name: 'Bắt đầu sạc' }))
+  await act(async () => FakeDriverStream.instances[0].send({ session: null, start_request: { id: 'request-one', status: 'Rejected', reply_status: 'Accepted', connector_id: 'connector-one', rejection_reason: 'wallet_low', balance_vnd: 0, minimum_balance_vnd: 22500, deadline: null } }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('0đ')
+  expect(screen.getByRole('alert')).toHaveTextContent('22.500đ')
+  expect(screen.queryByText(/Trụ từ chối/)).not.toBeInTheDocument()
+  await user.selectOptions(screen.getByLabelText('Trụ và đầu nối'), '')
+  expect(screen.queryByRole('link', { name: 'Nạp tiền' })).not.toBeInTheDocument()
+  await user.selectOptions(screen.getByLabelText('Trụ và đầu nối'), 'connector-one')
+  expect(screen.queryByRole('link', { name: 'Nạp tiền' })).not.toBeInTheDocument()
+})
+
 it('opens the session view only after current confirms the matching started session', async () => {
   let current: object = empty
   const accepted = { id: 'request-one', status: 'Accepted', deadline: new Date(Date.now() + 60000).toISOString() }

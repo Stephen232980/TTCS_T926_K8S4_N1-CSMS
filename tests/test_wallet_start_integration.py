@@ -38,11 +38,11 @@ async def wallet_case(session, data, balance):
     return wallet
 
 
-@pytest.mark.parametrize("balance", [12499, 12500])
+@pytest.mark.parametrize("balance", [12499, 12500, 12501])
 async def test_real_wallet_authorize_and_start_boundaries(db_session, fixture, balance):
     _, charger, _, _, _, conn, tag = fixture
     await wallet_case(db_session, fixture, balance)
-    expected = "Accepted" if balance == 12500 else "Blocked"
+    expected = "Accepted" if balance >= 12500 else "Blocked"
     authorized = await call(db_session, conn, "Authorize", {"idTag": tag})
     assert authorized.payload["idTagInfo"]["status"] == expected
     begun = await start(db_session, conn, tag)
@@ -51,10 +51,10 @@ async def test_real_wallet_authorize_and_start_boundaries(db_session, fixture, b
         select(func.count())
         .select_from(ChargingSession)
         .where(ChargingSession.charge_point_id == charger.id)
-    ) == int(balance == 12500)
+    ) == int(balance >= 12500)
 
 
-@pytest.mark.parametrize("balance", [12499, 12500])
+@pytest.mark.parametrize("balance", [12499, 12500, 12501])
 async def test_real_wallet_api_boundaries(db_session, fixture, balance):
     _, _, connector, driver, _, conn, _ = fixture
     await wallet_case(db_session, fixture, balance)
@@ -64,7 +64,11 @@ async def test_real_wallet_api_boundaries(db_session, fixture, balance):
         with pytest.raises(HTTPException) as denied:
             await remote_start(driver.id, key, connector.id)
         assert denied.value.status_code == 409
-        assert denied.value.detail == "wallet_low"
+        assert denied.value.detail == {
+            "reason": "wallet_low",
+            "balance_vnd": 12499,
+            "minimum_balance_vnd": 12500,
+        }
         assert await db_session.get(DriverStartRequest, key) is None
         assert await db_session.get(ControlRequest, key) is None
         conn.websocket.send_text.assert_not_awaited()
@@ -140,6 +144,11 @@ async def test_wallet_changes_reject_durable_request_without_session(
     assert snapshot["session"] is None
     assert snapshot["start_request"]["status"] == "Rejected"
     assert snapshot["start_request"]["rejection_reason"] == reason
+    if reason == "wallet_low":
+        assert (
+            result["balance_vnd"] == snapshot["start_request"]["balance_vnd"] == 12499
+        )
+        assert result["minimum_balance_vnd"] == 12500
     assert (
         await db_session.scalar(
             select(func.count())
@@ -187,6 +196,7 @@ async def test_rejected_request_releases_lease_and_keeps_replay_after_topup(
     await db_session.commit()
     old = await remote_start(driver.id, key, connector.id)
     assert old["status"] == "Rejected" and old["rejection_reason"] == "wallet_low"
+    assert old["balance_vnd"] == 12499 and old["minimum_balance_vnd"] == 12500
     conn.websocket.send_text.assert_awaited_once()
     fresh = await remote_start(driver.id, uuid4(), connector.id)
     assert fresh["status"] == "Accepted" and fresh["rejection_reason"] is None
