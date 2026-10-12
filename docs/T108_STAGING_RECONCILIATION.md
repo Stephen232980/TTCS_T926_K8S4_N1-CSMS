@@ -14,7 +14,7 @@ and TV6's story acceptance. No API/schema or production settlement code changes.
 | Exactly one debit and correct wallet/ledger | Read-only checks of sessions, invoice lines, ledger and balance | Failure/mutation tests, replay on real sockets |
 | Three new runs all correct | `verify-suite`, distinct run and station IDs | Three successful **staging** reports, TV6 review |
 | Parameterized fast CI | `--mode ci`, count/duration/boundary flags, historical buffered source clock | 20 real sockets on disposable PostgreSQL |
-| T-107 manifest integration | `simulator/t108_fixture.py:seed_manifest` receiver adapter | T-88 seed, concurrent/repeated runs, cleanup tests |
+| T-107 manifest integration | `scripts/t107_manifest_run.py:apply_run` and `cleanup_run` | T-88 seed, concurrent/repeated runs, cleanup tests |
 
 T-108 owns station/charger/connector and the initial tariff. The T-107 adapter
 owns driver/card/wallet/manual funding. `run_id` is a UUID; retry uses the same
@@ -134,12 +134,13 @@ ruff format --check .
 mypy src
 ```
 
-The OCPP regression uses real sockets and disposable PostgreSQL. It checks the
-invoice-only dependency state is rejected, then explicitly prepares settled
-data **inside the test** to exercise positive reporting/replay/cleanup. This
-test fixture is not proof that T-102 runtime settlement is ready.
+The OCPP regression uses 20 real sockets and disposable migrated PostgreSQL.
+It requires T-102's actual worker to settle all sessions automatically, then
+checks positive reporting and replay without another invoice/debit. It does
+not prepare settled data manually. Independent verifier tests reject missing
+settlement and inconsistent financial evidence.
 
-Current delivery starts from develop `c8c8b601`; its T-81 worker creates invoices
-without debiting wallets. T-102 must merge and enable settlement for the actual
-three-run staging gate. No staging execution, GitHub CI success or Jira Done is
-claimed by local checks.
+T-102 (#132), T-103 (#136) and T-107 (#133) are integrated from develop
+`7f76f96a`. Local checks passed 49 tests plus Ruff lint/format and mypy (114 src
+files). Local or CI success alone does not replace the three fresh staging
+runs or TV6's review, and never changes Jira status.
