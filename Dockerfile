@@ -14,6 +14,7 @@ RUN python -m pip install --no-cache-dir --upgrade pip \
 COPY alembic.ini ./
 COPY migrations ./migrations
 COPY scripts ./scripts
+COPY simulator/__init__.py simulator/t108_contract.py simulator/t108_fixture.py ./simulator/
 
 RUN useradd --create-home appuser \
     && chown -R appuser:appuser /app
