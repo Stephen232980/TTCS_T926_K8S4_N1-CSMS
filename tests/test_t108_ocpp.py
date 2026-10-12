@@ -3,20 +3,15 @@
 import asyncio
 import socket
 import sys
-from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
 import uvicorn
-from sqlalchemy import select
 
 from scripts.t108_staging import execute
 from simulator.t108_contract import new_manifest, save_json
 from simulator.t108_fixture import cleanup_manifest, seed_manifest, user
 from src.entrypoints.http import app
-from src.modules.billing.invoicing import lap_hoa_don
-from src.modules.charging.models import ChargingSession
-from src.modules.wallet.service import tru_vi
 from src.platform.database.session import SessionFactory
 from tests.test_effective_tariffs import committed_tariff_db as isolated_ocpp_db
 
@@ -24,7 +19,7 @@ committed_tariff_db = isolated_ocpp_db
 
 
 @pytest.mark.asyncio
-async def test_twenty_real_sockets_replay_and_verifier_reject_missing_settlement(
+async def test_twenty_real_sockets_automatically_settle_and_replay_once(
     committed_tariff_db, monkeypatch, tmp_path
 ):
     factory = committed_tariff_db
@@ -53,30 +48,15 @@ async def test_twenty_real_sockets_replay_and_verifier_reject_missing_settlement
             while not server.started:
                 await asyncio.sleep(0.05)
         first = await execute(
-            run, f"ws://127.0.0.1:{port}", tmp_path, factory, timeout=2
+            run, f"ws://127.0.0.1:{port}", tmp_path, factory, timeout=15
         )
         save_json(tmp_path / "dependency-state.json", first)
         assert all(row["actual"].get("total_vnd") == 5000 for row in first["rows"])
         assert all(row["actual"]["invoice_count"] == 1 for row in first["rows"])
-        if not first["passed"]:
-            assert all("settlement_missing" in row["failures"] for row in first["rows"])
-            with pytest.raises(ValueError, match="unsettled"):
-                async with factory() as db, db.begin():
-                    await cleanup_manifest(db, run)
-            # Test-only settled fixture exercises the positive verifier path.
-            # Never called by the CLI; T-102 must provide runtime settlement.
-            async with factory() as db, db.begin():
-                for participant in run.participants:
-                    charging = await db.scalar(
-                        select(ChargingSession).where(
-                            ChargingSession.charge_point_id
-                            == participant.charge_point_id
-                        )
-                    )
-                    outcome = await lap_hoa_don(db, charging.id)
-                    await tru_vi(db, invoice=outcome.invoice)
-                    charging.settlement_completed_at = datetime.now(UTC)
-                    charging.settlement_reason = "debited"
+        assert first["passed"]
+        assert all(
+            row["actual"]["settlement_reason"] == "debited" for row in first["rows"]
+        )
         replay = await execute(
             run, f"ws://127.0.0.1:{port}", tmp_path, factory, timeout=2
         )

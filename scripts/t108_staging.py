@@ -355,7 +355,8 @@ async def main() -> None:
         raise SystemExit("Settlement timeout must be 1..600 seconds")
     from sqlalchemy import text
 
-    from simulator.t108_fixture import cleanup_manifest, lock_key, seed_manifest
+    from scripts.t107_manifest_run import apply_run, cleanup_run
+    from simulator.t108_fixture import lock_key, prepare_station
     from src.platform.database.session import SessionFactory
 
     async with SessionFactory() as guard:
@@ -367,11 +368,12 @@ async def main() -> None:
         try:
             async with SessionFactory() as db, db.begin():
                 if args.action == "cleanup":
-                    await cleanup_manifest(db, manifest)
+                    await cleanup_run(db, manifest)
                 else:
                     if not args.admin_email:
                         raise SystemExit("Run requires --admin-email for T-88")
-                    await seed_manifest(db, manifest, args.admin_email)
+                    await prepare_station(db, manifest)
+                    await apply_run(db, manifest, args.admin_email)
             save_json(args.manifest, manifest.model_dump(mode="json"))
             if args.action == "run":
                 report = await execute(

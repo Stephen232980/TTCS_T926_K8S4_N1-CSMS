@@ -19,8 +19,13 @@ and TV6's story acceptance. No API/schema or production settlement code changes.
 T-108 owns station/charger/connector and the initial tariff. The T-107 adapter
 owns driver/card/wallet/manual funding. `run_id` is a UUID; retry uses the same
 manifest and deterministic OCPP message IDs, while new runs use fresh IDs.
-PR #133's standalone fixed fixture can later reuse this adapter; it is not
-modified or pushed by this delivery.
+PR #133 đã merge hai module dùng chung. T-108 gọi `prepare_station`, rồi adapter
+`scripts.t107_manifest_run.apply_run` nhận manifest để seed; cleanup cũng dùng
+adapter T-107. Không duy trì schema/fixture khác với develop.
+
+T-102 đã merge và được kiểm chứng trên staging. Test 20 socket của T-108 phải
+đạt với worker thật tự settlement; không tự gọi `tru_vi` hay đặt settlement bằng
+fixture khi luồng thực tế thất bại. Oracle/report vẫn từ chối thiếu settlement.
 
 ## Installation and environment
 
