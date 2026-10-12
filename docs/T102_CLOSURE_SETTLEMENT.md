@@ -8,7 +8,8 @@
 
 ## 2. Thiết kế Giao dịch Nguyên tử (Atomic Settlement Transaction)
 
-Hàm `chot_phien(session_id, db=None, settle=True)` tại `src/modules/billing/closure.py`:
+Hàm `chot_phien(session_id, db=None, settle=False)` tại `src/modules/billing/closure.py`:
+Worker và vòng quét trong lifespan truyền `settle=True`; caller chỉ lập hoá đơn có thể giữ `False`.
 
 ```mermaid
 sequenceDiagram
@@ -74,19 +75,65 @@ sequenceDiagram
     - `settlement_completed_at = now()` (nếu đang null)
   - Giúp tránh việc quét chốt phiên sau khi triển khai hệ thống mới trừ đè tiền ví của các hoá đơn cũ đã được thanh toán ngoài luồng hoặc không cần trừ ví.
 - **Cấu hình mốc Cutoff**:
+  Mốc là bắt buộc, phải có timezone; chuẩn hóa UTC. Thiếu/sai mốc sẽ dừng trước DML.
   1. CLI Alembic: `alembic -x legacy_cutoff="2026-03-30T00:00:00+00:00" upgrade head`
   2. Biến môi trường: `LEGACY_SETTLEMENT_CUTOFF="2026-03-30T00:00:00+00:00"`
   3. Cài đặt hệ thống: `settings.legacy_settlement_cutoff` trong `src/config.py`.
 
+### Quy trình chuyển đổi từng môi trường
+
+1. Dừng backend/worker chốt phiên và các nguồn phát sinh hoá đơn, bao gồm OCPP.
+2. Trưởng nhóm xác nhận mốc UTC có timezone cho môi trường. Không dùng giờ merge
+   hoặc tự lấy giờ hiện tại làm mặc định. Sao lưu database theo quy trình hiện có.
+3. Chạy Alembic bằng tài khoản migration, truyền mốc đã duyệt qua `-x legacy_cutoff`
+   hoặc `LEGACY_SETTLEMENT_CUTOFF` trong env migration riêng. Mốc CI `1970-01-01`
+   chỉ dành cho DB kiểm thử trống, không sao chép sang staging đang có dữ liệu.
+4. Lưu log migration cùng môi trường, người duyệt, mốc, revision và bản sao lưu.
+   Dòng audit ghi database, cutoff chuẩn UTC, số `legacy_exempt`, `debited`,
+   `needs_review`. Kiểm tra dữ liệu và lưu kết quả vào hồ sơ triển khai trước restart.
+5. Chỉ invoice trước mốc và không có dấu vết trừ liên quan mới được miễn trừ.
+   Dòng trừ đúng ví/loại/tham chiếu/số tiền được nhận diện `debited` không ghi tiền lại.
+   Dòng sai giữ `settlement_* = NULL`, thêm `settlement_ledger_mismatch` vào review.
+   Không sửa/xoá invoice hoặc ledger. Invoice tại/sau mốc chưa trừ để job xử lý.
+6. Khởi động lại worker sau khi kiểm tra. Đối chiếu invoice, balance, ledger,
+   settlement và xác nhận lần quét kế tiếp không trừ thêm.
+
+Deploy chạy preflight bằng môi trường migration, rồi migrate/cấp quyền trước khi
+khởi động candidate. Lần chuyển đổi đầu bị chặn nếu backend cũ còn chạy, cutoff
+thiếu/sai timezone hoặc nằm trong tương lai. Các lần deploy sau khi revision đã áp dụng
+không yêu cầu dừng backend hay đặt lại mốc. Người vận hành vẫn phải xác nhận tất cả
+nguồn tạo invoice khác đã dừng; preflight chỉ nhận diện container backend chính.
+
+Nếu revision này từng được chạy trước khi bổ sung kiểm tra, `upgrade head` không
+chạy lại revision đã áp dụng. Phải rà soát trạng thái dữ liệu và có kế hoạch chuyển đổi
+riêng được trưởng nhóm duyệt; không tự downgrade để chạy lại trên dữ liệu tài chính.
+Downgrade hiện xoá dấu `legacy_exempt`, không hoàn tiền và không xoá ledger.
+Chỉ thực hiện khi worker dừng và có kế hoạch khôi phục đã xác nhận.
+
+### Kiểm thử bổ sung
+
+`tests/test_t102_transition.py` chạy hàm `upgrade()` của revision thật trên PostgreSQL
+với invoice trước/tại/sau cùng mốc; kiểm số dư và ledger sau hai vòng quét.
+Các ca thiếu/sai mốc hoặc thiếu timezone xác nhận không ghi dữ liệu.
+Runtime kiểm tra ledger sai tham chiếu/loại/số tiền và nhận diện debit hợp lệ kể cả ví
+đang locked. Lỗi sau khi ghi ví thực tế xác nhận rollback toàn bộ và job retry đúng một lần.
+
 ---
 
-## 5. Danh sách Test Cases (Đã kiểm thử 100% Pass)
-Được triển khai trong `tests/test_t102_closure_settlement.py`:
-1. `test_t102_chot_phien_thanh_cong_co_phi_tru_vi_va_danh_dau_debited`: Chốt phiên có phí, trừ ví thành công, cập nhật `debited`.
-2. `test_t102_chot_phien_hoa_don_0_dong_danh_dau_zero_invoice_khong_ghi_ledger`: Hoá đơn 0đ, không ghi sổ cái, đánh dấu `zero_invoice`.
-3. `test_t102_nguyen_tu_loi_tru_vi_rollback_khong_mo_coi_hoa_don`: Lỗi trừ ví rollback toàn bộ, không sót hoá đơn mồ côi.
-4. `test_t102_idempotent_chot_phien_nhieu_lan_khong_tru_vi_dup`: Gọi lặp lại không bị trừ tiền 2 lần.
-5. `test_t102_chot_phien_tai_su_dung_hoa_don_da_lap_truoc_do`: Tái sử dụng hoá đơn sẵn có và trừ ví an toàn.
-6. `test_t102_settle_false_chi_lap_hoa_don_khong_tru_vi`: Cho phép tham số `settle=False` chỉ lập hoá đơn (tương thích test cũ).
-7. `test_t102_migration_legacy_exempt_offline`: Đánh dấu các phiên lịch sử sang `legacy_exempt`.
-8. `test_t102_log_khong_ghi_ten_tai_xe`: Kiểm tra assertion trong log không rò rỉ tên người dùng.
+## 5. Ma trận AC và kiểm thử
+
+| Tiêu chí | Kiểm thử |
+| --- | --- |
+| Invoice, debit và settlement cùng transaction; 0 đồng; idempotency | `tests/test_t102_closure_settlement.py` |
+| Worker và recovery tự trừ ví | `tests/test_t102_closure_settlement.py`, `tests/test_t81_closure.py` |
+| Trước/tại/sau cùng mốc, debit hợp lệ, ledger sai và quét sau chuyển đổi | `test_actual_revision_boundaries_existing_debit_and_review` |
+| Thiếu/sai mốc/thiếu timezone dừng trước DML | `test_invalid_cutoff_fails_before_any_write` |
+| CLI ưu tiên hơn environment và settings | `test_cutoff_configuration_precedence` |
+| Ledger sai ví/loại/số tiền/tham chiếu không hoàn tất hay trừ thêm | `test_runtime_corrupt_ledger_stays_review_without_debit` |
+| Debit cũ hợp lệ không trừ lại kể cả ví locked | `test_runtime_existing_valid_debit_not_charged_again` |
+| Lỗi sau flush ví rollback toàn bộ, job retry | `test_failure_after_real_wallet_write_rolls_back_everything` |
+
+Các test transition ở `tests/test_t102_transition.py`. Test PostgreSQL dùng database
+riêng, không dùng dữ liệu staging. Log nghiệp vụ chỉ ghi mã phiên và số tiền;
+log migration ghi mốc/database/count, không ghi tên tài xế hoặc connection string.
+Kết quả CI và nghiệm thu chuyển đổi thực tế phải kiểm tra trên head đã cập nhật.
