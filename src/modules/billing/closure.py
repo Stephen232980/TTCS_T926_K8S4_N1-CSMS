@@ -152,7 +152,7 @@ async def scan_unsettled_sessions(
 async def closure_scan_loop() -> None:
     while True:
         try:
-            await scan_unsettled_sessions()
+            await scan_unsettled_sessions(settle=True)
         except Exception:  # noqa: BLE001 - supervise recovery without logging SQL data.
             logger.error("charging_closure_scan_failed")
         await asyncio.sleep(settings.charging_closure_scan_interval_seconds)
@@ -161,9 +161,10 @@ async def closure_scan_loop() -> None:
 class ClosureRunner:
     """A bounded hint queue; the persisted ended session is the recovery source."""
 
-    def __init__(self, capacity: int = 256) -> None:
+    def __init__(self, capacity: int = 256, *, settle: bool = False) -> None:
         self.queue: asyncio.Queue[int] = asyncio.Queue(maxsize=capacity)
         self.pending: set[int] = set()
+        self.settle = settle
 
     def schedule(self, session_id: int) -> bool:
         if session_id in self.pending:
@@ -179,7 +180,10 @@ class ClosureRunner:
         while True:
             session_id = await self.queue.get()
             try:
-                await chot_phien(session_id)
+                if self.settle:
+                    await chot_phien(session_id, settle=True)
+                else:
+                    await chot_phien(session_id)
             except Exception:  # noqa: BLE001 - keep workers alive for later sessions.
                 logger.error("charging_closure_failed session=%s", session_id)
             finally:
@@ -198,7 +202,7 @@ def schedule_closure(session_id: int) -> bool:
 @asynccontextmanager
 async def closure_lifespan() -> AsyncIterator[None]:
     global _runner
-    runner = ClosureRunner()
+    runner = ClosureRunner(settle=True)
     _runner = runner
     tasks = [asyncio.create_task(runner.worker()) for _ in range(2)]
     tasks.append(asyncio.create_task(closure_scan_loop()))

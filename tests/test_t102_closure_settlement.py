@@ -316,3 +316,30 @@ async def test_t102_migration_legacy_exempt_logic(factory):
         assert res1.settlement_completed_at is not None
         assert res2.settlement_reason is None
         assert res2.settlement_completed_at is None
+
+
+async def test_t102_closure_runner_worker_tu_dong_tru_vi(factory):
+    """Xác nhận ClosureRunner.worker tự động chốt và trừ ví (settle=True) cho phiên kết thúc."""
+    session_id = await saved(factory)
+    runner = closure.ClosureRunner(capacity=10, settle=True)
+    assert runner.schedule(session_id)
+
+    worker = asyncio.create_task(runner.worker())
+    try:
+        await asyncio.wait_for(runner.queue.join(), 5)
+    finally:
+        worker.cancel()
+        await asyncio.gather(worker, return_exceptions=True)
+
+    async with factory() as db:
+        cs = await db.get(ChargingSession, session_id)
+        assert cs is not None
+        assert cs.settlement_completed_at is not None
+        assert cs.settlement_reason == "debited"
+        ledger = await db.scalar(
+            select(WalletLedger).where(
+                WalletLedger.entry_type == "charging_debit",
+                WalletLedger.reference_id == str(session_id),
+            )
+        )
+        assert ledger is not None
