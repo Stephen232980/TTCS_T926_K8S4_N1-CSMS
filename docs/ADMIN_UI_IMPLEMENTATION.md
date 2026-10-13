@@ -103,7 +103,7 @@ Xem [hợp đồng và kiểm chứng](ADMIN_ACCOUNT_PASSWORD.md).
 
 ## Nạp thủ công với phiếu tự sinh (bổ sung S-36)
 
-Frontend dùng hợp đồng backend `92b9fd7` trên nhánh backend riêng; cần tích hợp backend này trước khi triển khai frontend. Không thay AC cũ, Jira hoặc workbook.
+Frontend dùng hợp đồng backend `92b9fd7`, đã được tích hợp từ `origin/develop` (`5c88ec4`, PR #142) vào nhánh sửa giao diện. Không thay AC cũ, Jira hoặc workbook.
 
 Admin chọn tài xế, nhập tiền nguyên dương và tham chiếu chứng từ tùy chọn, rồi kiểm tra/xác nhận đã thu tiền. Chỉ khi gửi lần đầu mới tạo UUID v4. Body gửi `amount_vnd`, `request_id`, `payment_received: true` và `external_reference` nếu có; không gửi `receipt_code`.
 
