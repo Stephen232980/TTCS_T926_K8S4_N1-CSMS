@@ -129,6 +129,20 @@ it("updates selected connector from SSE and closes the stream on unmount", async
   view.unmount();
   expect(Stream.current.close).toHaveBeenCalled();
 });
+it('cancels manual closure without leaving the form or submitting a command', async () => {
+  const fetcher = setup();
+  const user = userEvent.setup();
+  render(<OwnerCharging area="ops" initialSessionId={91} />);
+  await screen.findByRole('heading', {name:'Phiên #91'});
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await user.click(screen.getByRole('button', {name:'Đóng hồ sơ phiên'}));
+    await user.type(screen.getByLabelText('Lý do đóng tay'), 'Kiểm tra thử');
+    await user.click(screen.getByRole('button', {name:'Hủy'}));
+    expect(screen.queryByRole('form', {name:'Đóng tay phiên 91'})).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Hướng dẫn kiểm tra phiên')).toBeInTheDocument();
+  }
+  expect(fetcher.mock.calls.some(([, options]) => options?.method === 'POST')).toBe(false);
+});
 it("reuses session details through ops endpoints, hides cards, and closes only with a reason and confirmation", async () => {
   const fetcher = setup();
   const user = userEvent.setup();
@@ -171,6 +185,23 @@ it("does not offer manual closure for ordinary open sessions even if they have r
   expect(
     screen.getByRole("button", { name: "Dừng từ xa #91" }),
   ).toBeInTheDocument();
+});
+it('restores list filters and explains an empty reason filter', async () => {
+  const fetcher = setup();
+  render(<OwnerCharging area="ops" initialState="review" initialListState={{page:2,state:'review',search:'CP-OPS',stationFilter:'Trạm ngoài sở hữu',reviewReason:'invoice_missing_tariff',scrollTop:0,shellScrollTop:0,windowScrollTop:0}} />);
+  expect(await screen.findByText('Không có phiên khớp bộ lọc trong trang này. Hãy đổi hoặc xóa bộ lọc để xem lại danh sách.')).toBeInTheDocument();
+  expect(screen.getByRole('searchbox', {name:'Tìm phiên trong trang'})).toHaveValue('CP-OPS');
+  expect(fetcher.mock.calls.some(([url]) => url.includes('page=2&page_size=20&state=review'))).toBe(true);
+});
+it('keeps review separate from the full session list', async () => {
+  const fetcher = setup();
+  render(<OwnerCharging area="ops" initialState="review" />);
+  expect(await screen.findByRole('heading', {name:'Phiên cần xem xét'})).toBeInTheDocument();
+  expect(await screen.findByRole('button', {name:/Phiên #91/})).toHaveClass('operator-review-row');
+  expect(screen.getByRole('combobox', {name:'Lý do trong trang'})).toBeInTheDocument();
+  expect(screen.queryByRole('combobox', {name:'Trạng thái'})).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', {name:'Chờ đối chiếu'})).not.toBeInTheDocument();
+  expect(fetcher.mock.calls.some(([url]) => url.includes('state=review'))).toBe(true);
 });
 it('keeps operator sessions as flat rows and loads shared details only after selection', async () => {
   const fetcher = setup();
