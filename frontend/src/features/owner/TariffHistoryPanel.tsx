@@ -1,4 +1,6 @@
+import { formatTariffDate } from './tariffDates'
 import { useEffect, useRef, useState } from 'react'
+import { Icon } from '../../components/icons/Icon'
 import { StationTariff } from './StationTariff'
 import { TariffForm } from './TariffForm'
 import { clockText } from './tariffBands'
@@ -49,8 +51,13 @@ export function TariffHistoryPanel({ stationId }: { stationId: string }) {
   }, [stationId, page, reload])
   return (
     <>
-      <section className="owner-panel owner-tariff-history">
-        <h2>Lịch sử phiên bản biểu giá</h2>
+      <details className="owner-panel owner-tariff-history">
+        <summary className="owner-tariff-history-toggle">
+          <Icon name="chevronRight" />
+          <h2>Lịch sử phiên bản biểu giá</h2>
+          {history && <span>{history.total} phiên bản</span>}
+          {error && <span>Không tải được lịch sử</span>}
+        </summary>
         <p className="owner-subtle">
           Phiên bản đã hiệu lực hoặc đã dùng cho hoá đơn được giữ nguyên. Chỉ
           sửa phiên bản chưa hiệu lực và chưa dùng; không xoá phiên bản.
@@ -74,14 +81,14 @@ export function TariffHistoryPanel({ stationId }: { stationId: string }) {
         {history && (
           <>
             <p className="owner-subtle">
-              Ngày tại trạm: {history.today} · {history.timezone}
+              Ngày tại trạm: {formatTariffDate(history.today)} · {history.timezone}
             </p>
             {history.items.length === 0 && <p>Chưa có phiên bản biểu giá.</p>}
             <ol className="owner-tariff-history-list">
               {history.items.map((version) => (
                 <li key={version.id}>
                   <div className="owner-tariff-version-title">
-                    <h3>Hiệu lực từ {version.effective_from}</h3>
+                    <h3>Hiệu lực từ {formatTariffDate(version.effective_from)}</h3>
                     <span>{statusText[version.status]}</span>
                   </div>
                   <ul>
@@ -154,7 +161,7 @@ export function TariffHistoryPanel({ stationId }: { stationId: string }) {
             )}
           </>
         )}
-      </section>
+      </details>
       {editing && history && (
         <>
           <TariffForm

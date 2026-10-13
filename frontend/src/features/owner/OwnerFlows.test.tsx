@@ -13,6 +13,22 @@ import { Telemetry } from './OwnerWorkspace'
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
 
 describe('approved owner flows', () => {
+  it('explains a missing historical tariff and links to the session station', async () => {
+    const session = { id: 170, station_id: 'station-old', station_name: 'Trạm cũ', charge_point_code: 'CP-OLD', connector_number: 1, started_at: '2026-10-09T02:55:52Z', ended_at: '2026-10-13T02:50:15Z', energy_kwh: '53.526', latest_meter_wh: null, meter_start_wh: '1000', tag_tail: 'TEST', review_reasons: ['invoice_missing_tariff', 'meter_regression'] }
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify({ items: url.includes('/samples?') ? [] : [session], page: 1, total: 1, total_pages: 1 }))))
+    render(<OwnerCharging />)
+    await userEvent.setup().click(await screen.findByRole('button', { name: /CP-OLD/ }))
+    const summary = screen.getByText('Chưa thể lập hóa đơn vì thiếu biểu giá')
+    const disclosure = summary.closest('details')!
+    expect(disclosure).not.toHaveAttribute('open')
+    await userEvent.setup().click(summary)
+    expect(disclosure).toHaveAttribute('open')
+    expect(screen.getByText(/Phiên được tạo trước khi/)).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Xem biểu giá' })).toHaveAttribute('href', '#tariffs?station=station-old')
+    expect(screen.getByText(/Cần kiểm tra · Số đo điện năng giảm/)).toBeInTheDocument()
+    await userEvent.setup().click(summary)
+    expect(disclosure).not.toHaveAttribute('open')
+  })
   it('never shows another session recovery events while history is loading or fails', async () => {
     const sessions = [71, 72].map(id => ({ id, station_name: 'Trạm thử', charge_point_code: `CP-${id}`, connector_number: 1, started_at: '2026-10-04T01:00:00Z', ended_at: null, energy_kwh: null, latest_meter_wh: null, meter_start_wh: '1000', tag_tail: 'TEST', review_reasons: [] }))
     let failHistory: (error: Error) => void = () => undefined
