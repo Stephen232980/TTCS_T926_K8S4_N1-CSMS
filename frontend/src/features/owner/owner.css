@@ -1286,6 +1286,7 @@ dl.owner-review div {
 .owner-charger-card header strong { white-space: normal; overflow-wrap: anywhere; }
 .owner-full-code { overflow-wrap: anywhere; user-select: text; }
 .owner-session-guidance { display: block; flex-shrink: 0; }
+.owner-session-note { padding: 10px 16px; border-radius: 12px; background: #eaf2f5; color: #526e7b; }
 .owner-session-guidance > summary { display: flex; align-items: center; gap: 10px; min-height: 32px; cursor: pointer; list-style: none; font-weight: 650; }
 .owner-session-guidance > summary::-webkit-details-marker { display: none; }
 .owner-session-guidance > summary > svg { flex: none; }

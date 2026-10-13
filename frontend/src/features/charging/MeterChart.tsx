@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
+import { meterLocationLabel } from './meterPresentation'
 
 export interface MeterReading {
   timestamp: string; measurand: string; phase: string; location: string; value: string; unit: string
@@ -62,7 +63,7 @@ export function MeterChart({ readings, sessionId, expanded = false }: { readings
   const isEnergy = active === 'Energy.Active.Import.Register'
   const regression = isEnergy && points.some((p, i) => i > 0 && p.energy < points[i - 1].energy)
   return <figure className="charging-chart" aria-labelledby={`meter-title-${sessionId}`}>
-    <div className="charging-chart-heading"><label>Thông số<select value={active} onChange={e => { setMetric(e.target.value); setSeries(''); setChosen(null) }}>{available.map(key => <option key={key} value={key}>{metrics[key].label} ({metrics[key].unit})</option>)}</select></label><h3 id={`meter-title-${sessionId}`}>Diễn biến số đo</h3>{streams.length > 1 && <label>Nguồn số đo<select value={selected} onChange={e => { setSeries(e.target.value); setChosen(null) }}>{streams.map(key => <option key={key} value={key}>{key.split('|')[0] || 'Tổng'} · {key.split('|')[1]}</option>)}</select></label>}</div>
+    <div className="charging-chart-heading"><label>Thông số<select value={active} onChange={e => { setMetric(e.target.value); setSeries(''); setChosen(null) }}>{available.map(key => <option key={key} value={key}>{metrics[key].label} ({metrics[key].unit})</option>)}</select></label><h3 id={`meter-title-${sessionId}`}>Diễn biến số đo</h3>{streams.length > 1 && <label>Nguồn số đo<select value={selected} onChange={e => { setSeries(e.target.value); setChosen(null) }}>{streams.map(key => <option key={key} value={key}>{key.split('|')[0] || 'Tổng'} · {meterLocationLabel(key.split('|')[1])}</option>)}</select></label>}</div>
     <svg ref={svgRef} viewBox={`0 0 ${width} ${plotBottom + 42}`} role="img" aria-label={`Biểu đồ ${definition.label.toLowerCase()} phiên ${sessionId}, ${points.length} số đo theo thời gian${regression ? ', có số đo giảm' : ''}`}>
       <text x="8" y="20" className="charging-chart-axis">{definition.unit}</text>
       {[0, 1, 2].map(i => { const value = floor + (ceiling - floor) * i / 2; return <g key={i}><line x1="64" x2={plotRight} y1={y(value)} y2={y(value)} className="charging-chart-grid" /><text x="54" y={y(value) + 4} textAnchor="end" className="charging-chart-axis">{format(value)}</text></g> })}
@@ -73,7 +74,7 @@ export function MeterChart({ readings, sessionId, expanded = false }: { readings
     <div className="charging-chart-readout"><time dateTime={point.timestamp}>{new Date(point.timestamp).toLocaleString('vi-VN')}</time><strong>{format(point.energy)} {definition.unit}</strong>{isEnergy && selectedIndex > 0 && point.energy < points[selectedIndex - 1].energy && <span className="status-badge status-badge--blocked">Số đo giảm</span>}</div>
     {points.length === 1 && <p className="charging-chart-single">Mới nhận một số đo. Đường diễn biến sẽ xuất hiện khi trụ gửi thêm dữ liệu.</p>}
     {points.length > 1 && <label className="charging-chart-scrubber">Chọn số đo<input type="range" min="0" max={points.length - 1} value={selectedIndex} onChange={e => setChosen(pointKey(Number(e.target.value)))} aria-label={`Chọn số đo ${definition.label.toLowerCase()} phiên ${sessionId}`} aria-valuetext={`${new Date(point.timestamp).toLocaleString('vi-VN')}, ${format(point.energy)} {definition.unit}`} /></label>}
-    <figcaption>{points.length} số đo · {definition.label} · {selected.split('|')[0] || 'Tổng'} / {selected.split('|')[1]}{regression ? ' · Đoạn nét đứt: số đo giảm' : ''}. Tối đa 100 bản ghi/trang.</figcaption>
+    <figcaption>{points.length} số đo · {definition.label} · {selected.split('|')[0] || 'Tổng'} / {meterLocationLabel(selected.split('|')[1])}{regression ? ' · Đoạn nét đứt: số đo giảm' : ''}. Tối đa 100 bản ghi/trang.</figcaption>
   </figure>
 }
 

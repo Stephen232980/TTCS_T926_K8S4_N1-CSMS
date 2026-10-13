@@ -146,6 +146,7 @@ function ConnectorSession({
       {!data && !error && <p role="status">Đang tải số đo…</p>}
       {data && (
         <>
+          {!charger.online && <p className="operator-stale-reading">Trụ ngoại tuyến · số đo dưới đây là lần cuối nhận được, không phải số đo trực tiếp.</p>}
           {error && <p>Dữ liệu lần tải trước có thể đã cũ.</p>}
           {data.session ? (
             <>
@@ -239,10 +240,29 @@ export function OperatorMonitoring({
   const [streamState, setStreamState] = useState("Đang nối luồng cập nhật…");
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
-  const [selection, setSelection] = useState<{
+  const [selection, updateSelection] = useState<{
     id: string;
     number: number;
-  } | null>(null);
+  } | null>(() => {
+    const params = new URLSearchParams(window.location.hash.split("?")[1]);
+    const id = params.get("charger");
+    return id ? { id, number: Number(params.get("connector")) || 1 } : null;
+  });
+  function setSelection(next: { id: string; number: number } | null) {
+    const params = new URLSearchParams();
+    if (next) { params.set("charger", next.id); params.set("connector", String(next.number)); }
+    window.history.pushState(null, "", `#ops-monitor${next ? `?${params}` : ""}`);
+    updateSelection(next);
+  }
+  useEffect(() => {
+    const change = () => {
+      const params = new URLSearchParams(window.location.hash.split("?")[1]);
+      const id = params.get("charger");
+      updateSelection(id ? { id, number: Number(params.get("connector")) || 1 } : null);
+    };
+    window.addEventListener("hashchange", change);
+    return () => window.removeEventListener("hashchange", change);
+  }, []);
   useEffect(() => {
     let stopped = false;
     let controller: AbortController | undefined;
@@ -402,6 +422,7 @@ export function OperatorMonitoring({
           {visible.length} / {result?.total ?? 0} trụ
         </span>
       </div>
+      <p className="operator-filter-scope">Nhóm ưu tiên và bộ lọc chỉ áp dụng cho các trụ trong trang này. Xem trang khác nếu chưa thấy trụ cần tìm.</p>
       {error && (
         <p role="alert" className="owner-error">
           {error} {result && "Dữ liệu có thể đã cũ."}
