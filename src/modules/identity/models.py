@@ -198,7 +198,7 @@ class AccountAudit(Base):
     __tablename__ = "account_audits"
     __table_args__ = (
         CheckConstraint(
-            "action IN ('account_created', 'account_updated')",
+            "action IN ('account_created', 'account_updated', 'account_password_reset')",
             name="ck_account_audits_action",
         ),
     )

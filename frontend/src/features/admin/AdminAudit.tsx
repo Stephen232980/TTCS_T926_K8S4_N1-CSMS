@@ -29,6 +29,7 @@ const actionNames: Record<string, string> = {
   RemoteStopTransaction: 'Dừng sạc từ xa',
   account_created: 'Cấp tài khoản',
   account_updated: 'Cập nhật tài khoản',
+  account_password_reset: 'Đổi mật khẩu',
 }
 const resultNames: Record<string, string> = {
   Accepted: 'Đã chấp nhận',
@@ -181,6 +182,7 @@ export function AdminAudit() {
               <option value="">Tất cả thao tác</option>
               <option value="account_created">Cấp tài khoản</option>
               <option value="account_updated">Cập nhật tài khoản</option>
+              <option value="account_password_reset">Đổi mật khẩu</option>
             </select>
           </label>
         )}
