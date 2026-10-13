@@ -37,3 +37,7 @@ class WalletReconciliationError(WalletError):
     def __init__(self, checks: list[str]):
         self.checks = checks
         super().__init__("Wallet checks failed: " + ", ".join(checks))
+
+
+class ManualTopupRequestConflictError(WalletLedgerConflictError):
+    """A generated-receipt request key was reused for another operation."""

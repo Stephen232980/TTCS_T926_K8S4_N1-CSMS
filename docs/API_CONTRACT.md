@@ -639,3 +639,32 @@ and compatibility aliases. Example: `"balance_vnd":"9007199254740993"`.
 Use BigInt/Decimal/integer parsing on clients; JSON number parsing loses đồng
 above 2^53-1. Internal Python/DB integers and existing top-up request formats
 are unchanged. See S40_WALLET_DEPENDENCIES.md for the complete field list.
+
+
+### Phiếu nạp thủ công do hệ thống tạo (bổ sung S-36)
+
+Cùng endpoint và quyền ở trên, không gửi receipt_code. Body:
+
+```json
+{"amount_vnd":100000,"request_id":"12345678-1234-4234-8234-123456789abc","payment_received":true,"external_reference":"CHUNG-TU-001"}
+```
+
+request_id là UUID frontend tạo một lần cho khoản thu đang xác nhận. Bắt buộc
+payment_received là boolean true; đây là xác nhận của admin đã thu tiền bên
+ngoài, không phải CSMS kiểm chứng ngân hàng. external_reference tùy chọn,
+1–128 ký tự sau trim; dùng mã chứng từ, không dùng mã VNPAY đã ghi nhận ví.
+Không trộn các trường này với receipt_code. Prefix PT-AUTO- dành riêng hệ thống.
+
+201 trả các trường phiếu cũ, thêm request_id, payment_received và
+external_reference; receipt_code = PT-AUTO- cộng 32 ký tự hex UUID. Cùng key,
+admin, tài xế, số tiền và tham chiếu trả lại chính phiếu gốc (cùng ledger_id,
+created_at và balance_after_vnd lịch sử), không ghi thêm ledger/audit. Đổi một
+trong các thông tin đó với key cũ trả 409 manual_topup_request_conflict.
+Sau timeout/mất response, retry giữ nguyên body/key. Chỉ tạo UUID mới khi admin
+xác nhận một khoản thu mới; không tự đổi key khi gặp lỗi để tránh cộng trùng.
+
+Người thực hiện và thời gian lấy từ phiên admin và DB. Sổ cái, số dư và audit
+cùng transaction; lỗi audit rollback toàn bộ. Metadata xác nhận/tham chiếu lưu
+trong audit append-only cùng ledger_id. Không cần migration hoặc quyền DB mới.
+Luồng receipt_code cũ vẫn giữ quy tắc trùng mã trả 409 receipt_already_used.
+Phần frontend được triển khai riêng, backend không tạo/in chứng từ thu tiền.
