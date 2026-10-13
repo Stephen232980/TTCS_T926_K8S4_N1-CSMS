@@ -19,6 +19,7 @@ dependencies = [
     "Pillow>=11,<13",
     "tzdata",
     "httpx>=0.28,<1",
+    "websockets>=14,<17",
 ]
 
 [project.optional-dependencies]

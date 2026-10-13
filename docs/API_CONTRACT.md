@@ -668,3 +668,7 @@ cùng transaction; lỗi audit rollback toàn bộ. Metadata xác nhận/tham ch
 trong audit append-only cùng ledger_id. Không cần migration hoặc quyền DB mới.
 Luồng receipt_code cũ vẫn giữ quy tắc trùng mã trả 409 receipt_already_used.
 Phần frontend được triển khai riêng, backend không tạo/in chứng từ thu tiền.
+
+## Tài xế dừng sạc và demo rút súng
+
+Hợp đồng endpoint, trạng thái, quyền sở hữu, retry và chế độ demo: [DRIVER_STOP_DEMO_UNPLUG.md](DRIVER_STOP_DEMO_UNPLUG.md). Dừng/checkbox không chốt tiền; backend chờ bằng chứng từ trụ. Giá trị demo mặc định tắt; chỉ phiên mới capture cấu hình xác nhận Available.

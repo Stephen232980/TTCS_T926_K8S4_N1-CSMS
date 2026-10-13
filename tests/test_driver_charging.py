@@ -199,6 +199,7 @@ async def test_driver_endpoint_roles_body_and_empty_state(db_session, fixture):
         assert (await client.get("/api/v1/driver/charging/current")).json() == {
             "session": None,
             "start_request": None,
+            "awaiting_unplug": None,
         }
         assert (
             await client.get(f"/api/v1/driver/stations/{station.id}/connectors")

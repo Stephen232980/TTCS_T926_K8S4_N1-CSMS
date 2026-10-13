@@ -321,7 +321,7 @@ export function OwnerWorkspace({
   const [logoutError, setLogoutError] = useState('')
   function setArea(next: Area) {
     updateArea(next)
-    window.location.hash = ownerHash(next, station?.id)
+    window.location.assign(ownerHash(next, station?.id))
   }
   useEffect(() => {
     const change = () => {
@@ -336,7 +336,10 @@ export function OwnerWorkspace({
     return () => window.removeEventListener('hashchange', change)
   }, [])
   useEffect(() => {
-    if (!routeStationId) { setStation(null); return }
+    if (!routeStationId) {
+      const timer = window.setTimeout(() => setStation(null), 0)
+      return () => window.clearTimeout(timer)
+    }
     const controller = new AbortController()
     void stationApi.getStation(routeStationId, controller.signal).then(value => {
       if (!controller.signal.aborted) { setStation(value); setChargerPage(1); setChargerSearch('') }
@@ -469,7 +472,7 @@ export function OwnerWorkspace({
     }
   }, [stationId, stationApi, chargePointApi, chargerPage, chargerSearch, revision, form])
   function open(record: Station) {
-    window.location.hash = ownerHash(area, record.id)
+    window.location.assign(ownerHash(area, record.id))
     setStation(record)
     setChargers(null)
     setChargerTotal(null)

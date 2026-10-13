@@ -151,7 +151,11 @@ async def remote_start(
         )
         occupied = await session.scalar(
             select(ChargingSession.id).where(
-                ChargingSession.ended_at.is_(None),
+                or_(
+                    ChargingSession.ended_at.is_(None),
+                    (ChargingSession.billing_lifecycle_version == 1)
+                    & ChargingSession.connector_released_at.is_(None),
+                ),
                 or_(
                     ChargingSession.connector_id == connector_id,
                     ChargingSession.driver_id == driver_id,

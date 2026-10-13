@@ -27,6 +27,7 @@ const actionNames: Record<string, string> = {
   Reset: 'Khởi động lại trụ',
   RemoteStartTransaction: 'Bắt đầu sạc từ xa',
   RemoteStopTransaction: 'Dừng sạc từ xa',
+  DataTransfer: 'Mô phỏng rút súng (demo)',
   account_created: 'Cấp tài khoản',
   account_updated: 'Cập nhật tài khoản',
   account_password_reset: 'Đổi mật khẩu',
