@@ -6,6 +6,10 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
+
+# Vite reads map configuration at build time; empty values use the app defaults.
+ARG VITE_MAP_TILE_URL=
+ARG VITE_MAP_ATTRIBUTION=
 RUN npm run build
 
 FROM nginx:1.28-alpine
