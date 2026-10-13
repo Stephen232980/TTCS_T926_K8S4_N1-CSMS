@@ -46,12 +46,15 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
     if (id) sessionStorage.setItem(storageKey, id)
   }, [storageKey])
   const [walletRevision, setWalletRevision] = useState(0)
+  const [succeededOrder, setSucceededOrder] = useState(false)
   const [topUpExpanded, setTopUpExpanded] = useState(() => sessionStorage.getItem(storageKey) !== null || readTopUpReturn(window.location).isReturn)
   const rememberOrder = useCallback((id: string) => {
     sessionStorage.setItem(storageKey, id)
     setTrackedOrder(id)
+    setSucceededOrder(false)
   }, [storageKey])
   const resolved = useCallback((result: TopUpResult) => {
+    if (result.status === 'succeeded') setSucceededOrder(true)
     if (['succeeded', 'failed', 'cancelled'].includes(result.status)) {
       sessionStorage.removeItem(storageKey)
       setWalletRevision(value => value + 1)
@@ -91,6 +94,7 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
   }, [rememberOrder])
 
   const navigate = useCallback((next: Area) => {
+    setSucceededOrder(false)
     setArea(next)
     setInvoiceView(false)
     setReturnLocation({ isReturn: false, orderId: '' })
@@ -100,6 +104,15 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
     const safePath = window.location.pathname.replace(/\/(?:driver\/)?wallet\/topup\/return\/?$/i, '/')
     window.history.replaceState(null, '', `${safePath}#driver-${next}`)
   }, [])
+  useEffect(() => {
+    if (!succeededOrder) return
+    const timer = window.setTimeout(() => {
+      setTrackedOrder('')
+      setSucceededOrder(false)
+      navigate('wallet')
+    }, 5000)
+    return () => window.clearTimeout(timer)
+  }, [succeededOrder, navigate])
   const showStations = useCallback(() => navigate('stations'), [navigate])
   const checkTopUpOrder = useCallback((orderId: string) => {
     rememberOrder(orderId)
