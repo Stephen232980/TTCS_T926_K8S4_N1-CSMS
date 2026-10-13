@@ -620,3 +620,22 @@ terminate an unrelated virtual-tag request. T-106 owns UI reason mapping/top-up.
 - `GET /api/v1/driver/wallet/topups/{order_id}`: `driver.wallet.topup.read`, `own_wallet`, driver; đọc status/reason của lệnh cùng driver_id. Lệnh lạ hoặc của người khác cùng trả 404.
 - Chưa có adapter: 503, không tạo lệnh. Timeout/lỗi sau khi gửi: 503 với detail.order_id, giữ pending đã commit để hỏi trạng thái; không tự retry POST và không cộng ví.
 - POST thành công trả 201 với order_id, amount_vnd, status, reason, created_at, redirect_url. GET trả cùng dữ liệu trừ redirect_url. Adapter T-92 chưa tích hợp; dùng gateway thử trong kiểm thử. Chi tiết ở [T93_WALLET_TOPUP_API.md](T93_WALLET_TOPUP_API.md).
+
+
+## S-40 — own-wallet transaction details and exact money
+
+`GET /api/v1/driver/wallet/transactions/{entry_id}` requires
+`driver.wallet.ledger` / `own_wallet`. Returns the persisted ledger item plus
+nullable `topup_order_id`, `topup_status`, `topup_reason`. The top-up joins on
+both the authenticated driver and the gateway transaction reference. Manual
+top-ups retain their receipt reference. GET never credits or settles anything.
+Missing entry is 404; another driver's entry is 403. Balance/list/detail reject
+`driver_id` or `wallet_id` query selectors with 403. Ledger pagination defaults
+to 50 (maximum 50) and uses the last returned ID as its cursor.
+
+All monetary fields on the driver wallet balance, ledger list and detail
+responses serialize as integer decimal **strings**, including `_vnd` fields
+and compatibility aliases. Example: `"balance_vnd":"9007199254740993"`.
+Use BigInt/Decimal/integer parsing on clients; JSON number parsing loses đồng
+above 2^53-1. Internal Python/DB integers and existing top-up request formats
+are unchanged. See S40_WALLET_DEPENDENCIES.md for the complete field list.

@@ -158,7 +158,7 @@ async def assert_state(context, status, balance, count, tx=None):
     ledger = await context.client.get("/api/v1/driver/wallet/transactions")
     assert order.status_code == wallet.status_code == ledger.status_code == 200
     assert order.json()["status"] == status and order.json()["amount_vnd"] == AMOUNT
-    assert wallet.json()["balance_vnd"] == balance
+    assert wallet.json()["balance_vnd"] == str(balance)
     assert len(ledger.json()["items"]) == count
     return state
 

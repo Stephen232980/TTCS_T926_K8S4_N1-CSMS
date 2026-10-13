@@ -355,6 +355,7 @@
 }
 
 .driver-balance-amount {
+  overflow-wrap: anywhere;
   font-size: clamp(28px, 6vw, 38px);
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -547,7 +548,12 @@
 .tx-amount {
   font-weight: 700;
   font-size: 14px;
-  white-space: nowrap;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.driver-session-summary p {
+  overflow-wrap: anywhere;
 }
 
 .tx-amount.plus {
