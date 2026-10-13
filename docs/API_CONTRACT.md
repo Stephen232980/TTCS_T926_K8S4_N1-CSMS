@@ -674,3 +674,11 @@ Phần frontend được triển khai riêng, backend không tạo/in chứng t�
 ## Tài xế dừng sạc và demo rút súng
 
 Hợp đồng endpoint, trạng thái, quyền sở hữu, retry và chế độ demo: [DRIVER_STOP_DEMO_UNPLUG.md](DRIVER_STOP_DEMO_UNPLUG.md). Dừng/checkbox không chốt tiền; backend chờ bằng chứng từ trụ. Giá trị demo mặc định tắt; chỉ phiên mới capture cấu hình xác nhận Available.
+
+## S-42 / S-43 / S-44 — Công suất trạm
+
+Năm endpoint owner owned, kW Decimal/W nguyên, optimistic version, enable/disable
+bất đồng bộ, phân bổ và commissioning: [S42_S43_S44_POWER.md](S42_S43_S44_POWER.md).
+Trạm chưa bật chia tải giữ luồng sạc hiện có; trạm đã bật chặn start khi chưa
+xác minh hoặc degraded (`power_unavailable`). Lưu hạn mức không phải bằng
+chứng trụ đã áp dụng. Kết quả có requested/confirmed/reserved riêng biệt.

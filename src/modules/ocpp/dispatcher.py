@@ -259,6 +259,19 @@ async def process_call(
             response=response,
         )
     )
+    if (
+        frame.action
+        in {
+            "BootNotification",
+            "StatusNotification",
+            "StartTransaction",
+            "StopTransaction",
+        }
+        and json.loads(response)[0] == 3
+    ):
+        from src.modules.power.service import note_power_event
+
+        await note_power_event(session, charge_point.station_id)
     await session.flush()
     return response
 

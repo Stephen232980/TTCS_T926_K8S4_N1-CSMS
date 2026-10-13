@@ -79,6 +79,11 @@ async def authorize(
         result = "Blocked"
     wallet_failure = None
     if result == "Accepted":
+        from src.modules.power.service import power_start_allowed
+
+        if not await power_start_allowed(session, charger.station_id):
+            result = "Blocked"
+    if result == "Accepted":
         if card is None:
             raise RuntimeError("Accepted authorization has no matching card")
         eligibility = await du_so_du_de_sac(
@@ -312,6 +317,14 @@ async def start_transaction(
     if connector is None:
         raise ValueError("Connector is not registered")
     result, card, wallet_failure = await authorize(session, charger, payload.idTag)
+    from src.modules.power.service import power_start_allowed
+
+    if not await power_start_allowed(session, charger.station_id):
+        from src.modules.charging.driver import reject_power_start
+
+        await reject_power_start(session, connector, card)
+        pending(session, charger, frame, "power_unavailable")
+        return {"transactionId": 0, "idTagInfo": {"status": "Blocked"}}
     if wallet_failure is not None:
         from src.modules.charging.driver import reject_remote_start
 
