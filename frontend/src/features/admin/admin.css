@@ -455,6 +455,27 @@
 .admin-detail > .admin-muted {
   margin-top: 16px;
 }
+.admin-account-detail { display: flex; flex-direction: column; overflow: hidden; padding: 0; }
+.admin-account-detail > .admin-empty { padding: 22px 20px; }
+.admin-account-identity { padding: 18px 20px; border-bottom: 1px solid #dce7eb; flex-shrink: 0; }
+.admin-detail-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.admin-detail-heading h2 { margin: 0 0 12px; }
+.admin-account-detail-body { padding: 18px 20px; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.admin-account-dates { margin-bottom: 18px; }
+.admin-account-dates summary { min-height: 44px; cursor: pointer; color: var(--muted); }
+.admin-reset-password { padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px solid #dce7eb; }
+.admin-reset-password form { display: grid; gap: 14px; }
+.admin-reset-password form > label { display: grid; gap: 7px; }
+.admin-reset-password form > button { justify-self: start; }
+.admin-reset-password .admin-actions { flex-direction: column-reverse; align-items: stretch; gap: 10px; }
+.admin-reset-password .admin-actions button { min-height: 44px; }
+.admin-reset-password .admin-actions .admin-primary { flex: 1; }
+.admin-account-detail-body > h3 { margin-top: 18px; }
+@media (max-width: 760px) {
+  .admin-account-detail-body { overflow: visible; }
+  .admin-account-detail { scroll-margin-top: 16px; }
+  .admin-reset-password .admin-actions { flex-direction: column-reverse; }
+}
 .admin-pagination {
   display: flex;
   justify-content: space-between;
@@ -620,6 +641,14 @@
   align-self: center;
   justify-self: end;
 }
+.admin-shell .admin-audit-row[aria-pressed='true'], .admin-shell .admin-audit-row[aria-pressed='true']:hover { background: #edf6f5; outline: 1px solid #14795e; outline-offset: -1px; }
+.admin-shell .admin-audit-row[aria-pressed='false']:hover { background: #f2f6f7; }
+.admin-shell .admin-actor-filter { min-width: 0; flex: 1; text-align: left; overflow-wrap: anywhere; background: transparent; padding: 4px 0; }
+.admin-shell .admin-actor-filter:hover { background: transparent; text-decoration: underline; text-underline-offset: 3px; }
+.admin-audit-filter-hint { font-size: 12px; flex-shrink: 0; }
+.admin-audit-quick-filters { flex-wrap: wrap; margin-bottom: 18px; }
+.admin-audit-detail .admin-payload { margin-top: 16px; }
+@media (max-width: 760px) { .admin-audit-quick-filters button { min-height: 44px; } }
 .admin-payload {
   background: #f2f6f7;
   padding: 12px;
@@ -661,7 +690,7 @@
 .admin-health-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-template-rows: repeat(2, minmax(0, 1fr));
+  grid-template-rows: repeat(2, minmax(320px, auto));
   gap: 14px;
   flex: 1;
   min-height: 0;
@@ -669,13 +698,15 @@
 }
 .admin-health-grid.is-expanded {
   grid-template-columns: 1fr;
-  grid-template-rows: 1fr;
+  grid-template-rows: minmax(320px, 1fr);
 }
 .admin-chart-panel {
   padding: 16px 18px 12px;
   display: flex;
   flex-direction: column;
-  overflow: auto;
+  overflow: visible;
+  min-height: 320px;
+  min-width: 0;
 }
 .admin-chart-panel > header {
   display: flex;
@@ -689,13 +720,14 @@
 }
 .admin-chart-panel > header button {
   font-size: 12px;
-  min-height: 30px;
+  min-height: 44px;
   padding: 5px 9px;
 }
 .admin-metric {
   display: flex;
   align-items: baseline;
   gap: 8px;
+  flex-wrap: wrap;
   margin: 5px 0 0 !important;
   font-variant-numeric: tabular-nums;
 }
@@ -713,7 +745,7 @@
   display: flex;
   flex-direction: column;
   flex: 1;
-  min-height: 130px;
+  min-height: 170px;
   margin-top: 8px;
 }
 .admin-plot {
@@ -750,7 +782,8 @@
   display: flex;
   gap: 10px;
   align-items: center;
-  font-size: 11px;
+  font-size: 12px;
+  flex-wrap: wrap;
   color: var(--muted);
   flex: none;
   min-height: 24px;
@@ -764,7 +797,10 @@
 }
 .admin-chart-inspect input {
   width: 80px;
+  min-height: 44px;
 }
+.admin-metric-definition summary { min-height: 44px; display: list-item; line-height: 44px; cursor: pointer; }
+.admin-health-paused { font-size: 12px; flex-shrink: 0; }
 .admin-chart-inspect output {
   text-align: right;
   flex: 1;
@@ -990,6 +1026,15 @@
 .admin-topup {
   overflow: auto;
 }
+.admin-shell .admin-topup-received { display: flex; flex-direction: row; align-items: flex-start; gap: 12px; margin: 12px 0; }
+.admin-shell .admin-topup .admin-topup-received input { width: 20px; height: 20px; min-height: 20px; flex: none; margin-top: 2px; }
+.admin-topup-result { padding: 24px; overflow: auto; min-height: 0; }
+.admin-topup-result .admin-success { display: block; margin-top: 16px; overflow-wrap: anywhere; }
+.admin-topup-result > button { margin-top: 18px; }
+.admin-topup .admin-wizard > .admin-actions { margin-top: 20px; flex-wrap: wrap; }
+.admin-topup .admin-wizard { gap: 12px; }
+.admin-topup .admin-wizard h2 { margin-bottom: 0; }
+.admin-topup .admin-topup-summary { margin: 12px 0; }
 .admin-topup-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -1015,6 +1060,9 @@
 .admin-topup-drivers {
   margin-top: 12px;
   min-height: 80px;
+  max-height: 320px;
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 .admin-topup-drivers label {
   display: flex;

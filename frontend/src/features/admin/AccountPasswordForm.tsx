@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { notifySessionUnauthorized } from '../auth/sessionEvents'
 import { adminRequest, AdminApiError, writeJson, type Account } from './adminApi'
 import { ErrorNotice } from './AdminShared'
@@ -11,6 +11,8 @@ export function AccountPasswordForm({ account, self, onSaved, onCancel, onConfli
   onConflict: () => void
 }) {
   const [password, setPassword] = useState('')
+  const hintId = useId()
+  const [visible, setVisible] = useState(false)
   const [confirm, setConfirm] = useState('')
   const [review, setReview] = useState(false)
   const [validation, setValidation] = useState('')
@@ -42,7 +44,7 @@ export function AccountPasswordForm({ account, self, onSaved, onCancel, onConfli
     } finally { sending.current = false; if (active.current) setBusy(false) }
   }
 
-  return <section aria-label="Đổi mật khẩu tài khoản">
+  return <section className="admin-reset-password" aria-label="Đổi mật khẩu tài khoản">
     <h3>Đổi mật khẩu</h3>
     <ErrorNotice error={error} />
     {review ? <>
@@ -61,10 +63,12 @@ export function AccountPasswordForm({ account, self, onSaved, onCancel, onConfli
       if (password !== confirm) { setValidation('Mật khẩu nhập lại không khớp.'); return }
       setValidation(''); setReview(true)
     }}>
-      <label>Mật khẩu mới<input type="password" autoComplete="new-password" minLength={12} maxLength={1024} required value={password} onChange={event => setPassword(event.target.value)} /></label>
-      <label>Nhập lại mật khẩu mới<input type="password" autoComplete="new-password" minLength={12} maxLength={1024} required value={confirm} onChange={event => setConfirm(event.target.value)} /></label>
+      <p id={hintId} className="admin-muted">Mật khẩu cần từ 12 đến 1024 ký tự. Khi xác nhận đổi, các phiên đăng nhập của tài khoản này sẽ kết thúc.</p>
+      <label>Mật khẩu mới<input type={visible ? 'text' : 'password'} aria-describedby={hintId} autoComplete="new-password" minLength={12} maxLength={1024} required value={password} onChange={event => { setPassword(event.target.value); setValidation('') }} /></label>
+      <label>Nhập lại mật khẩu mới<input type={visible ? 'text' : 'password'} aria-describedby={hintId} autoComplete="new-password" minLength={12} maxLength={1024} required value={confirm} onChange={event => { setConfirm(event.target.value); setValidation('') }} /></label>
+      <button type="button" aria-pressed={visible} onClick={() => setVisible(value => !value)}>{visible ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}</button>
       {validation && <p className="admin-error" role="alert">{validation}</p>}
-      <div className="admin-actions"><button type="button" onClick={onCancel}>Hủy đổi mật khẩu</button><button className="admin-primary" type="submit">Tiếp tục đổi mật khẩu</button></div>
+      <div className="admin-actions"><button type="button" onClick={onCancel}>Hủy đổi mật khẩu</button><button className="admin-primary" type="submit">Xác nhận</button></div>
     </form>}
   </section>
 }

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useId, useRef, useState } from 'react'
 import {
   adminRequest,
   dateTime,
@@ -48,6 +48,15 @@ export function AdminAudit() {
   const [filters, setFilters] = useState(initial)
   const [page, setPage] = useState(1)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const suggestionsId = useId()
+  const detailRef = useRef<HTMLElement>(null)
+  const listRef = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (selectedId && window.matchMedia?.('(max-width: 760px)').matches) {
+      detailRef.current?.scrollIntoView({ block: 'start' })
+      detailRef.current?.focus({ preventScroll: true })
+    }
+  }, [selectedId])
   const [validation, setValidation] = useState('')
   const resource = useResource(
     useCallback(
@@ -105,6 +114,12 @@ export function AdminAudit() {
   for (const item of resource.data?.items ?? [])
     groups.set(item.actor, [...(groups.get(item.actor) ?? []), item])
   const selected = resource.data?.items.find((item) => item.id === selectedId)
+  const actors = [...new Set(resource.data?.items.map(item => item.actor) ?? [])]
+  const chargePoints = [...new Set(resource.data?.items.map(item => item.target) ?? [])]
+  const filterBy = (field: 'actor' | 'chargePoint', value: string) => {
+    const next = { ...filters, [field]: value }
+    setDraft(next); setFilters(next); setPage(1); setSelectedId(null); setValidation('')
+  }
   return (
     <>
       <header className="admin-heading">
@@ -156,6 +171,8 @@ export function AdminAudit() {
             type="email"
             maxLength={320}
             placeholder="Email chính xác"
+            list={`${suggestionsId}-actors`}
+            aria-describedby={`${suggestionsId}-hint`}
             value={draft.actor}
             onChange={(e) => setDraft({ ...draft, actor: e.target.value })}
           />
@@ -166,6 +183,8 @@ export function AdminAudit() {
             <input
               maxLength={100}
               placeholder="Mã trụ chính xác"
+              list={`${suggestionsId}-chargers`}
+              aria-describedby={`${suggestionsId}-hint`}
               value={draft.chargePoint}
               onChange={(e) =>
                 setDraft({ ...draft, chargePoint: e.target.value })
@@ -218,12 +237,16 @@ export function AdminAudit() {
           Xóa lọc
         </button>
       </form>
+      <datalist id={`${suggestionsId}-actors`}>{actors.map(actor => <option key={actor} value={actor} />)}</datalist>
+      {source === 'control' && <datalist id={`${suggestionsId}-chargers`}>{chargePoints.map(code => <option key={code} value={code} />)}</datalist>}
+      <p className="admin-muted admin-audit-filter-hint" id={`${suggestionsId}-hint`}>Chọn gợi ý hoặc nhập đầy đủ email{source === 'control' ? '/mã trụ' : ''}. Gợi ý lấy từ trang nhật ký đang xem; bỏ trống để xem tất cả.</p>
       <ErrorNotice
         error={validation || resource.error}
         onRetry={resource.error ? resource.reload : undefined}
       />
       <div className="admin-split admin-audit-split">
         <section
+          ref={listRef}
           className="admin-panel admin-audit-groups"
           aria-label="Nhật ký theo người thực hiện"
           aria-busy={resource.loading}
@@ -249,14 +272,14 @@ export function AdminAudit() {
                   <span className="admin-avatar" aria-hidden="true">
                     {actor.slice(0, 1).toUpperCase()}
                   </span>
-                  <strong>{actor}</strong>
+                  <button type="button" className="admin-actor-filter" aria-label={`Lọc nhật ký của ${actor}`} onClick={() => filterBy('actor', actor)}>{actor}</button>
                   <span>{items.length} thao tác</span>
                 </header>
                 {items.map((item) => (
                   <button
-                    className={`admin-audit-row ${selectedId === item.id ? 'is-selected' : ''}`}
+                    className={`admin-audit-row ${selected?.id === item.id ? 'is-selected' : ''}`}
                     key={item.id}
-                    aria-pressed={selectedId === item.id}
+                    aria-pressed={selected?.id === item.id}
                     onClick={() => setSelectedId(item.id)}
                   >
                     <span>
@@ -278,10 +301,15 @@ export function AdminAudit() {
             ))}
           </div>
         </section>
-        <aside className="admin-panel admin-detail">
+        <aside ref={detailRef} tabIndex={-1} className="admin-panel admin-detail admin-account-detail admin-audit-detail" aria-label="Chi tiết nhật ký">
           {selected ? (
             <>
-              <h2>Chi tiết thao tác</h2>
+              <header className="admin-account-identity">
+                <div className="admin-detail-heading"><h2>Chi tiết thao tác</h2><button aria-label="Đóng chi tiết thao tác" onClick={() => { setSelectedId(null); listRef.current?.querySelector<HTMLButtonElement>('button[aria-pressed="true"]')?.focus() }}>Đóng</button></div>
+                <strong className="admin-email">{actionNames[selected.action] ?? selected.action}</strong>
+                <p className="admin-muted">{dateTime(selected.time)}</p>
+              </header>
+              <div key={selected.id} className="admin-account-detail-body">
               <dl className="admin-facts">
                 <dt>Người thực hiện</dt>
                 <dd>{selected.actor}</dd>
@@ -292,6 +320,10 @@ export function AdminAudit() {
                 <dt>{selected.control ? 'Trụ' : 'Tài khoản'}</dt>
                 <dd>{selected.target}</dd>
               </dl>
+              <div className="admin-actions admin-audit-quick-filters">
+                <button onClick={() => filterBy('actor', selected.actor)}>Lọc theo người này</button>
+                {selected.control && <button onClick={() => filterBy('chargePoint', selected.target)}>Lọc theo trụ này</button>}
+              </div>
               <details className="admin-payload">
                 <summary>Quyền tại thời điểm thao tác</summary>
                 <dl className="admin-facts">
@@ -344,6 +376,7 @@ export function AdminAudit() {
                   </>
                 )
               )}
+              </div>
             </>
           ) : (
             <div className="admin-empty">
