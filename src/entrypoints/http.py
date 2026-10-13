@@ -6,6 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.entrypoints.lifecycle import application_lifespan
+from src.modules.billing.accounting_router import router as accounting_finance_router
 from src.modules.billing.driver_router import router as driver_invoice_router
 from src.modules.charging.driver_router import router as driver_charging_router
 from src.modules.charging.router import router as charging_router
@@ -47,6 +48,7 @@ for documentation_route in app.routes:
         cast(Any, documentation_route).endpoint
     )
 app.include_router(identity_router)
+app.include_router(accounting_finance_router)
 app.include_router(admin_accounts_router)
 app.include_router(admin_audit_router)
 app.include_router(stations_router)

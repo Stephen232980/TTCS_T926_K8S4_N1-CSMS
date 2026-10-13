@@ -1,5 +1,7 @@
 # API contract CSMS
 
+Tra cứu kế toán (13/10/2026): role accountant có API GET `/api/v1/accounting/finance/sessions`, `/invoices`, `/stations`, `/sessions/{session_id}`, `/insights/{area}` với quyền đọc toàn phạm vi, tìm kiếm/lọc/phân trang và tổng hợp hóa đơn/sổ cái. Xem [hợp đồng và giới hạn kế toán](ACCOUNTING_FINANCE_DELIVERY.md). Không có phát hành hóa đơn điện tử, sửa tiền hoặc đối soát đối tác qua các endpoint này.
+
 Phân quyền endpoint cập nhật 05/10/2026: xem [contract phạm vi và chuyển API](ENDPOINT_AUTHORIZATION_DELIVERY.md). Các endpoint `/stations`, `/charge-points`, `/charging` (đọc/quản lý thẻ), `/ocpp/connections` cũ là alias chủ trạm, luôn `owned`; vận hành dùng `/api/v1/ops/...`, quản trị đọc dùng `/api/v1/admin/...`, kế toán đọc phiên dùng `/api/v1/accounting/...`. Reset/RemoteStop/đóng tay chỉ cần vai trò operator, admin đơn thuần không được gửi lệnh. Đây là quy tắc hiện hành thay thế các mô tả quyền chung trong phần lịch sử bên dưới.
 
 API quản trị tài khoản bổ sung ngày 05/10/2026: xem
