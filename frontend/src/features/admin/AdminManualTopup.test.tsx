@@ -1,209 +1,130 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { AdminManualTopup } from './AdminManualTopup'
 import { AdminWorkspace } from './AdminWorkspace'
-
-const driver = {
-  id: 'driver-id',
-  email: 'driver@example.com',
-  roles: ['driver'],
-  status: 'active',
-}
-const response = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  })
+const driver = { id: 'driver-id', email: 'driver@example.com', roles: ['driver'], status: 'active' }
+const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status })
 const post = vi.fn()
 let fetcher: ReturnType<typeof vi.fn>
+const payload = (index = 0) => JSON.parse(post.mock.calls[index][1].body)
+const resultFor = (body: ReturnType<typeof payload>) => ({ ledger_id: 12, driver_id: driver.id, actor_id: 'admin-1', amount_vnd: body.amount_vnd, balance_after_vnd: 150000, receipt_code: 'PT-AUTO-' + body.request_id.replaceAll('-', ''), request_id: body.request_id, payment_received: true, external_reference: body.external_reference ?? null, created_at: '2026-10-10T01:00:00Z' })
 beforeEach(() => {
-  post
-    .mockReset()
-    .mockResolvedValue(
-      response(
-        {
-          ledger_id: 12,
-          amount_vnd: 100000,
-          balance_after_vnd: 150000,
-          receipt_code: 'PT-01',
-          created_at: '2026-10-10T01:00:00Z',
-        },
-        201,
-      ),
-    )
-  fetcher = vi.fn((url: string, options?: RequestInit) =>
-    options?.method === 'POST'
-      ? post(url, options)
-      : Promise.resolve(
-          response({ items: [driver], page: 1, total: 1, total_pages: 1 }),
-        ),
-  )
-  vi.stubGlobal('fetch', fetcher)
-  window.location.hash = ''
+ sessionStorage.clear()
+ post.mockReset().mockImplementation(async (_url: string, options: RequestInit) => response(resultFor(JSON.parse(String(options.body))), 201))
+ fetcher = vi.fn((url: string, options?: RequestInit) => options?.method === 'POST' ? post(url, options) : Promise.resolve(response({ items: [driver], page: 1, total: 1, total_pages: 1 })))
+ vi.stubGlobal('fetch', fetcher); window.history.replaceState(null, '', '/')
 })
-afterEach(() => vi.unstubAllGlobals())
-async function fill() {
-  render(<AdminManualTopup />)
-  fireEvent.click(await screen.findByRole('radio', { name: driver.email }))
-  fireEvent.change(screen.getByLabelText('Số tiền (VND)'), {
-    target: { value: '100000' },
-  })
-  fireEvent.change(screen.getByLabelText('Mã phiếu thu'), {
-    target: { value: ' PT-01 ' },
-  })
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); sessionStorage.clear() })
+async function fill(mount = true, reference = ' CHUNG-TU-001 ') {
+ if (mount) render(<AdminManualTopup adminId="admin-1" />)
+ fireEvent.click(await screen.findByRole('radio', { name: driver.email }))
+ fireEvent.change(screen.getByLabelText('Số tiền (VND)'), { target: { value: '100000' } })
+ fireEvent.change(screen.getByLabelText('Tham chiếu chứng từ (không bắt buộc)'), { target: { value: reference } })
 }
-it('filters active drivers and requires two confirmations before sending the exact amount and receipt', async () => {
-  await fill()
-  expect(String(fetcher.mock.calls[0][0])).toContain(
-    'role=driver&status=active',
-  )
-  fireEvent.click(screen.getByText('Tiếp tục kiểm tra'))
-  expect(post).not.toHaveBeenCalled()
-  expect(screen.getByText('100.000 VND')).toBeInTheDocument()
-  expect(screen.getByText('PT-01')).toBeInTheDocument()
-  fireEvent.click(screen.getByRole('button', { name: 'Xác nhận nạp tiền' }))
-  await screen.findByText(/Đã nạp 100.000 VND/)
-  expect(post).toHaveBeenCalledOnce()
-  expect(post.mock.calls[0][0]).toBe(
-    '/api/v1/admin/drivers/driver-id/wallet/manual-topups',
-  )
-  expect(JSON.parse(post.mock.calls[0][1].body)).toEqual({
-    amount_vnd: 100000,
-    receipt_code: 'PT-01',
-  })
-  expect(screen.getByLabelText('Mã phiếu thu')).toHaveValue('')
+function confirm() {
+ fireEvent.click(screen.getByRole('button', { name: 'Tiếp tục kiểm tra' }))
+ fireEvent.click(screen.getByRole('checkbox'))
+ fireEvent.click(screen.getByRole('button', { name: 'Xác nhận nạp tiền' }))
+}
+it('generates a UUID only after payment confirmation and sends the new contract without receipt_code', async () => {
+ const uuid = vi.spyOn(crypto, 'randomUUID'); await fill()
+ expect(String(fetcher.mock.calls[0][0])).toContain('role=driver&status=active')
+ fireEvent.click(screen.getByRole('button', { name: 'Tiếp tục kiểm tra' }))
+ expect(post).not.toHaveBeenCalled(); expect(uuid).not.toHaveBeenCalled()
+ expect(screen.getByRole('button', { name: 'Xác nhận nạp tiền' })).toBeDisabled()
+ fireEvent.click(screen.getByRole('checkbox')); fireEvent.click(screen.getByRole('button', { name: 'Xác nhận nạp tiền' }))
+ await screen.findByText(/Đã nạp 100.000 VND/)
+ expect(post).toHaveBeenCalledOnce()
+ expect(post.mock.calls[0][0]).toBe('/api/v1/admin/drivers/driver-id/wallet/manual-topups')
+ expect(payload()).toEqual({ amount_vnd: 100000, request_id: expect.stringMatching(/^[0-9a-f-]{36}$/), payment_received: true, external_reference: 'CHUNG-TU-001' })
+ expect(screen.getByText(/PT-AUTO-/)).toBeInTheDocument()
+ expect(screen.getByText('admin-1')).toBeInTheDocument()
+ expect(screen.getByText(/Số dư trên phiếu là số dư tại thời điểm/)).toBeInTheDocument()
 })
-it('blocks missing receipt inline and rejects fractional or unsafe amounts', async () => {
-  await fill()
-  fireEvent.change(screen.getByLabelText('Mã phiếu thu'), {
-    target: { value: '   ' },
-  })
-  fireEvent.change(screen.getByLabelText('Số tiền (VND)'), {
-    target: { value: '1.5' },
-  })
-  fireEvent.click(screen.getByText('Tiếp tục kiểm tra'))
-  expect(screen.getByText('Vui lòng nhập mã phiếu thu.')).toBeInTheDocument()
-  expect(
-    screen.getByText('Nhập số tiền nguyên dương bằng VND.'),
-  ).toBeInTheDocument()
-  fireEvent.change(screen.getByLabelText('Số tiền (VND)'), {
-    target: { value: '9007199254740992' },
-  })
-  fireEvent.click(screen.getByText('Tiếp tục kiểm tra'))
-  expect(post).not.toHaveBeenCalled()
-  expect(
-    screen.queryByRole('button', { name: 'Xác nhận nạp tiền' }),
-  ).not.toBeInTheDocument()
+it('omits an empty optional reference', async () => {
+ await fill(true, '   '); confirm(); await screen.findByText(/Đã nạp/)
+ expect(payload()).not.toHaveProperty('external_reference'); expect(payload()).not.toHaveProperty('receipt_code')
 })
-it('sends one POST during repeated clicks and freezes review while pending', async () => {
-  let resolve!: (value: Response) => void
-  post.mockImplementation(
-    () =>
-      new Promise<Response>((done) => {
-        resolve = done
-      }),
-  )
-  await fill()
-  fireEvent.click(screen.getByText('Tiếp tục kiểm tra'))
-  const confirm = screen.getByRole('button', { name: 'Xác nhận nạp tiền' })
-  fireEvent.click(confirm)
-  fireEvent.click(confirm)
-  expect(post).toHaveBeenCalledOnce()
-  expect(screen.getByText('Quay lại chỉnh sửa')).toBeDisabled()
-  resolve(
-    response(
-      {
-        ledger_id: 12,
-        amount_vnd: 100000,
-        balance_after_vnd: 150000,
-        receipt_code: 'PT-01',
-        created_at: '2026-10-10T01:00:00Z',
-      },
-      201,
-    ),
-  )
-  await screen.findByText(/Đã nạp/)
+it('rejects fractional and unsafe amounts', async () => {
+ await fill()
+ for (const amount of ['1.5', '9007199254740992', '0', '-1']) {
+  fireEvent.change(screen.getByLabelText('Số tiền (VND)'), { target: { value: amount } })
+  fireEvent.click(screen.getByRole('button', { name: 'Tiếp tục kiểm tra' }))
+  expect(screen.getByText('Nhập số tiền nguyên dương bằng VND.')).toBeInTheDocument()
+ }
+ expect(post).not.toHaveBeenCalled()
 })
-it.each([
-  ['receipt_already_used', 'Mã phiếu thu đã được sử dụng.'],
-  ['wallet_locked', 'Ví tài xế đang bị khóa.'],
-])('explains conflict %s without automatic retries', async (code, message) => {
-  post.mockResolvedValue(response({ detail: code }, 409))
-  await fill()
-  fireEvent.click(screen.getByText('Tiếp tục kiểm tra'))
-  fireEvent.click(screen.getByText('Xác nhận nạp tiền', { selector: 'button' }))
-  await screen.findByText(new RegExp(message))
-  expect(post).toHaveBeenCalledOnce()
+it('sends once and freezes confirmation during repeated clicks', async () => {
+ let resolve!: (value: Response) => void
+ post.mockImplementation(() => new Promise<Response>(done => { resolve = done }))
+ await fill(); confirm(); fireEvent.click(screen.getByRole('button', { name: 'Đang nạp tiền…' }))
+ expect(post).toHaveBeenCalledOnce()
+ expect(screen.getByRole('button', { name: 'Quay lại chỉnh sửa' })).toBeDisabled(); expect(screen.getByRole('checkbox')).toBeDisabled()
+ resolve(response(resultFor(payload()), 201)); await screen.findByText(/Đã nạp/)
 })
-it('maps server amount limit validation back to the amount field', async () => {
-  post.mockResolvedValue(
-    response(
-      {
-        detail: [
-          {
-            loc: ['body', 'amount_vnd'],
-            msg: 'Amount exceeds manual topup limit',
-          },
-        ],
-      },
-      422,
-    ),
-  )
-  await fill()
-  fireEvent.click(screen.getByText('Tiếp tục kiểm tra'))
-  fireEvent.click(screen.getByText('Xác nhận nạp tiền', { selector: 'button' }))
-  await screen.findByText('Dữ liệu chưa hợp lệ. Quay lại để sửa thông tin.')
-  fireEvent.click(screen.getByText('Quay lại chỉnh sửa'))
-  expect(screen.getByLabelText('Số tiền (VND)')).toHaveAttribute(
-    'aria-invalid',
-    'true',
-  )
-  expect(screen.getByText(/vượt hạn mức/)).toBeInTheDocument()
+it('retains the exact key and body after lost response and remount', async () => {
+ post.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+ await fill(); confirm(); await screen.findByText(/Chưa xác định được kết quả nạp/)
+ const original = payload()
+ expect(screen.getByRole('button', { name: 'Quay lại chỉnh sửa' })).toBeDisabled()
+ cleanup(); render(<AdminManualTopup adminId="admin-1" />)
+ expect(screen.getByRole('checkbox')).toBeChecked()
+ fireEvent.click(screen.getByRole('button', { name: 'Thử lại cùng khoản thu' }))
+ await screen.findByText(/Đã nạp/)
+ expect(payload(1)).toEqual(original); expect(sessionStorage.getItem('csms:manual-topup:admin-1')).toBeNull()
 })
-it('keeps receipt after uncertain network result and never retries automatically', async () => {
-  post.mockRejectedValue(new TypeError('Failed to fetch'))
-  await fill()
-  fireEvent.click(screen.getByText('Tiếp tục kiểm tra'))
-  fireEvent.click(screen.getByText('Xác nhận nạp tiền', { selector: 'button' }))
-  await screen.findByText(/giữ nguyên mã phiếu thu/)
-  expect(post).toHaveBeenCalledOnce()
-  fireEvent.click(screen.getByText('Quay lại chỉnh sửa'))
-  expect(screen.getByLabelText('Mã phiếu thu')).toHaveValue(' PT-01 ')
+it('keeps request identity after a timeout without automatic retries', async () => {
+ await fill()
+ post.mockImplementation((_url: string, options: RequestInit) => new Promise((_resolve, reject) => options.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')))))
+ vi.useFakeTimers(); confirm()
+ await act(async () => { await vi.advanceTimersByTimeAsync(30000) })
+ expect(screen.getByText(/Chưa xác định được kết quả nạp/)).toBeInTheDocument(); expect(post).toHaveBeenCalledOnce()
+ expect(JSON.parse(sessionStorage.getItem('csms:manual-topup:admin-1')!).requestId).toBe(payload().request_id)
+ expect(screen.getByRole('button', { name: 'Thử lại cùng khoản thu' })).toBeEnabled()
 })
-it('hides the workspace and makes no request for non-admin even with a topup hash', () => {
-  window.location.hash = '#admin-topup'
-  render(
-    <AdminWorkspace
-      currentUser={{ id: 'driver-id', email: driver.email, roles: ['driver'] }}
-      onLogout={async () => {}}
-    />,
-  )
-  expect(screen.queryByText('Nạp tiền thủ công')).not.toBeInTheDocument()
-  expect(fetcher).not.toHaveBeenCalled()
+it('blocks request conflicts without changing key or retrying', async () => {
+ const uuid = vi.spyOn(crypto, 'randomUUID')
+ post.mockResolvedValue(response({ detail: 'manual_topup_request_conflict' }, 409))
+ await fill(); confirm(); await screen.findByText(/Mã yêu cầu đã được dùng/)
+ expect(screen.getByRole('button', { name: 'Thử lại cùng khoản thu' })).toBeDisabled()
+ expect(screen.getByRole('button', { name: 'Quay lại chỉnh sửa' })).toBeDisabled()
+ expect(uuid).toHaveBeenCalledOnce(); expect(post).toHaveBeenCalledOnce()
 })
-it('ignores stale search results after a newer query', async () => {
-  let resolve!: (value: Response) => void
-  fetcher.mockImplementationOnce(
-    () =>
-      new Promise<Response>((done) => {
-        resolve = done
-      }),
-  )
-  render(<AdminManualTopup />)
-  await waitFor(() => expect(fetcher).toHaveBeenCalledOnce())
-  fireEvent.change(screen.getByLabelText('Tìm tài xế theo email'), {
-    target: { value: 'driver@' },
-  })
-  await screen.findByRole('radio', { name: driver.email })
-  resolve(
-    response({
-      items: [{ ...driver, email: 'stale@example.com' }],
-      page: 1,
-      total: 1,
-      total_pages: 1,
-    }),
-  )
-  await waitFor(() =>
-    expect(screen.queryByText('stale@example.com')).not.toBeInTheDocument(),
-  )
+it('allows corrections after validation rejection while retaining original identity', async () => {
+ post.mockResolvedValueOnce(response({ detail: [{ loc: ['body', 'amount_vnd'], msg: 'Amount exceeds limit' }] }, 422))
+ await fill(); confirm(); await screen.findByText('Dữ liệu chưa hợp lệ. Quay lại để sửa thông tin.')
+ const key = payload().request_id
+ fireEvent.click(screen.getByRole('button', { name: 'Quay lại chỉnh sửa' }))
+ expect(screen.getByLabelText('Số tiền (VND)')).toHaveAttribute('aria-invalid', 'true')
+ fireEvent.change(screen.getByLabelText('Số tiền (VND)'), { target: { value: '50000' } })
+ confirm(); await screen.findByText(/Đã nạp/); expect(payload(1).request_id).toBe(key)
+})
+it('uses a new UUID only for a new receipt after success', async () => {
+ await fill(); confirm(); await screen.findByText(/Đã nạp/); const oldKey = payload().request_id
+ fireEvent.click(screen.getByRole('button', { name: 'Ghi nhận khoản thu mới' }))
+ await fill(false); confirm(); await screen.findByText(/Đã nạp/); expect(payload(1).request_id).not.toBe(oldKey)
+})
+it('does not send when persistence is unavailable', async () => {
+ await fill(); vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('Storage blocked') }); confirm()
+ expect(screen.getByText(/Không lưu được mã yêu cầu/)).toBeInTheDocument(); expect(post).not.toHaveBeenCalled()
+})
+it('does not restore another admin receipt', async () => {
+ post.mockRejectedValueOnce(new TypeError('Failed to fetch')); await fill(); confirm(); await screen.findByText(/Chưa xác định được kết quả nạp/)
+ cleanup(); render(<AdminManualTopup adminId="admin-2" />)
+ expect(screen.queryByRole('button', { name: 'Thử lại cùng khoản thu' })).not.toBeInTheDocument()
+ expect(screen.getByRole('button', { name: 'Tiếp tục kiểm tra' })).toBeInTheDocument()
+})
+it('hides workspace and sends no request for non-admin', () => {
+ window.location.hash = '#admin-topup'
+ render(<AdminWorkspace currentUser={{ id: driver.id, email: driver.email, roles: ['driver'] }} onLogout={async () => {}} />)
+ expect(screen.queryByText('Nạp tiền thủ công')).not.toBeInTheDocument(); expect(fetcher).not.toHaveBeenCalled()
+})
+it('ignores stale driver search responses', async () => {
+ let resolve!: (value: Response) => void
+ fetcher.mockImplementationOnce(() => new Promise<Response>(done => { resolve = done }))
+ render(<AdminManualTopup adminId="admin-1" />); await waitFor(() => expect(fetcher).toHaveBeenCalledOnce())
+ fireEvent.change(screen.getByLabelText('Tìm tài xế theo email'), { target: { value: 'driver@' } })
+ await screen.findByRole('radio', { name: driver.email })
+ resolve(response({ items: [{ ...driver, email: 'stale@example.com' }], page: 1, total: 1, total_pages: 1 }))
+ await waitFor(() => expect(screen.queryByText('stale@example.com')).not.toBeInTheDocument())
 })

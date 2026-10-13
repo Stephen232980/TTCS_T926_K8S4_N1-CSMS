@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.config import settings
 from src.modules.charging.driver import remote_start, start_result
 from src.modules.charging.driver_models import DriverStartRequest
 from src.modules.charging.models import ChargingSession, MeterSample
@@ -29,6 +30,8 @@ from src.modules.identity.dependencies import (
 from src.modules.identity.policy_routing import PolicyRoute
 from src.modules.identity.repository import IdentityRepository
 from src.modules.identity.security import hash_session_token
+from src.modules.ocpp.control import command_status, execute_command
+from src.modules.ocpp.control_models import ControlRequest
 from src.modules.stations.connector_status import connector_status_group
 from src.modules.stations.models import ChargePoint, Connector, Station
 from src.platform.database.session import SessionFactory, get_db_session
@@ -41,6 +44,11 @@ router = APIRouter(
 )
 Database = Annotated[AsyncSession, Depends(get_db_session)]
 STREAM_INTERVAL_SECONDS = 0.5
+
+
+class SessionCommandBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    request_id: UUID
 
 
 class StartBody(BaseModel):
@@ -92,6 +100,15 @@ async def owned_session(
                 ).total_seconds()
             ),
         ),
+        "connector_released_at": transaction.connector_released_at,
+        "awaiting_unplug": transaction.billing_lifecycle_version == 1
+        and transaction.ended_at is not None
+        and transaction.connector_released_at is None,
+        "demo_unplug_available": settings.demo_driver_unplug_enabled
+        and transaction.release_detection == "available"
+        and charger is not None
+        and charger.code.upper().startswith("DEMO-STG-")
+        and transaction.connector_released_at is None,
         "needs_attention": transaction.abnormal_since is not None
         or bool(transaction.review_reasons),
     }
@@ -107,6 +124,17 @@ async def current_snapshot(session: AsyncSession, driver_id: UUID) -> dict[str, 
         .order_by(ChargingSession.started_at.desc())
         .limit(1)
     )
+    waiting = await session.scalar(
+        select(ChargingSession)
+        .where(
+            ChargingSession.driver_id == driver_id,
+            ChargingSession.ended_at.is_not(None),
+            ChargingSession.connector_released_at.is_(None),
+            ChargingSession.billing_lifecycle_version == 1,
+        )
+        .order_by(ChargingSession.started_at.desc())
+        .limit(1)
+    )
     request = await session.scalar(
         select(DriverStartRequest)
         .where(DriverStartRequest.driver_id == driver_id)
@@ -116,6 +144,7 @@ async def current_snapshot(session: AsyncSession, driver_id: UUID) -> dict[str, 
     return {
         "session": await owned_session(session, transaction) if transaction else None,
         "start_request": start_result(request) if request else None,
+        "awaiting_unplug": await owned_session(session, waiting) if waiting else None,
     }
 
 
@@ -259,3 +288,64 @@ async def connectors(station_id: UUID, session: Database) -> dict[str, object]:
             for row in rows
         ]
     }
+
+
+@router.post("/charging/sessions/{session_id}/stop")
+@user_policy("driver.session.stop", "own", "driver")
+async def stop_session(
+    session_id: int,
+    body: SessionCommandBody,
+    actor: CurrentActorDependency,
+    authorization: AuditEvidence,
+    session: Database,
+) -> dict[str, object]:
+    await session.commit()
+    return await execute_command(
+        actor.user_id,
+        body.request_id,
+        "RemoteStopTransaction",
+        session_id,
+        authorization=authorization,
+        driver_id=actor.user_id,
+    )
+
+
+@router.post("/charging/sessions/{session_id}/demo-unplug")
+@user_policy("driver.session.demo_unplug", "own", "driver")
+async def demo_unplug(
+    session_id: int,
+    body: SessionCommandBody,
+    actor: CurrentActorDependency,
+    authorization: AuditEvidence,
+    session: Database,
+) -> dict[str, object]:
+    await session.commit()
+    return await execute_command(
+        actor.user_id,
+        body.request_id,
+        "DataTransfer",
+        session_id,
+        authorization=authorization,
+        driver_id=actor.user_id,
+    )
+
+
+@router.get("/charging/commands/{command_id}")
+@user_policy("driver.session.command_read", "own", "driver")
+async def session_command(
+    command_id: UUID, actor: CurrentActorDependency, session: Database
+) -> dict[str, object]:
+    command = await session.get(ControlRequest, command_id)
+    if command is None:
+        raise HTTPException(404, "resource_not_found")
+    if command.actor_id != actor.user_id or command.permission not in {
+        "driver.session.stop",
+        "driver.session.demo_unplug",
+    }:
+        raise HTTPException(403, "permission_denied")
+    if (
+        command.permission == "driver.session.demo_unplug"
+        and not settings.demo_driver_unplug_enabled
+    ):
+        raise HTTPException(404, "demo_unplug_disabled")
+    return {"id": command.id, "status": await command_status(session, command.id)}

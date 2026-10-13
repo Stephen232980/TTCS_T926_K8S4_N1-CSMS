@@ -571,6 +571,7 @@ async def test_api_owner_scope_cards_samples_pending_and_driver_denied(db_sessio
         ) as client:
             own = await client.get("/api/v1/charging/sessions")
             assert own.status_code == 200 and own.json()["items"][0]["id"] == tid
+            assert own.json()["items"][0]["station_id"] == str(station.id)
             assert tag not in own.text
             assert (
                 await client.get(f"/api/v1/charging/sessions/{tid}/samples")

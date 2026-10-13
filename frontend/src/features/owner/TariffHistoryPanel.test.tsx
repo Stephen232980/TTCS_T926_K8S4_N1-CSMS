@@ -4,6 +4,11 @@ import { TariffHistoryPanel } from './TariffHistoryPanel'
 import type { TariffVersion } from './tariffApi'
 
 afterEach(() => vi.unstubAllGlobals())
+function renderExpanded(node: Parameters<typeof render>[0]) {
+  const view = render(node)
+  fireEvent.click(screen.getByText('Lịch sử phiên bản biểu giá'))
+  return view
+}
 const today = '2026-10-10'
 const version = (
   id: string,
@@ -85,7 +90,7 @@ function mockApi(
 
 it('shows two versions, locks effective versions and reuses the creation form', async () => {
   mockApi()
-  render(<TariffHistoryPanel stationId="station" />)
+  renderExpanded(<TariffHistoryPanel stationId="station" />)
   expect(await screen.findByText('Đang áp dụng')).toBeInTheDocument()
   expect(screen.getByText('Sắp hiệu lực')).toBeInTheDocument()
   expect(
@@ -104,7 +109,7 @@ it('shows two versions, locks effective versions and reuses the creation form', 
 
 it('prefills and edits future bands, preserves labels and exact BIGINT, then reloads history', async () => {
   const fetcher = mockApi()
-  render(<TariffHistoryPanel stationId="station" />)
+  renderExpanded(<TariffHistoryPanel stationId="station" />)
   fireEvent.click(
     await screen.findByRole('button', { name: 'Sửa biểu giá 2026-10-11' }),
   )
@@ -135,7 +140,7 @@ it('prefills and edits future bands, preserves labels and exact BIGINT, then rel
 
 it('blocks an edit when the server reports the version became immutable', async () => {
   const fetcher = mockApi({ reject: 'tariff_immutable' })
-  render(<TariffHistoryPanel stationId="station" />)
+  renderExpanded(<TariffHistoryPanel stationId="station" />)
   fireEvent.click(
     await screen.findByRole('button', { name: 'Sửa biểu giá 2026-10-11' }),
   )
@@ -155,7 +160,7 @@ it('blocks an edit when the server reports the version became immutable', async 
 
 it('keeps the edit form and values on a duplicate-date rejection', async () => {
   mockApi({ reject: 'tariff_duplicate_date' })
-  render(<TariffHistoryPanel stationId="station" />)
+  renderExpanded(<TariffHistoryPanel stationId="station" />)
   fireEvent.click(
     await screen.findByRole('button', { name: 'Sửa biểu giá 2026-10-11' }),
   )
@@ -176,7 +181,7 @@ it('keeps the edit form and values on a duplicate-date rejection', async () => {
 
 it('cancels without writes and can retry a failed history read', async () => {
   const fetcher = mockApi({ historyFailure: true })
-  render(<TariffHistoryPanel stationId="station" />)
+  renderExpanded(<TariffHistoryPanel stationId="station" />)
   fireEvent.click(
     await screen.findByRole('button', { name: 'Tải lại lịch sử' }),
   )
@@ -194,7 +199,7 @@ it('cancels without writes and can retry a failed history read', async () => {
 
 it('refreshes history after creating a future version', async () => {
   const fetcher = mockApi()
-  render(<TariffHistoryPanel stationId="station" />)
+  renderExpanded(<TariffHistoryPanel stationId="station" />)
   await screen.findByRole('button', { name: 'Lưu biểu giá' })
   fireEvent.change(screen.getByLabelText('Ngày hiệu lực'), {
     target: { value: '2026-10-12' },

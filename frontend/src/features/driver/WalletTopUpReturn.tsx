@@ -94,13 +94,14 @@ export function WalletTopUpReturn({ transactionId, getStatus, onResolved, onSucc
 
   return <section className="driver-wallet-page" aria-label="Trạng thái nạp tiền">
     <h2>Trạng thái nạp tiền</h2>
-    {transactionId ? <p>Mã đơn: <strong>{transactionId}</strong></p> : <p role="alert">URL quay về thiếu mã đơn order_code. Không thể xác minh thanh toán.</p>}
+    {transactionId ? <p>Mã đơn: <strong>{transactionId}</strong></p> : <p role="alert">Chưa tìm thấy mã giao dịch để kiểm tra thanh toán. Hãy quay lại ví để kiểm tra lịch sử; nếu bạn đã thanh toán nhưng chưa nhận tiền, liên hệ hỗ trợ kèm thông tin thanh toán.</p>}
     {transactionId && result.status === 'pending' && !timedOut && !error && <p role="status">Đang chờ hệ thống xác nhận giao dịch...</p>}
     {transactionId && timedOut && result.status === 'pending' && !error && <p role="status">Đã hết thời gian chờ tự động (2 phút). Giao dịch chưa được xác nhận, vui lòng kiểm tra lại.</p>}
-    {result.status === 'succeeded' && <p role="status">Backend đã xác nhận nạp tiền thành công.{loadingWallet && ' Đang tải lại thông tin ví...'}</p>}
-    {result.status === 'failed' && <p role="alert">Nạp tiền thất bại.{result.reason && ` Lý do: ${result.reason}`}</p>}
-    {result.status === 'cancelled' && <p role="status">Giao dịch đã bị huỷ.{result.reason && ` Lý do: ${result.reason}`}</p>}
-    {result.status === 'needs_review' && <p role="status">Giao dịch đang cần kiểm tra thủ công. Chưa thể xác nhận tiền đã vào ví.{result.reason && ` Chi tiết: ${result.reason}`}</p>}
+    {result.status === 'succeeded' && <p role="status">Nạp tiền thành công.{loadingWallet && ' Đang cập nhật số dư ví...'}</p>}
+    {result.status === 'failed' && <p role="alert">Nạp tiền thất bại. Kiểm tra lịch sử ví trước khi nạp lại. Nếu tài khoản thanh toán đã bị trừ tiền, hãy liên hệ hỗ trợ kèm mã đơn.</p>}
+    {result.status === 'cancelled' && <p role="status">Giao dịch đã bị huỷ. Bạn có thể quay lại ví để kiểm tra số dư và nạp lại khi cần.</p>}
+    {result.status === 'needs_review' && <p role="status">Giao dịch cần được kiểm tra thêm; chưa xác nhận tiền đã vào ví. Hãy liên hệ hỗ trợ và cung cấp mã đơn phía trên.</p>}
+    {result.reason && <details><summary>Thông tin phản hồi giao dịch</summary><p>{result.reason}</p></details>}
     {error && <p role="alert" className="driver-wallet-error">{error}</p>}
     {transactionId && (timedOut || (error && result.status === 'pending')) && <button type="button" className="secondary-button" onClick={retryStatus}>Kiểm tra lại trạng thái đơn</button>}
     {onBack && <button type="button" className="secondary-button" onClick={onBack}>Về Ví của tôi</button>}

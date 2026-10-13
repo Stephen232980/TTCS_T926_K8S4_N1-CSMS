@@ -43,6 +43,18 @@ const navigation: { area: Area; label: string; icon: IconName }[] = [
   { area: 'power', label: 'Công suất', icon: 'bolt' },
 ]
 
+function ownerRoute() {
+  const [path, query] = window.location.hash.slice(1).split('?')
+  return {
+    area: navigation.find(item => item.area === path)?.area ?? 'stations' as Area,
+    stationId: new URLSearchParams(query).get('station'),
+  }
+}
+
+function ownerHash(area: Area, stationId?: string | null) {
+  return `#${area}${stationId ? `?${new URLSearchParams({ station: stationId })}` : ''}`
+}
+
 export function Telemetry({
   charger,
   connector,
@@ -195,7 +207,7 @@ export function Telemetry({
             <div>
               <span>Tiền tạm tính</span>
               <strong>—</strong>
-              <small>Chưa có biểu giá</small>
+              <small>Chưa có dữ liệu tạm tính</small>
             </div>
           </div>
           {Array.from(latest.values())
@@ -270,12 +282,14 @@ export function OwnerWorkspace({
   stationApi?: StationApi
   chargePointApi?: ChargePointApi
 }) {
-  const [area, setArea] = useState<Area>('stations')
+  const [area, updateArea] = useState<Area>(() => ownerRoute().area)
+  const [routeStationId, setRouteStationId] = useState(() => ownerRoute().stationId)
   const [stations, setStations] = useState<PaginatedResult<Station> | null>(
     null,
   )
   const [station, setStation] = useState<Station | null>(null)
   const [chargers, setChargers] = useState<ChargePointPage | null>(null)
+  const [chargerTotal, setChargerTotal] = useState<number | null>(null)
   const [connections, setConnections] = useState<Connection[]>([])
   const [connectionError, setConnectionError] = useState('')
   const [selected, setSelected] = useState<{
@@ -305,6 +319,35 @@ export function OwnerWorkspace({
   const menuRef = useRef<HTMLButtonElement>(null)
   const [loggingOut, setLoggingOut] = useState(false)
   const [logoutError, setLogoutError] = useState('')
+  function setArea(next: Area) {
+    updateArea(next)
+    window.location.assign(ownerHash(next, station?.id))
+  }
+  useEffect(() => {
+    const change = () => {
+      const route = ownerRoute()
+      updateArea(route.area)
+      setRouteStationId(route.stationId)
+      setSelected(null)
+      setForm(null)
+      setMenu(false)
+    }
+    window.addEventListener('hashchange', change)
+    return () => window.removeEventListener('hashchange', change)
+  }, [])
+  useEffect(() => {
+    if (!routeStationId) {
+      const timer = window.setTimeout(() => setStation(null), 0)
+      return () => window.clearTimeout(timer)
+    }
+    const controller = new AbortController()
+    void stationApi.getStation(routeStationId, controller.signal).then(value => {
+      if (!controller.signal.aborted) { setStation(value); setChargerPage(1); setChargerSearch('') }
+    }).catch(() => {
+      if (!controller.signal.aborted) setError('Không tải được trạm từ liên kết. Hãy thử lại.')
+    })
+    return () => controller.abort()
+  }, [routeStationId, stationApi, revision])
   const stationId = station?.id
   useEffect(() => {
     const query = window.matchMedia?.('(max-width: 800px)')
@@ -365,12 +408,24 @@ export function OwnerWorkspace({
       if (running) return
       running = true
       try {
-        const value = await chargePointApi.listChargePoints(
+        let value = await chargePointApi.listChargePoints(
           stationId!,
           chargerPage,
           20,
           controller.signal,
         )
+        if (!controller.signal.aborted) setChargerTotal(value.total)
+        if (chargerSearch.trim()) {
+          const all = [...value.items]
+          for (let nextPage = 1; nextPage <= value.totalPages; nextPage++) {
+            if (nextPage === chargerPage) continue
+            const next = await chargePointApi.listChargePoints(stationId!, nextPage, 20, controller.signal)
+            all.push(...next.items)
+          }
+          const query = chargerSearch.trim().toLocaleLowerCase('vi')
+          const matches = all.filter(item => `${item.code} ${item.name ?? ''}`.toLocaleLowerCase('vi').includes(query))
+          value = { ...value, items: matches, total: matches.length, totalPages: 1, page: 1 }
+        }
         if (!controller.signal.aborted) {
           setChargers(value)
           setError('')
@@ -406,27 +461,26 @@ export function OwnerWorkspace({
         running = false
       }
     }
-    void load()
+    const searchTimer = window.setTimeout(() => void load(), chargerSearch.trim() ? 250 : 0)
     const timer = window.setInterval(() => {
       if (!document.hidden && !form) void load()
     }, 5000)
     return () => {
       controller.abort()
+      window.clearTimeout(searchTimer)
       window.clearInterval(timer)
     }
-  }, [stationId, stationApi, chargePointApi, chargerPage, revision, form])
+  }, [stationId, stationApi, chargePointApi, chargerPage, chargerSearch, revision, form])
   function open(record: Station) {
+    window.location.assign(ownerHash(area, record.id))
     setStation(record)
     setChargers(null)
+    setChargerTotal(null)
     setSelected(null)
     setChargerPage(1)
     setChargerSearch('')
     setError('')
   }
-  useEffect(() => {
-    if (area === 'tariffs' && station) document.getElementById('owner-selected-tariff')?.scrollIntoView?.({block: 'start'})
-  }, [area, station])
-
   async function logout() {
     setLoggingOut(true)
     setLogoutError('')
@@ -451,7 +505,7 @@ export function OwnerWorkspace({
           href="#stations"
           className="owner-brand"
           onClick={() => {
-            setArea('stations')
+            updateArea('stations')
             setStation(null)
             setForm(null)
             setMenu(false)
@@ -464,12 +518,11 @@ export function OwnerWorkspace({
           {navigation.map((item) => (
             <a
               key={item.area}
-              href={`#${item.area}`}
+              href={ownerHash(item.area, station?.id)}
               className={area === item.area ? 'is-active' : ''}
               aria-current={area === item.area ? 'page' : undefined}
               onClick={() => {
                 setArea(item.area)
-                if (item.area === 'tariffs') setStation(null)
                 setForm(null)
                 setError('')
                 setMenu(false)
@@ -570,6 +623,7 @@ export function OwnerWorkspace({
                   <button
                     className="text-button"
                     onClick={() => {
+                      window.location.hash = ownerHash(area)
                       setStation(null)
                       setSelected(null)
                       setError('')
@@ -594,7 +648,7 @@ export function OwnerWorkspace({
                       <Icon name="edit" />
                       Thông tin trạm
                     </button>
-                    <button
+                    {area === 'stations' && <button
                       className="primary-button"
                       onClick={() => {
                         setEditingCharger(undefined)
@@ -603,7 +657,7 @@ export function OwnerWorkspace({
                     >
                       <Icon name="plus" />
                       Thêm trụ
-                    </button>
+                    </button>}
                   </>
                 ) : (
                   <button
@@ -771,14 +825,18 @@ export function OwnerWorkspace({
               </>
             ) : (
               <>
+                <nav className="owner-station-sections" aria-label="Nội dung trạm">
+                  <button type="button" aria-pressed={area === 'stations'} onClick={() => setArea('stations')}>Khu sạc</button>
+                  <button type="button" aria-pressed={area === 'tariffs'} onClick={() => setArea('tariffs')}>Biểu giá</button>
+                </nav>
                 <div className="owner-toolbar owner-statusbar">
                   <strong
                     className={`owner-station-status status-${station.status}`}
                   >
                     {statusLabel[station.status]}
                   </strong>
-                  <span>{chargers?.total ?? '—'} trụ</span>
-                  <div className="owner-legend">
+                  <span>{chargerTotal ?? '—'} trụ</span>
+                  {area === 'stations' && <div className="owner-legend">
                     {['available', 'charging', 'faulted', 'unknown'].map(
                       (key) => (
                         <span key={key} className={`connector-${key}`}>
@@ -787,51 +845,58 @@ export function OwnerWorkspace({
                         </span>
                       ),
                     )}
-                  </div>
+                  </div>}
                 </div>
-                {connectionError && (
+                {area === 'stations' && connectionError && (
                   <p className="owner-subtle" role="status">
                     {connectionError}
                   </p>
                 )}
-                <div className="owner-tariff-scroll" id="owner-selected-tariff">
+                {area === 'tariffs' ? <div className="owner-tariff-scroll owner-grow" role="region" aria-label="Biểu giá của trạm" tabIndex={0}>
                   <TariffHistoryPanel key={station.id} stationId={String(station.id)} />
-                </div>
-
-                <div className="owner-detail-grid owner-grow">
+                </div> : <div className="owner-detail-grid owner-grow">
                   <section className="owner-chargers">
                     <header>
                       <h2>Khu sạc</h2>
                       <input
                         type="search"
-                        aria-label="Tìm trụ trên trang"
-                        placeholder="Tìm trụ trên trang"
+                        aria-label="Tìm trụ trong trạm"
+                        placeholder="Tìm trụ trong trạm"
                         value={chargerSearch}
-                        onChange={(event) =>
+                        onChange={(event) => {
                           setChargerSearch(event.target.value)
-                        }
+                          setChargerPage(1)
+                          setChargers(null)
+                          setSelected(null)
+                        }}
                       />
                     </header>
                     <div className="owner-scroll owner-grow">
                       <div className="owner-charger-grid">
                         {chargers?.items
-                          .filter((item) =>
-                            `${item.code} ${item.name ?? ''}`
-                              .toLowerCase()
-                              .includes(chargerSearch.toLowerCase()),
-                          )
                           .map((charger) => {
                             const connection = connections.find(
                               (item) => item.id === charger.id,
                             )
+                            const defaultConnector = charger.connectors.find(item => item.connectorNumber === 1) ?? charger.connectors[0]
+                            const openCharger = () => {
+                              if (defaultConnector) setSelected({ charger, connector: defaultConnector })
+                            }
                             return (
                               <article
                                 key={charger.id}
                                 className={`owner-charger-card${selected?.charger.id === charger.id ? ' is-selected' : ''}`}
+                                onClick={(event) => {
+                                  if (!(event.target as HTMLElement).closest('button')) openCharger()
+                                }}
                               >
                                 <header>
-                                  <strong>
-                                    {charger.name || charger.code}
+                                  <strong title={charger.name || charger.code}>
+                                    <button type="button" className="owner-charger-open" disabled={!defaultConnector}
+                                      aria-label={`Xem trụ ${charger.name || charger.code}`}
+                                      onClick={openCharger}>
+                                      {charger.name || charger.code}
+                                    </button>
                                   </strong>
                                   <span
                                     className={`owner-connection ${connection?.online ? 'is-online' : ''}`}
@@ -899,7 +964,8 @@ export function OwnerWorkspace({
                             )
                           })}
                       </div>
-                      {chargers?.items.length === 0 && (
+                      {chargers?.items.length === 0 && chargerSearch.trim() && <p role="status">Không tìm thấy trụ khớp “{chargerSearch}” trong trạm này.</p>}
+                      {chargers?.items.length === 0 && !chargerSearch.trim() && (
                         <div className="owner-placeholder">
                           <h2>Chưa có trụ sạc</h2>
                           <p>
@@ -913,7 +979,7 @@ export function OwnerWorkspace({
                     </div>
                     <footer className="owner-charger-pagination">
                       <span>
-                        Trang {chargerPage} / {chargers?.totalPages || 1}
+                        {chargerSearch.trim() ? `${chargers?.total ?? '…'} trụ phù hợp` : `Trang ${chargerPage} / ${chargers?.totalPages || 1}`}
                       </span>
                       <button
                         disabled={chargerPage <= 1}
@@ -941,6 +1007,11 @@ export function OwnerWorkspace({
                     {selectedCharger && selectedConnector ? (
                       <>
                         <h2>{selectedCharger.name || selectedCharger.code}</h2>
+                        <p className="owner-full-code">Mã trụ: {selectedCharger.code}</p>
+                        <button type="button" className="secondary-button" onClick={async () => {
+                          try { await navigator.clipboard.writeText(selectedCharger.code); setNotice('Đã sao chép mã trụ.') }
+                          catch { setNotice('Không sao chép được. Bạn có thể chọn mã trụ phía trên để sao chép.') }
+                        }}>Sao chép mã trụ</button>
                         <p>Đầu nối {selectedConnector.connectorNumber}</p>
                         <p className="owner-contact"><ConnectionSymbol online={selectedConnection?.online} /> {selectedConnection ? selectedConnection.online ? 'Trực tuyến' : 'Ngoại tuyến' : 'Chưa có dữ liệu kết nối'}</p>
                         <p className="owner-subtle">Liên lạc cuối: {clock(selectedConnection?.last_seen_at ?? null)}</p>
@@ -963,7 +1034,7 @@ export function OwnerWorkspace({
                       </div>
                     )}
                   </aside>
-                </div>
+                </div>}
               </>
             )}
           </section>

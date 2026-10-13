@@ -201,6 +201,7 @@ describe('DriverWalletPage (S-40 / T-100)', () => {
       render(<DriverWalletPage walletApi={{getWallet: vi.fn().mockResolvedValue(mockWallet), getTransactions: vi.fn().mockResolvedValue({items:[item],next_cursor:null,has_more:false})}} />)
       await userEvent.click(await screen.findByRole('button', {name:'Xem lần nạp'}))
       const detail = await screen.findByRole('region', {name:'Chi tiết lần nạp'})
+      expect(detail.closest('article')).not.toBeNull()
       expect(detail).toHaveTextContent('real-order')
       expect(detail).toHaveTextContent('Thành công')
       expect(fetcher).toHaveBeenCalledWith('/api/v1/driver/wallet/transactions/1', {credentials:'include',signal:expect.any(AbortSignal)})

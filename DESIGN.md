@@ -150,6 +150,10 @@ Heading sizes tighten to (26px) for the compact desktop height rule and (24px) o
 
 ## Layout
 
+Station details separate equipment and tariffs with a two-button section selector. Only the selected section is mounted: equipment keeps the flexible grid/detail space, while tariff history and its create/edit form share one flexible scroll region. Switching sections keeps the selected station; the sidebar tariff entry also keeps it when one is open. Charger creation is shown in the equipment section. Tariffs no longer consume up to 55dvh above the equipment grid.
+
+Tariff history is a native disclosure, collapsed initially, with its version count visible in the summary. Expanding reveals the version list and pagination; the current tariff and create/edit form remain outside the disclosure. Its summary supports keyboard activation and the workspace focus styling.
+
 The desktop shell fills (100dvh), hides outer overflow and uses a (220px) sidebar plus a flexible main column. Pages are flex columns; base padding is (26px 30px 22px) with (16px) gaps, overridden on desktop (width above 800px) by (20px 24px 16px) padding and (12px) gaps. Selected-session pages tighten the gap to (8px). Long station lists, charger grids, detail panes and wizard content scroll internally; flexible regions set `min-height: 0`. Scroll containers contain overscroll. Headers and action footers remain separate from these regions.
 
 Station and charger grids start at three columns. Detail uses a flexible equipment region and a second column of `minmax(280px, 31%)`. Wizard columns are (0.9fr / 1.1fr) with a (32px) gap. Sessions use two-column card grids, and session facts use four columns. These are workspace patterns, not mandatory page compositions for other roles.

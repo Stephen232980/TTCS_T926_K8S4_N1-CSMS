@@ -479,9 +479,21 @@ export function OwnerCharging({ initialSessionId, onInitialSessionOpened, area =
             })}
           </div>}
           {selected.review_reasons.length > 0 && (
-            <p className="owner-error">
-              Cần kiểm tra · {selected.review_reasons.map(reason => reviewLabels[reason] ?? reason).join(', ')}
-            </p>
+            <details key={selected.id} className="owner-error owner-session-guidance" aria-label="Hướng dẫn kiểm tra phiên">
+              <summary>
+                <Icon name="chevronRight" />
+                <span>{selected.review_reasons.includes('invoice_missing_tariff') ? 'Chưa thể lập hóa đơn vì thiếu biểu giá' : 'Phiên cần kiểm tra'}</span>
+                <span className="owner-guidance-toggle"><span className="when-closed">Xem hướng dẫn</span><span className="when-open">Thu gọn</span></span>
+              </summary>
+              {selected.review_reasons.includes('invoice_missing_tariff') && <>
+                <p>Không tìm thấy biểu giá có hiệu lực cho một phần thời gian phiên, từ {clock(selected.started_at)} đến {clock(selected.ended_at)}.</p>
+                <p>Phiên được tạo trước khi tính năng biểu giá được triển khai có thể gặp tình trạng này. Kiểm tra lịch sử biểu giá của trạm; nếu đây là phiên dữ liệu cũ, nhờ bộ phận vận hành kiểm tra và xử lý. Khai báo biểu giá mới không bổ sung biểu giá cho thời gian đã qua.</p>
+                {area === '' && <a className="secondary-button" href={selected.station_id ? `#tariffs?${new URLSearchParams({ station: selected.station_id })}` : '#tariffs'}>Xem biểu giá</a>}
+              </>}
+              {selected.review_reasons.filter(reason => reason !== 'invoice_missing_tariff').length > 0 && <p>
+                Cần kiểm tra · {selected.review_reasons.filter(reason => reason !== 'invoice_missing_tariff').map(reason => reviewLabels[reason] ?? reason).join(', ')}
+              </p>}
+            </details>
           )}
           <nav className="owner-tabs">
             <button

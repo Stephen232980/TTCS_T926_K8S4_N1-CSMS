@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AuthenticatedUser } from '../auth/model/auth'
 import {
   adminRequest,
@@ -30,6 +30,14 @@ export function AdminAccounts({
   })
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const detailRef = useRef<HTMLElement>(null)
+  const listRef = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (selectedId && window.matchMedia?.('(max-width: 760px)').matches) {
+      detailRef.current?.scrollIntoView({ block: 'start' })
+      detailRef.current?.focus({ preventScroll: true })
+    }
+  }, [selectedId])
   const [creating, setCreating] = useState(false)
   const [notice, setNotice] = useState('')
   const roles = useResource(
@@ -205,6 +213,7 @@ export function AdminAccounts({
           <ErrorNotice error={accounts.error} onRetry={accounts.reload} />
           <div className="admin-split">
             <section
+              ref={listRef}
               className="admin-panel admin-account-list"
               aria-label="Danh sách tài khoản"
               aria-busy={accounts.loading}
@@ -254,7 +263,7 @@ export function AdminAccounts({
                 ))}
               </div>
             </section>
-            <aside className="admin-panel admin-detail">
+            <aside ref={detailRef} tabIndex={-1} className="admin-panel admin-detail admin-account-detail" aria-label="Chi tiết tài khoản">
               {selectedId ? (
                 <AccountDetail
                   key={selectedId}
@@ -262,6 +271,10 @@ export function AdminAccounts({
                   currentUser={currentUser}
                   roles={roles.data ?? []}
                   onSaved={(a) => saved(a, 'Đã lưu thay đổi tài khoản.')}
+                  onClose={() => {
+                    setSelectedId(null)
+                    listRef.current?.querySelector<HTMLButtonElement>('button[aria-pressed="true"]')?.focus()
+                  }}
                 />
               ) : (
                 <div className="admin-empty">
@@ -489,11 +502,13 @@ function AccountDetail({
   currentUser,
   roles,
   onSaved,
+  onClose,
 }: {
   id: string
   currentUser: AuthenticatedUser
   roles: Role[]
   onSaved: (a: Account) => void
+  onClose: () => void
 }) {
   const detail = useResource(
     useCallback(
@@ -545,19 +560,24 @@ function AccountDetail({
       ) : (
         a && (
           <>
-            <h2>Thông tin tài khoản</h2>
+            <header className="admin-account-identity">
+            <div className="admin-detail-heading"><h2>Thông tin tài khoản</h2><button aria-label="Đóng chi tiết tài khoản" disabled={busy} onClick={onClose}>Đóng</button></div>
             <strong className="admin-email">{a.email}</strong>
             <span
               className={`admin-badge ${a.status === 'active' ? 'good' : 'neutral'}`}
             >
               {statusNames[a.status] ?? a.status}
             </span>
+            </header>
+            <div className="admin-account-detail-body">
+            <details className="admin-account-dates"><summary>Thời điểm tạo & cập nhật</summary>
             <dl className="admin-facts">
               <dt>Tạo lúc</dt>
               <dd>{dateTime(a.created_at)}</dd>
               <dt>Cập nhật</dt>
               <dd>{dateTime(a.updated_at)}</dd>
             </dl>
+            </details>
             {mutable && currentUser.roles.includes('admin') && !editing && !confirming && (
               resettingPassword ? <AccountPasswordForm account={a} self={self}
                 onCancel={() => setResettingPassword(false)}
@@ -602,7 +622,7 @@ function AccountDetail({
                     </span>
                   ))}
                 </div>
-                {mutable && roles.length > 0 && (
+                {mutable && roles.length > 0 && !resettingPassword && (
                   <button
                     disabled={busy || confirming || resettingPassword}
                     onClick={() => {
@@ -684,6 +704,7 @@ function AccountDetail({
                 Trạng thái này chỉ cho phép xem thông tin.
               </p>
             )}
+            </div>
           </>
         )
       )}

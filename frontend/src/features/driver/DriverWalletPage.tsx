@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Icon } from '../../components/icons/Icon'
 import {
   HttpDriverWalletApi,
@@ -43,10 +43,12 @@ export function DriverWalletPage({
   walletApi = defaultWalletApi,
   onTopUp,
   onOpenInvoice,
+  topUpContent,
 }: {
   walletApi?: DriverWalletApi
   onTopUp?: () => void
   onOpenInvoice?: (id: number) => void
+  topUpContent?: ReactNode
 }) {
   const [wallet, setWallet] = useState<DriverWallet | null>(null)
   const [transactions, setTransactions] = useState<WalletLedgerItem[]>([])
@@ -58,6 +60,7 @@ export function DriverWalletPage({
   const request = useRef<AbortController | null>(null)
   const busy = useRef(false)
   const detailRequest = useRef<AbortController | null>(null)
+  const [activeTransaction, setActiveTransaction] = useState<number | null>(null)
   const [sessionDetail, setSessionDetail] = useState<{ id: number; station_name: string; energy_kwh: number | string } | null>(null)
   const [detailError, setDetailError] = useState('')
   const [transactionDetail, setTransactionDetail] = useState<TransactionDetail | null>(null)
@@ -172,6 +175,7 @@ export function DriverWalletPage({
       )}
 
       {loading && !wallet && <p role="status">Đang tải thông tin ví…</p>}
+      {!wallet && topUpContent}
       {wallet && <>
       {/* Main Balance Card */}
       <div className={`driver-balance-card ${isNegative ? 'negative' : ''}`}>
@@ -222,11 +226,13 @@ export function DriverWalletPage({
       </div>
 
       {/* Transaction History Section */}
-      <div className="driver-tx-history-section">
-        <div className="driver-tx-header">
+      {topUpContent}
+      <details className="driver-tx-history-section">
+        <summary className="driver-tx-header">
+          <Icon name="chevronRight" />
           <h3>Lịch sử giao dịch</h3>
-
-        </div>
+          <span>{transactions.length ? `${transactions.length}${hasMore ? '+' : ''} giao dịch` : 'Chưa có giao dịch'}</span>
+        </summary>
 
         {loading && transactions.length === 0 ? (
           <div className="driver-tx-loading" role="status">
@@ -294,11 +300,11 @@ export function DriverWalletPage({
                       </span>
                     </div>
                     <div className="tx-meta-row">
-                      <span className="tx-id-badge">Mã dòng #{tx.id}</span>
                       {tx.reference_id && (
                         <span className="tx-ref-badge">
                           {['charging_session', 'session'].includes(tx.reference_type ?? '') && /^\d+$/.test(tx.reference_id) ? (
                             <button className="text-button" onClick={async () => {
+                              setActiveTransaction(tx.id)
                               detailRequest.current?.abort()
                               const controller = new AbortController()
                               detailRequest.current = controller
@@ -316,9 +322,10 @@ export function DriverWalletPage({
                             }}>Xem phiên sạc #{tx.reference_id}</button>
                           ) : (
                             <>
-                              Mã tham chiếu: {tx.reference_id}
+                              <details className="tx-reference-value"><summary>Mã giao dịch</summary><p>Mã dòng #{tx.id}</p><p>Mã tham chiếu: {tx.reference_id}</p></details>
                               {['gateway_topup', 'manual_topup'].includes(tx.entry_type) && <button className="text-button" onClick={async () => {
-                                detailRequest.current?.abort()
+                                setActiveTransaction(tx.id)
+                              detailRequest.current?.abort()
                                 const controller = new AbortController()
                                 detailRequest.current = controller
                                 setSessionDetail(null); setTransactionDetail(null); setDetailError('Đang tải giao dịch…')
@@ -335,27 +342,7 @@ export function DriverWalletPage({
                         </span>
                       )}
                     </div>
-                  </div>
-                </article>
-              )
-            })}
-          </div>
-        )}
-
-        {hasMore && (
-          <div className="driver-load-more-container">
-            <button
-              className="secondary-button driver-load-more-btn"
-              onClick={handleLoadMore}
-              disabled={loading || loadingMore}
-            >
-              {loadingMore ? 'Đang tải thêm…' : 'Tải thêm giao dịch cũ hơn'}
-            </button>
-          </div>
-        )}
-      </div>
-
-      </>}
+                    {activeTransaction === tx.id && <div className="driver-tx-detail">
       {detailError && <p role="status">{detailError}</p>}
       {sessionDetail && <section aria-label="Chi tiết phiên sạc">
         <h3>Phiên sạc #{sessionDetail.id}</h3>
@@ -374,6 +361,28 @@ export function DriverWalletPage({
         {transactionDetail.topup_reason && <p>{transactionDetail.topup_reason}</p>}
         <button className="secondary-button" onClick={() => setTransactionDetail(null)}>Đóng chi tiết</button>
       </section>}
+                    </div>}
+                  </div>
+                </article>
+              )
+            })}
+          </div>
+        )}
+
+        {hasMore && (
+          <div className="driver-load-more-container">
+            <button
+              className="secondary-button driver-load-more-btn"
+              onClick={handleLoadMore}
+              disabled={loading || loadingMore}
+            >
+              {loadingMore ? 'Đang tải thêm…' : 'Tải thêm giao dịch cũ hơn'}
+            </button>
+          </div>
+        )}
+      </details>
+
+      </>}
       {/* Topup Info Modal */}
       {showTopupModal && (
         <div

@@ -88,7 +88,7 @@ export function AdminWorkspace({
         {area === 'accounts' ? (
           <AdminAccounts currentUser={currentUser} />
         ) : area === 'topup' ? (
-          <AdminManualTopup />
+          <AdminManualTopup key={currentUser.id} adminId={currentUser.id} />
         ) : area === 'audit' ? (
           <AdminAudit />
         ) : (

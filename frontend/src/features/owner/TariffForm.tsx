@@ -1,6 +1,6 @@
-import { useRef, useState, type FormEvent } from 'react'
+import { useId, useRef, useState, type FormEvent } from 'react'
 import { OwnerApiError } from './ownerApi'
-import { stationToday } from './tariffDates'
+import { formatTariffDate, stationToday } from './tariffDates'
 import { TariffBandsEditor } from './TariffBandsEditor'
 import { validateBands, type BandValues } from './tariffBands'
 
@@ -161,6 +161,7 @@ export function TariffForm({
   tariffToday,
   onSave,
 }: TariffFormProps) {
+  const formId = useId()
   const today = tariffToday ?? localToday(stationTimezone)
   const minimumDate = today ? (hasVersions ? nextTariffDay(today) : today) : ''
 
@@ -236,7 +237,7 @@ export function TariffForm({
       await onSave(multiBand ? { ...values, bands } : values)
 
       setSuccess(
-        `Đã lưu biểu giá vào hệ thống. Ngày hiệu lực: ${values.effectiveFrom}.`,
+        `Đã lưu biểu giá vào hệ thống. Ngày hiệu lực: ${formatTariffDate(values.effectiveFrom)}.`,
       )
       setValues((previous) => ({
         ...previous,
@@ -300,14 +301,14 @@ export function TariffForm({
   return (
     <section className="owner-panel owner-tariff-panel">
       {!editMode && (
-        <>
+        <div className="owner-current-tariff">
           <h2>Biểu giá đang áp dụng</h2>
 
           {currentTariff ? (
             <>
               {currentTariff.effectiveFrom && (
                 <p className="owner-subtle">
-                  Áp dụng từ {currentTariff.effectiveFrom}
+                  Áp dụng từ {formatTariffDate(currentTariff.effectiveFrom)}
                 </p>
               )}
               <dl className="owner-tariff-values">
@@ -346,7 +347,7 @@ export function TariffForm({
           ) : (
             <p className="owner-subtle">Trạm chưa có biểu giá đang áp dụng.</p>
           )}
-        </>
+        </div>
       )}
       <h2>{editMode ? 'Sửa phiên bản biểu giá' : 'Khai báo biểu giá'}</h2>
 
@@ -356,11 +357,16 @@ export function TariffForm({
         này khi lưu.
       </p>
 
+      <p className="owner-subtle">Các trường đều bắt buộc. Nhập 0 nếu không thu phí hoặc không có thời gian ân hạn.</p>
       <form onSubmit={handleSubmit} noValidate>
         <label className="owner-field">
-          Ngày hiệu lực
+          <span>Ngày hiệu lực</span>
           <input
             type="date"
+            aria-label="Ngày hiệu lực"
+            lang="vi"
+            required
+            aria-describedby={`${formId}-date-hint${displayedDateError ? ` ${formId}-date-error` : ''}`}
             value={values.effectiveFrom}
             min={minimumDate || undefined}
             max={!hasVersions ? today || undefined : undefined}
@@ -370,8 +376,9 @@ export function TariffForm({
               changeValue('effectiveFrom', event.target.value)
             }
           />
+          <span id={`${formId}-date-hint`} className="owner-subtle">Ngày đã chọn: {formatTariffDate(values.effectiveFrom)} (ngày/tháng/năm).</span>
           {displayedDateError && (
-            <span className="owner-error" role="alert">
+            <span id={`${formId}-date-error`} className="owner-error" role="alert">
               {displayedDateError}
             </span>
           )}
@@ -421,6 +428,8 @@ export function TariffForm({
                 <input
                   type="text"
                   inputMode="numeric"
+                  required
+                  aria-describedby={fieldError ? `${formId}-${key}-error` : undefined}
                   value={values[key]}
                   disabled={saving}
                   aria-invalid={Boolean(fieldError)}
@@ -428,7 +437,7 @@ export function TariffForm({
                 />
 
                 {fieldError && (
-                  <span className="owner-error" role="alert">
+                  <span id={`${formId}-${key}-error`} className="owner-error" role="alert">
                     {fieldError}
                   </span>
                 )}
@@ -454,6 +463,11 @@ export function TariffForm({
           </p>
         )}
 
+        {hasError && today && <p className="owner-subtle" role="status">
+          Chưa thể lưu: {dateError || (multiBand && !validateBands(bands).valid
+            ? 'Kiểm tra các khung giờ và đơn giá.'
+            : `Kiểm tra các trường: ${numberFields.filter(({ key }) => (!multiBand || key !== 'pricePerKwh') && validateNumber(key, values[key])).map(({ label }) => label).join(', ')}. Nhập số nguyên không âm.`)}
+        </p>}
         <button
           type="submit"
           className="primary-button"

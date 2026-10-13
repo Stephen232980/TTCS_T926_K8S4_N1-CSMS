@@ -41,3 +41,8 @@ export function stationTomorrow(
 
   return nextDate.toISOString().slice(0, 10)
 }
+
+export function formatTariffDate(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : value || "Chưa chọn ngày"
+}
