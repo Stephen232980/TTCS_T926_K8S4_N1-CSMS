@@ -222,7 +222,10 @@ async def test_locked_wallet_and_inactive_admin_rejected(api_db, request_api):
     assert await counts(factory) == (0, 0)
 
 
-async def test_audit_failure_rolls_back_credit(api_db, request_api, monkeypatch):
+@pytest.mark.parametrize("generated", [False, True])
+async def test_audit_failure_rolls_back_credit(
+    api_db, request_api, monkeypatch, generated
+):
     import src.modules.wallet.manual_topup as service
 
     factory, actor, driver_id, wallet_id = api_db
@@ -233,12 +236,20 @@ async def test_audit_failure_rolls_back_credit(api_db, request_api, monkeypatch)
         await original(session, **kwargs)
         raise RuntimeError("audit unavailable")
 
+    body = (
+        {"amount_vnd": 100000, "request_id": str(uuid4()), "payment_received": True}
+        if generated
+        else payload()
+    )
     monkeypatch.setattr(service, "ghi_nhat_ky", fail)
     with pytest.raises(RuntimeError, match="audit unavailable"):
-        await request_api(driver_id, payload(), actor)
+        await request_api(driver_id, body, actor)
     assert await counts(factory) == (0, 0)
     async with factory() as session:
         assert (await session.get(Wallet, wallet_id)).balance_vnd == 0
+    monkeypatch.setattr(service, "ghi_nhat_ky", original)
+    assert (await request_api(driver_id, body, actor)).status_code == 201
+    assert await counts(factory) == (1, 1)
 
 
 async def test_ledger_failure_leaves_no_audit_or_credit(
@@ -288,3 +299,118 @@ def test_openapi_and_policy_contract():
     assert policy.roles == frozenset({"admin"})
     route = app.openapi()["paths"][PATH.format("{driver_id}")]["post"]
     assert {"201", "401", "403", "404", "409", "422"} <= route["responses"].keys()
+
+
+async def test_generated_receipt_retries_and_conflicting_payloads(api_db, request_api):
+    factory, actor, driver_id, wallet_id = api_db
+    body = {
+        "amount_vnd": 100000,
+        "request_id": str(uuid4()),
+        "payment_received": True,
+        "external_reference": "BANK-TEST-001",
+    }
+    first = await request_api(driver_id, body, actor)
+    assert first.status_code == 201, first.text
+    data = first.json()
+    assert data["receipt_code"] == "PT-AUTO-" + body["request_id"].replace("-", "")
+    assert (
+        data["request_id"] == body["request_id"]
+        and data["external_reference"] == "BANK-TEST-001"
+    )
+    assert data["payment_received"] is True and data["actor_id"] == str(actor.user_id)
+    before = await counts(factory)
+    replay = await request_api(driver_id, body, actor)
+    assert replay.status_code == 201 and replay.json() == data
+    for change in [{"amount_vnd": 100001}, {"external_reference": "BANK-TEST-002"}]:
+        conflict = await request_api(driver_id, body | change, actor)
+        assert conflict.status_code == 409
+        assert conflict.json()["detail"] == "manual_topup_request_conflict"
+    assert await counts(factory) == before
+    async with factory() as db:
+        wallet = await db.get(Wallet, wallet_id)
+        assert wallet.balance_vnd == 100000
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"amount_vnd": 100000},
+        {"amount_vnd": 100000, "request_id": str(uuid4())},
+        {"amount_vnd": 100000, "request_id": str(uuid4()), "payment_received": False},
+        {"amount_vnd": 100000, "request_id": str(uuid4()), "payment_received": "true"},
+        {"amount_vnd": 100000, "receipt_code": "PT-AUTO-forged"},
+        {"amount_vnd": 100000, "receipt_code": "PT-001", "request_id": str(uuid4())},
+        {
+            "amount_vnd": 100000,
+            "request_id": str(uuid4()),
+            "payment_received": True,
+            "external_reference": " ",
+        },
+    ],
+)
+async def test_generated_receipt_requires_confirmation_and_unambiguous_mode(
+    request_api, body
+):
+    result = await request_api(
+        uuid4(), body, CurrentActor(uuid4(), frozenset({"admin"}))
+    )
+    assert result.status_code == 422
+
+
+async def test_generated_receipt_key_cannot_move_to_another_driver_or_admin(
+    api_db, request_api
+):
+    factory, actor, driver_id, _ = api_db
+    body = {"amount_vnd": 100000, "request_id": str(uuid4()), "payment_received": True}
+    assert (await request_api(driver_id, body, actor)).status_code == 201
+    async with factory() as db:
+        other, _ = await setup_wallet(db)
+        admin, _ = await setup_wallet(db, admin=True)
+        await db.commit()
+    assert (await request_api(other.id, body, actor)).status_code == 409
+    assert (
+        await request_api(driver_id, body, CurrentActor(admin.id, frozenset({"admin"})))
+    ).status_code == 409
+
+
+async def test_generated_receipt_concurrent_retry_commits_once(api_db):
+    from src.modules.identity.authorization import AuthorizationEvidence
+    from src.modules.wallet.manual_topup import ManualTopupRequest, nap_tay
+
+    factory, actor, driver_id, wallet_id = api_db
+    body = ManualTopupRequest(
+        amount_vnd=100000, request_id=uuid4(), payment_received=True
+    )
+
+    async def post():
+        async with factory() as db, db.begin():
+            return await nap_tay(
+                db,
+                driver_id=driver_id,
+                actor_id=actor.user_id,
+                request=body,
+                authorization=AuthorizationEvidence(
+                    "admin.wallet.manual_topup", ("admin",)
+                ),
+            )
+
+    results = await asyncio.gather(*(post() for _ in range(8)))
+    assert len({r.ledger_id for r in results}) == 1
+    async with factory() as db:
+        assert (await db.get(Wallet, wallet_id)).balance_vnd == 100000
+        assert (
+            await db.scalar(
+                select(func.count())
+                .select_from(WalletLedger)
+                .where(WalletLedger.wallet_id == wallet_id)
+            )
+            == 1
+        )
+        assert (
+            await db.scalar(
+                select(func.count())
+                .select_from(AuditLog)
+                .where(AuditLog.object_id == str(wallet_id))
+            )
+            == 1
+        )

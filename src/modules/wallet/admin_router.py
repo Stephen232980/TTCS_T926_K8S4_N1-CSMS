@@ -12,6 +12,7 @@ from src.modules.identity.dependencies import (
 )
 from src.modules.identity.policy_routing import PolicyRoute
 from src.modules.wallet.exceptions import (
+    ManualTopupRequestConflictError,
     WalletAdminRequiredError,
     WalletAmountError,
     WalletLedgerConflictError,
@@ -67,6 +68,8 @@ async def manual_topup(
         raise HTTPException(403, "permission_denied") from error
     except WalletNotFoundError as error:
         raise HTTPException(404, "resource_not_found") from error
+    except ManualTopupRequestConflictError as error:
+        raise HTTPException(409, "manual_topup_request_conflict") from error
     except WalletLedgerConflictError as error:
         raise HTTPException(409, "receipt_already_used") from error
     except WalletLockedError as error:
