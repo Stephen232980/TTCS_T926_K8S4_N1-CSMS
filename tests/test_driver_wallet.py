@@ -135,11 +135,11 @@ async def test_driver_wallet_get_and_cursor_pagination(db_session, driver_user):
             assert res.status_code == 200
             data = res.json()
             assert data["driver_id"] == str(driver_user.id)
-            assert data["balance_vnd"] == 110000
-            assert data["balance"] == 110000
+            assert data["balance_vnd"] == "110000"
+            assert data["balance"] == "110000"
             assert data["status"] == "active"
             assert data["is_negative"] is False
-            assert data["debt_amount_vnd"] == 0
+            assert data["debt_amount_vnd"] == "0"
 
             # 2. Get Ledger Transactions (limit=2)
             res_tx = await client.get("/api/v1/driver/wallet/transactions?limit=2")
@@ -186,11 +186,11 @@ async def test_driver_wallet_negative_debt_warning(db_session, driver_user):
             res = await client.get("/api/v1/driver/wallet")
             assert res.status_code == 200
             data = res.json()
-            assert data["balance_vnd"] == -75000
-            assert data["balance"] == -75000
+            assert data["balance_vnd"] == "-75000"
+            assert data["balance"] == "-75000"
             assert data["is_negative"] is True
-            assert data["debt_amount_vnd"] == 75000
-            assert data["debt_amount"] == 75000
+            assert data["debt_amount_vnd"] == "75000"
+            assert data["debt_amount"] == "75000"
     finally:
         app.dependency_overrides.pop(get_current_actor, None)
 
@@ -233,9 +233,159 @@ async def test_two_drivers_have_separate_balances_and_transactions(
                 balance = await client.get("/api/v1/driver/wallet")
                 ledger = await client.get("/api/v1/driver/wallet/transactions")
                 assert balance.status_code == ledger.status_code == 200
-                assert balance.json()["balance_vnd"] == expected[user.id][0]
+                assert balance.json()["balance_vnd"] == str(expected[user.id][0])
                 assert [item["reference_id"] for item in ledger.json()["items"]] == [
                     expected[user.id][1]
                 ]
+    finally:
+        app.dependency_overrides.pop(get_current_actor, None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["", "/transactions"])
+@pytest.mark.parametrize("selector", ["driver_id", "wallet_id"])
+async def test_wallet_rejects_selectors(db_session, driver_user, path, selector):
+    app.dependency_overrides[get_current_actor] = lambda: CurrentActor(
+        user_id=driver_user.id, roles=frozenset({"driver"})
+    )
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            assert (
+                await client.get(f"/api/v1/driver/wallet{path}?{selector}={uuid4()}")
+            ).status_code == 403
+    finally:
+        app.dependency_overrides.pop(get_current_actor, None)
+
+
+@pytest.mark.asyncio
+async def test_wallet_default_50_pages_with_new_insert(db_session, driver_user):
+    from src.modules.wallet.models import WalletLedger
+
+    wallet = await ensure_driver_wallet(db_session, driver_user.id)
+    for _ in range(120):
+        await ghi_so_cai(
+            db_session,
+            wallet_id=wallet.id,
+            entry_type="gateway_topup",
+            amount_vnd=1,
+            reference_type="payment",
+            reference_id=str(uuid4()),
+        )
+    await db_session.commit()
+    original = set(
+        await db_session.scalars(
+            select(WalletLedger.id).where(WalletLedger.wallet_id == wallet.id)
+        )
+    )
+    app.dependency_overrides[get_current_actor] = lambda: CurrentActor(
+        user_id=driver_user.id, roles=frozenset({"driver"})
+    )
+    try:
+        seen = []
+        sizes = []
+        cursor = None
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            for index in range(3):
+                r = await client.get(
+                    "/api/v1/driver/wallet/transactions",
+                    params={"cursor": cursor} if cursor else {},
+                )
+                assert r.status_code == 200
+                data = r.json()
+                sizes.append(len(data["items"]))
+                seen.extend(row["id"] for row in data["items"])
+                cursor = data["next_cursor"]
+                if index == 0:
+                    await ghi_so_cai(
+                        db_session,
+                        wallet_id=wallet.id,
+                        entry_type="gateway_topup",
+                        amount_vnd=1,
+                        reference_type="payment",
+                        reference_id=str(uuid4()),
+                    )
+                    await db_session.commit()
+        assert (
+            sizes == [50, 50, 20]
+            and len(seen) == len(set(seen)) == 120
+            and set(seen) == original
+        )
+    finally:
+        app.dependency_overrides.pop(get_current_actor, None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["gateway", "manual", "legacy"])
+async def test_wallet_transaction_ownership_topup_and_exact_money(
+    db_session, driver_user, kind
+):
+    from src.modules.wallet.models import WalletLedger
+    from src.modules.wallet.topup_models import WalletTopup
+
+    wallet = await ensure_driver_wallet(db_session, driver_user.id)
+    amount = 9007199254740993
+    gateway_id = "qa-" + uuid4().hex
+    entry = await ghi_so_cai(
+        db_session,
+        wallet_id=wallet.id,
+        entry_type="manual_topup" if kind == "manual" else "gateway_topup",
+        amount_vnd=amount,
+        reference_type="manual_topup" if kind == "manual" else "gateway_transaction",
+        actor_id=driver_user.id if kind == "manual" else None,
+        reference_id=gateway_id,
+    )
+    order = "order-" + uuid4().hex
+    if kind == "gateway":
+        db_session.add(
+            WalletTopup(
+                driver_id=driver_user.id,
+                amount_vnd=amount,
+                order_id=order,
+                status="succeeded",
+                gateway_transaction_id=gateway_id,
+            )
+        )
+    await db_session.commit()
+    app.dependency_overrides[get_current_actor] = lambda: CurrentActor(
+        user_id=driver_user.id, roles=frozenset({"driver"})
+    )
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            response = await client.get(
+                f"/api/v1/driver/wallet/transactions/{entry.id}"
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["amount_vnd"] == data["balance_after_vnd"] == str(amount)
+            if kind == "gateway":
+                assert (
+                    data["topup_order_id"] == order
+                    and data["topup_status"] == "succeeded"
+                )
+            else:
+                assert data["topup_order_id"] is None and data["topup_status"] is None
+            balance = (await client.get("/api/v1/driver/wallet")).json()
+            assert balance["balance"] == balance["balance_vnd"] == str(amount)
+            app.dependency_overrides[get_current_actor] = lambda: CurrentActor(
+                user_id=uuid4(), roles=frozenset({"driver"})
+            )
+            assert (
+                await client.get(f"/api/v1/driver/wallet/transactions/{entry.id}")
+            ).status_code == 403
+            assert (
+                await client.get("/api/v1/driver/wallet/transactions/2147483647")
+            ).status_code == 404
+            assert (
+                await db_session.scalar(
+                    select(WalletLedger.amount_vnd).where(WalletLedger.id == entry.id)
+                )
+                == amount
+            )
     finally:
         app.dependency_overrides.pop(get_current_actor, None)

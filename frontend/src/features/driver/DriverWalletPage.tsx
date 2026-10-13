@@ -9,15 +9,20 @@ import {
 
 const defaultWalletApi = new HttpDriverWalletApi()
 
-function formatVND(amount: number | string): string {
-  const num = typeof amount === 'string' ? parseFloat(amount) : amount
-  if (isNaN(num)) return '0 ₫'
-  return new Intl.NumberFormat('vi-VN', {
-    style: 'currency',
-    currency: 'VND',
-    maximumFractionDigits: 0,
-  }).format(num)
+function moneyValue(value: number | string | bigint): bigint {
+  return BigInt(typeof value === 'string' ? value.replace(/\.0+$/, '') : value)
 }
+function formatVND(amount: number | string | bigint): string {
+  try {
+    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(moneyValue(amount))
+  } catch { return '—' }
+}
+interface TransactionDetail extends WalletLedgerItem {
+  topup_order_id: string | null
+  topup_status: string | null
+  topup_reason: string | null
+}
+const topupStatus: Record<string, string> = {pending: 'Đang chờ', succeeded: 'Thành công', failed: 'Thất bại', cancelled: 'Đã hủy', needs_review: 'Cần xem xét'}
 
 function formatDate(isoString: string): string {
   try {
@@ -55,6 +60,7 @@ export function DriverWalletPage({
   const detailRequest = useRef<AbortController | null>(null)
   const [sessionDetail, setSessionDetail] = useState<{ id: number; station_name: string; energy_kwh: number | string } | null>(null)
   const [detailError, setDetailError] = useState('')
+  const [transactionDetail, setTransactionDetail] = useState<TransactionDetail | null>(null)
   const [showTopupModal, setShowTopupModal] = useState(false)
 
   const loadInitialData = useCallback(async (signal?: AbortSignal) => {
@@ -68,7 +74,7 @@ export function DriverWalletPage({
     try {
       const [walletData, txData] = await Promise.all([
         walletApi.getWallet(controller.signal),
-        walletApi.getTransactions({ limit: 10 }, controller.signal),
+        walletApi.getTransactions({ limit: 50 }, controller.signal),
       ])
       if (controller.signal.aborted || request.current !== controller) return
       setWallet(walletData)
@@ -114,7 +120,7 @@ export function DriverWalletPage({
     setLoadingMore(true)
     try {
       const txData = await walletApi.getTransactions({
-        limit: 10,
+        limit: 50,
         cursor: nextCursor,
       }, controller.signal)
       if (controller.signal.aborted || request.current !== controller) return
@@ -136,9 +142,9 @@ export function DriverWalletPage({
     }
   }
 
-  const balanceNumber = wallet ? Number(wallet.balance) : 0
-  const isNegative = wallet?.is_negative || balanceNumber < 0
-  const isLowBalance = !isNegative && balanceNumber < 50000
+  const balanceNumber = wallet ? moneyValue(wallet.balance) : 0n
+  const isNegative = wallet?.is_negative || balanceNumber < 0n
+
 
   return (
     <section className="driver-wallet-container" aria-label="Quản lý ví tài xế">
@@ -194,23 +200,14 @@ export function DriverWalletPage({
             <div className="warning-content">
               <strong>Cảnh báo nợ ví</strong>
               <p>
-                Số dư đang âm {formatVND(wallet?.debt_amount ?? Math.abs(balanceNumber))}.
+                Số dư đang âm {formatVND(wallet?.debt_amount ?? -balanceNumber)}.
                 Bạn cần nạp thêm tiền để có thể bắt đầu các phiên sạc tiếp theo.
               </p>
             </div>
           </div>
         )}
 
-        {/* Low balance warning */}
-        {isLowBalance && (
-          <div className="wallet-low-warning" role="status">
-            <span className="warning-icon">💡</span>
-            <p>
-              Số dư hiện tại thấp hơn 50.000 ₫. Vui lòng nạp thêm để đảm bảo đủ
-              ngưỡng khởi động phiên sạc.
-            </p>
-          </div>
-        )}
+        {!isNegative && <p className="owner-subtle">Ngưỡng bắt đầu sạc phụ thuộc biểu giá của trạm bạn chọn.</p>}
 
         <div className="driver-balance-cta">
           <button
@@ -249,8 +246,8 @@ export function DriverWalletPage({
         ) : (
           <div className="driver-tx-list" role="feed" aria-label="Danh sách giao dịch ví">
             {transactions.map((tx) => {
-              const amountNum = Number(tx.amount)
-              const isPlus = amountNum > 0
+              const amountNum = moneyValue(tx.amount)
+              const isPlus = amountNum > 0n
               return (
                 <article key={tx.id} className="driver-tx-item">
                   <div
@@ -306,6 +303,7 @@ export function DriverWalletPage({
                               const controller = new AbortController()
                               detailRequest.current = controller
                               setSessionDetail(null)
+                              setTransactionDetail(null)
                               setDetailError('Đang tải phiên sạc…')
                               try {
                                 const response = await fetch(`${import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''}/api/v1/driver/charging/sessions/${encodeURIComponent(tx.reference_id!)}`, { credentials: 'include', signal: controller.signal })
@@ -317,7 +315,22 @@ export function DriverWalletPage({
                               } catch (err) { if (controller.signal.aborted) return; setDetailError(err instanceof Error ? err.message : 'Không thể mở phiên sạc.') }
                             }}>Xem phiên sạc #{tx.reference_id}</button>
                           ) : (
-                            <>Mã tham chiếu: {tx.reference_id}{['payment', 'payment_gateway', 'manual_receipt'].includes(tx.reference_type ?? '') && <span> · Chi tiết lần nạp chưa khả dụng</span>}</>
+                            <>
+                              Mã tham chiếu: {tx.reference_id}
+                              {['gateway_topup', 'manual_topup'].includes(tx.entry_type) && <button className="text-button" onClick={async () => {
+                                detailRequest.current?.abort()
+                                const controller = new AbortController()
+                                detailRequest.current = controller
+                                setSessionDetail(null); setTransactionDetail(null); setDetailError('Đang tải giao dịch…')
+                                try {
+                                  const response = await fetch(`${import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''}/api/v1/driver/wallet/transactions/${tx.id}`, {credentials: 'include', signal: controller.signal})
+                                  if (!response.ok) throw new Error('Không thể mở giao dịch. Vui lòng thử lại.')
+                                  const data: TransactionDetail = await response.json()
+                                  if (controller.signal.aborted) return
+                                  setTransactionDetail(data); setDetailError('')
+                                } catch (error) { if (!controller.signal.aborted) setDetailError(error instanceof Error ? error.message : 'Không thể mở giao dịch.') }
+                              }}>Xem lần nạp</button>}
+                            </>
                           )}
                         </span>
                       )}
@@ -349,6 +362,17 @@ export function DriverWalletPage({
         {onOpenInvoice && <button className="secondary-button" onClick={() => onOpenInvoice(sessionDetail.id)}>Xem hóa đơn phiên này</button>}
         <p>{sessionDetail.station_name} · {sessionDetail.energy_kwh} kWh</p>
         <button className="secondary-button" onClick={() => setSessionDetail(null)}>Đóng chi tiết</button>
+      </section>}
+      {transactionDetail && <section className="driver-session-summary" aria-label="Chi tiết lần nạp">
+        <h3>{transactionDetail.description}</h3>
+        <p>Số tiền: {formatVND(transactionDetail.amount)}</p>
+        <p>Thời điểm: {formatDate(transactionDetail.created_at)}</p>
+        <p>Số dư sau: {formatVND(transactionDetail.balance_after)}</p>
+        <p>Mã tham chiếu: {transactionDetail.reference_id}</p>
+        {transactionDetail.topup_order_id && <p>Mã đơn: {transactionDetail.topup_order_id}</p>}
+        <p>Trạng thái: {transactionDetail.topup_status ? topupStatus[transactionDetail.topup_status] ?? transactionDetail.topup_status : 'Đã ghi nhận vào ví'}</p>
+        {transactionDetail.topup_reason && <p>{transactionDetail.topup_reason}</p>}
+        <button className="secondary-button" onClick={() => setTransactionDetail(null)}>Đóng chi tiết</button>
       </section>}
       {/* Topup Info Modal */}
       {showTopupModal && (
