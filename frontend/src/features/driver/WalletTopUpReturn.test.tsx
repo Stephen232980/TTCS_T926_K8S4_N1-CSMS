@@ -15,7 +15,7 @@ describe('T-94 - Trạng thái nạp tiền', () => {
     const onSucceeded = vi.fn(async () => {})
     render(<WalletTopUpReturn transactionId="order-001" getStatus={getStatus} onSucceeded={onSucceeded} />)
     await act(async () => { await vi.advanceTimersByTimeAsync(12000) })
-    expect(screen.getByText(/Backend đã xác nhận nạp tiền thành công/)).toBeTruthy()
+    expect(screen.getByText(/Nạp tiền thành công/)).toBeTruthy()
     expect(getStatus).toHaveBeenCalledTimes(5)
     expect(onSucceeded).toHaveBeenCalledTimes(1)
     await act(async () => { await vi.advanceTimersByTimeAsync(6000) })
@@ -25,7 +25,7 @@ describe('T-94 - Trạng thái nạp tiền', () => {
   it.each([
     { status: 'failed' as const, match: /Nạp tiền thất bại/, reason: 'Thanh toán bị từ chối' },
     { status: 'cancelled' as const, match: /Giao dịch đã bị huỷ/, reason: 'Người dùng huỷ' },
-    { status: 'needs_review' as const, match: /cần kiểm tra thủ công/, reason: 'Chờ đối soát' },
+    { status: 'needs_review' as const, match: /cần được kiểm tra thêm/, reason: 'Chờ đối soát' },
   ])('hiển thị $status theo T-93 và lý do', async ({ status, match, reason }) => {
     const getStatus = vi.fn().mockResolvedValue({ status, reason })
     render(<WalletTopUpReturn transactionId="order-002" getStatus={getStatus} />)
@@ -53,7 +53,7 @@ describe('T-94 - Trạng thái nạp tiền', () => {
     expect(screen.getByText(/Đã hết thời gian chờ tự động/)).toBeTruthy()
     expect(getStatus).toHaveBeenCalledTimes(1)
     await act(async () => { complete({ status: 'succeeded' }); await Promise.resolve() })
-    expect(screen.queryByText(/Backend đã xác nhận nạp tiền thành công/)).toBeNull()
+    expect(screen.queryByText(/Nạp tiền thành công/)).toBeNull()
     expect(onSucceeded).not.toHaveBeenCalled()
   })
 
@@ -66,7 +66,7 @@ describe('T-94 - Trạng thái nạp tiền', () => {
     rerender(<WalletTopUpReturn transactionId="new" getStatus={getStatus} />)
     await act(async () => { completeOld({ status: 'succeeded' }); await vi.advanceTimersByTimeAsync(0) })
     expect(screen.getByText(/Nạp tiền thất bại/)).toBeTruthy()
-    expect(screen.queryByText(/Backend đã xác nhận nạp tiền thành công/)).toBeNull()
+    expect(screen.queryByText(/Nạp tiền thành công/)).toBeNull()
   })
 
   it('unmount dọn timer và không xử lý response tới muộn', async () => {
@@ -83,7 +83,7 @@ describe('T-94 - Trạng thái nạp tiền', () => {
   it('thiếu order_code và mã không tồn tại đều có thông báo', async () => {
     const getStatus = vi.fn().mockRejectedValue(new WalletTopUpApiError('not_found', 'Không tìm thấy lệnh.', 404))
     const { rerender } = render(<WalletTopUpReturn transactionId="" getStatus={getStatus} />)
-    expect(screen.getByText(/URL quay về thiếu mã đơn/)).toBeTruthy()
+    expect(screen.getByText(/Chưa tìm thấy mã giao dịch/)).toBeTruthy()
     expect(getStatus).not.toHaveBeenCalled()
     rerender(<WalletTopUpReturn transactionId="absent" getStatus={getStatus} />)
     await act(async () => { await vi.advanceTimersByTimeAsync(0) })

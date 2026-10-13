@@ -37,7 +37,7 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
     setInvoiceView(true)
     setInvoiceSessionId(id)
     setArea('wallet')
-    window.history.replaceState(null, '', id === undefined ? '#driver-invoices' : `#driver-invoice-${id}`)
+    window.history.pushState(null, '', id === undefined ? '#driver-invoices' : `#driver-invoice-${id}`)
   }, [])
   const storageKey = `csms:topup:${currentUser.id}`
   const [trackedOrder, setTrackedOrder] = useState(() => readTopUpReturn(window.location).orderId || sessionStorage.getItem(storageKey) || '')
@@ -46,6 +46,7 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
     if (id) sessionStorage.setItem(storageKey, id)
   }, [storageKey])
   const [walletRevision, setWalletRevision] = useState(0)
+  const [topUpExpanded, setTopUpExpanded] = useState(() => sessionStorage.getItem(storageKey) !== null || readTopUpReturn(window.location).isReturn)
   const rememberOrder = useCallback((id: string) => {
     sessionStorage.setItem(storageKey, id)
     setTrackedOrder(id)
@@ -156,7 +157,10 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
                 : 'Xem vị trí trạm và tìm nơi sạc phù hợp.'}
         </p>
       </header>
-      {area === 'wallet' && invoiceView && <DriverInvoicePage sessionId={invoiceSessionId} onOpen={openInvoice} onBack={() => openInvoice()} />}
+      {area === 'wallet' && invoiceView && <div className="driver-wallet-stack">
+        <button className="secondary-button driver-wallet-back" onClick={() => { setInvoiceView(false); window.history.pushState(null, '', '#driver-wallet') }}><Icon name="chevronLeft" />Quay lại ví</button>
+        <DriverInvoicePage sessionId={invoiceSessionId} onOpen={openInvoice} onBack={() => openInvoice()} />
+      </div>}
       <div hidden={area !== 'wallet' || invoiceView}>
         {(showingReturn || trackedOrder) && <WalletTopUpReturn
           transactionId={returnOrderId}
@@ -165,11 +169,16 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
           onSucceeded={refreshWallet}
           onBack={showingReturn ? () => navigate('wallet') : undefined}
         />}
-        {area === 'wallet' && !showingReturn && !invoiceView && <div className="driver-wallet-stack">
-          <DriverWalletPage key={`wallet-${walletRevision}`} onTopUp={() => document.getElementById('topup-amount')?.focus()} onOpenInvoice={openInvoice} />
+        {area === 'wallet' && !showingReturn && <div className="driver-wallet-stack">
+          <DriverWalletPage key={`wallet-${walletRevision}`} onTopUp={() => {
+            setTopUpExpanded(true)
+            window.setTimeout(() => document.getElementById('topup-amount')?.focus(), 0)
+          }} onOpenInvoice={openInvoice} topUpContent={<details className="driver-topup-disclosure" open={topUpExpanded} onToggle={event => setTopUpExpanded(event.currentTarget.open)}>
+            <summary><Icon name="chevronRight" /><span>Nạp tiền</span></summary>
+            <WalletTopUpPage key={`topup-${walletRevision}`} storageKey={storageKey} onOrder={rememberOrder}
+              onTopUp={createWalletTopUp} onCheckOrder={checkTopUpOrder} onRedirect={navigateToPayment} />
+          </details>} />
           <button className="secondary-button" onClick={() => openInvoice()}>Xem hóa đơn phiên sạc</button>
-          <WalletTopUpPage key={`topup-${walletRevision}`} storageKey={storageKey} onOrder={rememberOrder}
-            onTopUp={createWalletTopUp} onCheckOrder={checkTopUpOrder} onRedirect={navigateToPayment} />
         </div>}
       </div>
       {area !== 'wallet' && (

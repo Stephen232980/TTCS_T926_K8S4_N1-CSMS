@@ -6,9 +6,13 @@ const statusText: Record<InvoiceStatus, string> = {
   needs_review: 'Phiên đang chờ xử lý', in_progress: 'Phiên sạc chưa kết thúc',
   awaiting_unplug: 'Đã dừng sạc, đang chờ xác nhận rút súng',
 }
-const utcTime = (value: string) => new Intl.DateTimeFormat('vi-VN', {
-  dateStyle: 'short', timeStyle: 'short', timeZone: 'UTC',
+const vietnamTime = (value: string) => new Intl.DateTimeFormat('vi-VN', {
+  dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Ho_Chi_Minh',
 }).format(new Date(value))
+const localDate = (value: string) => value.split('-').reverse().join('/')
+const lineTotal = (invoice: DriverInvoice, type: 'energy' | 'idle') => invoiceMoney(
+  invoice.lines.filter(line => line.line_type === type).reduce((total, line) => total + BigInt(line.amount_vnd), 0n).toString(),
+)
 
 export function DriverInvoicePage({ api = driverInvoiceApi, sessionId, onOpen, onBack }: {
   api?: DriverInvoiceApi
@@ -67,23 +71,27 @@ export function DriverInvoicePage({ api = driverInvoiceApi, sessionId, onOpen, o
     {!loading && !error && invoice && <>
       <p>{invoice.station_name}</p>
       {invoice.status !== 'ready' ? <p role="status">{statusText[invoice.status]}. Hóa đơn chưa sẵn sàng; chưa có số tiền được xác nhận để hiển thị.</p> : <>
-        <p>Mã hóa đơn: <strong>{invoice.invoice_id}</strong></p>
-        <p>Các khoảng thời gian dưới đây hiển thị theo UTC. Ngày tính giá là ngày địa phương được lưu trên hóa đơn.</p>
+        <div className="driver-invoice-summary">
+          <p className="driver-invoice-total">Tổng cộng: <strong>{invoiceMoney(invoice.total_vnd!)}</strong></p>
+          <dl><dt>Tiền điện</dt><dd>{lineTotal(invoice, 'energy')}</dd><dt>Phí chiếm trụ</dt><dd>{lineTotal(invoice, 'idle')}</dd></dl>
+        </div>
+        <p>Thời gian hiển thị theo giờ Việt Nam (UTC+7). Ngày tính giá theo giờ trạm được lưu trên hóa đơn.</p>
         <ol className="driver-invoice-lines">{invoice.lines.map(line => <li key={line.id}>
           <h3>{line.line_type === 'idle' ? 'Phí chiếm trụ' : 'Tiền điện'} · {line.band_label}</h3>
-          <p>Ngày tính giá: {line.local_date}</p>
-          <p>{utcTime(line.started_at)} – {utcTime(line.ended_at)} UTC</p>
+          <p>Ngày tính giá: {localDate(line.local_date)}</p>
+          <p>{vietnamTime(line.started_at)} – {vietnamTime(line.ended_at)}</p>
           <dl>
             {line.line_type === 'energy' && <><dt>Điện năng</dt><dd>{line.energy_kwh.replace('.', ',')} kWh</dd></>}
             <dt>Đơn giá</dt><dd>{invoiceMoney(line.rate_vnd)}{line.line_type === 'energy' ? '/kWh' : '/phút'}</dd>
             <dt>Thành tiền</dt><dd>{invoiceMoney(line.amount_vnd)}</dd>
           </dl>
-          {line.interpolated && <p>Số đo tại ranh giới được nội suy.</p>}
-          <p>Phiên bản biểu giá: {line.tariff_id}</p>
         </li>)}</ol>
-        <p>Quy tắc làm tròn: {invoice.rounding_rule}</p>
-        <p className="driver-invoice-total">Tổng cộng: <strong>{invoiceMoney(invoice.total_vnd!)}</strong></p>
-        <p>Hóa đơn được đọc từ bản ghi đã lưu; thay đổi biểu giá sau phiên không tính lại hóa đơn này.</p>
+        <details className="driver-invoice-technical"><summary>Thông tin đối chiếu</summary>
+          <p>Mã hóa đơn: <strong>{invoice.invoice_id}</strong></p>
+          <p>Quy tắc làm tròn: {invoice.rounding_rule}</p>
+          {invoice.lines.map(line => <div key={line.id}><p>{line.line_type === 'idle' ? 'Phí chiếm trụ' : 'Tiền điện'} · {line.band_label}: Phiên bản biểu giá {line.tariff_id}</p>{line.interpolated && <p>Số đo tại ranh giới được nội suy.</p>}</div>)}
+          <p>Hóa đơn được đọc từ bản ghi đã lưu; thay đổi biểu giá sau phiên không tính lại hóa đơn này.</p>
+        </details>
       </>}
     </>}
   </section>

@@ -5,7 +5,7 @@ import { DriverWorkspace } from './DriverWorkspace'
 import { WalletTopUpApiError, createWalletTopUp, getWalletTopUp } from './walletTopUpApi'
 vi.mock('./DriverCharging', () => ({ DriverCharging: () => null }))
 vi.mock('./DriverMapPage', () => ({ DriverMapPage: () => null }))
-vi.mock('./DriverWalletPage', () => ({ DriverWalletPage: () => <div>Wallet</div> }))
+vi.mock('./DriverWalletPage', () => ({ DriverWalletPage: ({ topUpContent }: { topUpContent?: import('react').ReactNode }) => <div>Wallet{topUpContent}</div> }))
 vi.mock('./walletTopUpApi', async original => ({ ...await original<typeof import('./walletTopUpApi')>(), createWalletTopUp: vi.fn(), getWalletTopUp: vi.fn(), refreshDriverWallet: vi.fn().mockResolvedValue(undefined) }))
 afterEach(() => { cleanup(); vi.clearAllMocks(); sessionStorage.clear(); window.history.replaceState(null, '', '/') })
 it('keeps uncertain order locked across navigation and remount', async () => {
@@ -14,6 +14,7 @@ it('keeps uncertain order locked across navigation and remount', async () => {
   vi.mocked(getWalletTopUp).mockResolvedValue({status:'pending'})
   const user = userEvent.setup()
   const view = render(<DriverWorkspace currentUser={{id:'d',email:'d@test',roles:['driver']}} onLogout={vi.fn()} navigateToPayment={vi.fn()} />)
+  await user.click(document.querySelector('.driver-topup-disclosure summary')!)
   await user.click(screen.getByRole('button', {name:'Nạp tiền'}))
   await screen.findByText('Unknown result')
   expect(screen.getByRole('button', {name:'Nạp tiền'})).toBeDisabled()

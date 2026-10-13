@@ -79,11 +79,11 @@
 .driver-shell .driver-empty .owner-charger-drawing { width: 90px; height: 120px; color: var(--muted); margin-bottom: 20px; }
 .driver-shell .driver-primary-link { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; padding: 10px 18px; border-radius: 10px; background: var(--accent); color: #fff; text-decoration: none; font-size: 14px; font-weight: 650; }
 .driver-map-container { min-width: 0; }
-.driver-map-page { display: flex; flex-direction: column; gap: 18px; min-height: 0; }
-.driver-station-search { display: grid; gap: 12px; }
+.driver-map-page { display: flex; flex-direction: column; gap: 18px; min-height: 0; min-width: 0; }
+.driver-station-search { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; min-width: 0; }
 .driver-station-search label { display: grid; gap: 8px; font-size: 14px; font-weight: 600; }
 .driver-station-search input { width: 100%; min-height: 44px; border: 1px solid var(--field-border); background: #fff; color: var(--ink); border-radius: 9px; padding: 10px 12px; }
-.driver-station-layout { display: grid; gap: 20px; }
+.driver-station-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; min-width: 0; }
 .driver-map-panel { min-width: 0; }
 .driver-shell .station-map__canvas { height: clamp(280px, 40dvh, 400px); }
 .driver-shell .station-map__tools button { flex: 1; }
@@ -99,12 +99,26 @@
 .driver-station-select { width: 100%; display: flex; align-items: flex-start; gap: 10px; border: 0; padding: 0; text-align: left; background: transparent; color: var(--ink); font: inherit; }
 .driver-station-select > svg { color: var(--accent); }
 .driver-station-select > span:first-of-type { flex: 1; min-width: 0; }
-.driver-station-select strong { display: block; font-size: 16px; }
+.driver-station-select strong { display: block; font-size: 16px; overflow-wrap: anywhere; }
 .driver-station-select > span > span { display: block; margin-top: 8px; font-size: 14px; line-height: 1.5; font-weight: 400; color: var(--muted); }
 .driver-distance { font-size: 13px; font-weight: 650; white-space: nowrap; font-variant-numeric: tabular-nums; color: #116443; }
 .driver-station-actions { display: flex; align-items: center; gap: 16px; margin-top: 14px; }
 .driver-station-actions button { flex: 1; }
 .driver-station-actions a { min-height: 44px; display: flex; align-items: center; font-size: 13px; }
+.driver-station-select > span > span { overflow-wrap: anywhere; }
+@media (max-width: 699px) {
+  .driver-shell { width: 100%; min-width: 0; }
+  .driver-main > *, .driver-station-search label { min-width: 0; }
+  .driver-shell .station-map__canvas { height: clamp(240px, 34dvh, 320px); }
+  .driver-map-page { gap: 16px; }
+  .driver-station-layout { gap: 16px; }
+  .driver-station-card { padding: 14px; margin-bottom: 12px; }
+  .driver-results-heading { align-items: flex-start; gap: 8px; }
+  .driver-results-heading h2 { min-width: 0; }
+  .driver-station-actions { gap: 10px; margin-top: 12px; }
+  .driver-station-actions button { min-width: 0; }
+  .driver-station-actions a { flex-shrink: 0; }
+}
 .driver-shell .driver-error { padding: 16px; border-radius: 12px; background: #fff0ec; }
 .driver-error p, .driver-charging > [role='alert'], .driver-connectors > [role='alert'] { color: #a3382c; }
 .driver-return button { width: 100%; }
@@ -129,6 +143,7 @@
 .driver-start-reason { display: grid; gap: 10px; }
 .driver-shell .driver-start-reason p { margin: 0; color: #a3382c; }
 .driver-start-reason .driver-primary-link { justify-self: start; }
+.driver-selected-connector, .driver-start-status, .driver-connectors > [role='alert'] { overflow-wrap: anywhere; }
 .driver-shell [hidden] { display: none !important; }
 @media (min-width: 700px) {
   .driver-shell { display: grid; grid-template-columns: 88px minmax(0, 1fr); height: 100dvh; overflow: hidden; }
@@ -700,6 +715,36 @@
   margin: 0 auto;
 }
 .driver-wallet-stack .driver-wallet-container { margin: 0; }
+.driver-wallet-stack > .driver-wallet-page, .driver-wallet-stack .driver-wallet-page { max-width: none; width: 100%; }
+.driver-wallet-back { align-self: flex-start; }
+.driver-topup-disclosure { background: #fff; border-radius: 16px; padding: 16px 18px; }
+.driver-topup-disclosure > summary, details.driver-tx-history-section > summary { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; list-style: none; margin: 0; border: 0; padding: 0; }
+.driver-topup-disclosure > summary::-webkit-details-marker, details.driver-tx-history-section > summary::-webkit-details-marker { display: none; }
+details.driver-tx-history-section > summary h3 { margin: 0; flex: 1; }
+details.driver-tx-history-section > summary > span { font-size: 12px; color: var(--muted); }
+.driver-topup-disclosure[open] > summary > svg, details.driver-tx-history-section[open] > summary > svg { transform: rotate(90deg); }
+details.driver-tx-history-section[open] > summary { margin-bottom: 16px; }
+.driver-topup-disclosure .driver-wallet-page { padding: 16px 0 0; box-shadow: none; }
+.driver-tx-empty { padding: 18px 0; }
+.driver-balance-card .owner-subtle { color: #d7e8ee; margin: 0; }
+.driver-shell .topup-button { background: #0b765c !important; }
+.driver-shell .topup-button:hover { background: #095f4a !important; }
+.driver-tx-item .tx-meta-row { flex-wrap: wrap; }
+.driver-tx-item .tx-ref-badge { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-width: 0; max-width: 100%; padding: 6px 8px; }
+.tx-reference-value { min-width: 0; overflow-wrap: anywhere; }
+.driver-tx-detail { padding-top: 12px; margin-top: 8px; border-top: 1px solid var(--line); }
+.driver-tx-detail section { min-width: 0; }
+.driver-tx-detail h3 { margin-top: 0; }
+.driver-tx-detail p { overflow-wrap: anywhere; }
+.tx-reference-value summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+.driver-invoice-summary { padding: 16px; border-radius: 12px; background: #f2f6f7; margin: 16px 0; }
+.driver-shell .driver-invoice-summary .driver-invoice-total { margin: 0 0 12px; color: var(--ink); }
+.driver-invoice-summary .driver-invoice-total strong { display: block; font-size: 28px; overflow-wrap: anywhere; }
+.driver-invoice-summary dl { margin: 0; }
+.driver-invoice-summary dd { margin: 0; text-align: right; font-weight: 650; overflow-wrap: anywhere; }
+.driver-invoice-technical { margin-top: 16px; }
+.driver-invoice-technical summary { min-height: 44px; cursor: pointer; font-weight: 650; }
+.driver-invoice-technical p { overflow-wrap: anywhere; }
 
 .driver-shell .topup-button span { display: inline; }
 .driver-shell .topup-button { width: auto; max-width: 100%; }
