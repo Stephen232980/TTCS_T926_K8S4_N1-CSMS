@@ -19,6 +19,22 @@ class FakeDriverStream {
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); FakeDriverStream.instances = [] })
 const empty = { session: null, start_request: null }
 const connectors = { items: [{ id: 'connector-one', charge_point_code: 'TRU-01', connector_number: 1, status: 'Available' }, { id: 'busy', charge_point_code: 'TRU-02', connector_number: 1, status: 'Reserved' }] }
+
+it('allows starting on an owned confirmed reservation and blocks another driver reservation', async () => {
+  const fetchMock = vi.fn().mockImplementation(async (url: string) => ({ ok: true, json: async () => url.includes('/connectors') ? { items: [
+    { id: 'owned', charge_point_code: 'TRU-01', connector_number: 1, status: 'Reserved', own_reservation: true, can_start: true, available: false, reservation_capability: 'supported' },
+    { id: 'other', charge_point_code: 'TRU-01', connector_number: 2, status: 'Reserved', own_reservation: false, can_start: false, available: false, reservation_capability: 'supported' },
+  ] } : empty }))
+  vi.stubGlobal('fetch', fetchMock)
+  render(<DriverCharging stationId="station-one" ownerId="owner" />)
+  const select = await screen.findByLabelText('Trụ và đầu nối')
+  expect(screen.getByRole('option', { name: /Đầu nối 2/ })).toBeDisabled()
+  await userEvent.selectOptions(select, 'owned')
+  expect(await screen.findByText(/Đầu nối đang được giữ cho bạn/)).toBeInTheDocument()
+  await userEvent.click(screen.getByRole('checkbox'))
+  expect(screen.getByRole('button', { name: 'Bắt đầu sạc' })).toBeEnabled()
+  expect(screen.queryByRole('button', { name: 'Chọn giờ đến và đặt chỗ' })).not.toBeInTheDocument()
+})
 function mockApi(current: object = empty, result: object = { id: 'request-one', status: 'Accepted', deadline: new Date(Date.now() + 60000).toISOString() }) {
   const fetchMock = vi.fn().mockImplementation(async (url: string, options?: RequestInit) => ({ ok: true, json: async () => options?.method === 'POST' ? result : url.includes('/connectors') ? connectors : current }))
   vi.stubGlobal('fetch', fetchMock)

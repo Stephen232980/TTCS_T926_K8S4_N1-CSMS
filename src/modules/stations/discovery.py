@@ -11,6 +11,8 @@ from src.modules.charging.driver_models import DriverStartRequest
 from src.modules.charging.models import ChargingSession
 from src.modules.ocpp.monitoring import expired
 from src.modules.pricing.models import Tariff, TariffBand
+from src.modules.reservations.models import ReservationCapability
+from src.modules.reservations.service import holds_connector
 from src.modules.stations.models import ChargePoint, Connector, Station
 
 
@@ -46,11 +48,25 @@ async def summaries(
         & (Connector.status == "Available")
         & ~occupied
         & ~pending
+        & ~holds_connector()
     )
     rows = (
         await db.execute(
-            select(ChargePoint.station_id, Connector, available.label("available"))
+            select(
+                ChargePoint.station_id,
+                Connector,
+                available.label("available"),
+                (
+                    (ReservationCapability.supported == True)
+                    & ReservationCapability.checked_at.is_not(None)
+                    & (ReservationCapability.boot_at == ChargePoint.last_boot_at)
+                ).label("reservation_supported"),
+            )
             .join(ChargePoint, Connector.charge_point_id == ChargePoint.id)
+            .outerjoin(
+                ReservationCapability,
+                ReservationCapability.charge_point_id == ChargePoint.id,
+            )
             .where(
                 ChargePoint.station_id.in_(ids),
                 ChargePoint.archived_at.is_(None),
@@ -70,7 +86,7 @@ async def summaries(
         }
         for station in stations
     }
-    for station_id, connector, free in rows:
+    for station_id, connector, free, reservation_supported in rows:
         projection = result[station_id]
         projection["total_connectors"] = int(projection["total_connectors"]) + 1  # type: ignore[call-overload]
         projection["available_connectors"] = int(
@@ -85,6 +101,7 @@ async def summaries(
                 "current_type": connector.current_type,
                 "max_power_kw": connector.max_power_kw,
                 "available": bool(free),
+                "reservation_supported": bool(reservation_supported),
             }
         )
     effective = (
