@@ -346,6 +346,7 @@ async def start_transaction(
         payload.reservationId,
         payload.timestamp,
         await database_time(session),
+        frame.message_id,
     )
     if not reservation_allowed or (
         reservation is not None and result != "Accepted" and wallet_failure is None
@@ -433,7 +434,7 @@ async def start_transaction(
     if reservation is not None:
         from src.modules.reservations.service import consume
 
-        consume(session, reservation, transaction, datetime.now(UTC))
+        await consume(session, reservation, transaction, datetime.now(UTC))
     await StationRepository(session).lock_charge_point_code_for_charging(
         charger.id, locked_at=datetime.now(UTC)
     )

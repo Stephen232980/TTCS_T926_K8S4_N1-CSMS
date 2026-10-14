@@ -3,7 +3,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import AwareDatetime, BaseModel, ConfigDict
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StrictInt
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,6 +31,8 @@ class BookingBody(BaseModel):
     request_id: UUID
     connector_id: UUID
     arrival_at: AwareDatetime | None = None
+    accepted_fee_vnd: Annotated[StrictInt, Field(ge=0, le=1000000)] | None = None
+    accepted_policy_version: Annotated[StrictInt, Field(ge=0)] | None = None
 
 
 class CancelBody(BaseModel):
@@ -77,10 +79,14 @@ async def view(
         "cancel_requested_at": reservation.cancel_requested_at,
         "no_show_exempt": reservation.no_show_exempt,
         "session_id": reservation.session_id,
+        "no_show_fee_vnd": str(reservation.fee_vnd),
+        "fee_decision": reservation.fee_decision,
+        "fee_reason": reservation.fee_reason,
+        "fee_ledger_id": reservation.fee_ledger_id,
         "can_cancel": reservation.status in {"active", "uncertain"}
         and now < reservation.expires_at,
         "booking_fee_vnd": 0,
-        "no_show_fee_enabled": False,
+        "no_show_fee_enabled": reservation.fee_vnd > 0,
     }
 
 
@@ -93,7 +99,14 @@ async def book(
     db: Database,
 ) -> dict[str, object]:
     result = await create_reservation(
-        db, actor.user_id, body.request_id, body.connector_id, body.arrival_at, evidence
+        db,
+        actor.user_id,
+        body.request_id,
+        body.connector_id,
+        body.arrival_at,
+        evidence,
+        body.accepted_fee_vnd,
+        body.accepted_policy_version,
     )
     return await view(db, result)
 
@@ -142,6 +155,30 @@ async def list_reservations(
         "generated_at": now,
         "refresh_after_seconds": 5,
     }
+
+
+@router.get("/policy")
+@user_policy("driver.reservations.policy.read", "own", "driver")
+async def read_quote(connector_id: UUID, db: Database) -> dict[str, int]:
+    from src.modules.reservations.policy import quote
+
+    row = (
+        await db.execute(
+            select(Station)
+            .join(ChargePoint)
+            .join(Connector)
+            .where(
+                Connector.id == connector_id,
+                Connector.archived_at.is_(None),
+                ChargePoint.archived_at.is_(None),
+                Station.archived_at.is_(None),
+                Station.status == "active",
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(404, "resource_not_found")
+    return await quote(db, row.id)
 
 
 @router.get("/{reservation_id}")

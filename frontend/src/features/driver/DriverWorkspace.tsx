@@ -30,6 +30,7 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
 }) {
   const [area, setArea] = useState<Area>(hashArea)
   const [invoiceView, setInvoiceView] = useState(() => window.location.hash.startsWith('#driver-invoice'))
+  const [reservationFocus, setReservationFocus] = useState(() => /^#driver-reservation-([0-9a-f-]{36})$/i.exec(window.location.hash)?.[1])
   const [invoiceSessionId, setInvoiceSessionId] = useState<number | undefined>(() => {
     const match = /^#driver-invoice-(\d+)$/.exec(window.location.hash)
     return match ? Number(match[1]) : undefined
@@ -79,6 +80,7 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
     const change = () => {
       const next = hashArea()
       setArea(next)
+      setReservationFocus(/^#driver-reservation-([0-9a-f-]{36})$/i.exec(window.location.hash)?.[1])
       setInvoiceView(window.location.hash.startsWith('#driver-invoice'))
       const invoiceMatch = /^#driver-invoice-(\d+)$/.exec(window.location.hash)
       setInvoiceSessionId(invoiceMatch ? Number(invoiceMatch[1]) : undefined)
@@ -150,7 +152,7 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
       <header className="driver-heading">
         <h1>
           {area === 'session'
-            ? 'Phiên sạc của bạn'
+            ? reservationFocus ? 'Chi tiết đặt chỗ' : 'Phiên sạc của bạn'
             : area === 'wallet'
               ? invoiceView ? 'Hóa đơn của bạn' : showingReturn ? 'Trạng thái nạp tiền' : 'Ví tiền của bạn'
               : showStart
@@ -159,7 +161,7 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
         </h1>
         <p>
           {area === 'session'
-            ? 'Theo dõi điện năng và thời gian từ trụ đang sạc.'
+            ? reservationFocus ? 'Mức phí đã xác nhận và kết quả xử lý đặt chỗ.' : 'Theo dõi điện năng và thời gian từ trụ đang sạc.'
             : area === 'wallet'
               ? invoiceView
                 ? 'Xem chi tiết tiền điện và phí chiếm trụ của từng phiên.'
@@ -197,7 +199,7 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
       </div>
       {area !== 'wallet' && (
         <>
-          <DriverReservations ownerId={currentUser.id} />
+          <DriverReservations key={reservationFocus ?? 'list'} ownerId={currentUser.id} focusedId={reservationFocus} />
           <div className="driver-return" hidden={!showStart || area !== 'stations'}><button className="secondary-button" onClick={() => setShowStart(false)}><Icon name="chevronLeft" />Quay lại bản đồ và danh sách</button></div>
           <DriverCharging ownerId={currentUser.id} stationId={station?.id} stationName={station?.name} showSession={area === 'session'} showConnectors={area === 'stations' && showStart} onFindStations={showStations} onSessionStarted={sessionStarted} />
           {mapOpened && <div className="driver-map-container" hidden={area !== 'stations' || showStart}><DriverMapPage selectedStationId={station?.id} onOpenStation={selected => { setStation(selected); setShowStart(true) }} /></div>}

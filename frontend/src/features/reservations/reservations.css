@@ -12,3 +12,6 @@
 .driver-reservation-form form p { flex-basis: 100%; }
 .driver-reservation-pages { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
 @media (max-width: 699px) { .driver-reservation-form form button { flex: 1 1 130px; } }
+
+.driver-reservation-form label.reservation-fee-consent { flex-basis: 100%; flex-direction: row; align-items: flex-start; line-height: 1.5; min-height: 44px; }
+.driver-reservation-form input[type=checkbox] { width: 20px; min-height: 20px; height: 20px; flex: 0 0 20px; margin: 2px 0; }

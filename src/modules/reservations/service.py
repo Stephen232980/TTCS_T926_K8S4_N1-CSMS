@@ -132,18 +132,35 @@ async def create_reservation(
     connector_id: UUID,
     arrival_at: datetime | None,
     evidence: AuthorizationEvidence,
+    accepted_fee_vnd: int | None = None,
+    accepted_policy_version: int | None = None,
 ) -> Reservation:
     canonical_arrival = (
         arrival_at.astimezone(UTC).isoformat() if arrival_at is not None else "now"
     )
-    digest = hashlib.sha256(f"{connector_id}|{canonical_arrival}".encode()).hexdigest()
+    digest = hashlib.sha256(
+        f"{connector_id}|{canonical_arrival}|{accepted_fee_vnd}|{accepted_policy_version}".encode()
+    ).hexdigest()
     await db.execute(
         text("SELECT pg_advisory_xact_lock(:key)"),
         {"key": request_id.int % (2**63 - 1)},
     )
     previous = await db.get(Reservation, request_id)
     if previous is not None:
-        if previous.driver_id != driver_id or previous.request_hash != digest:
+        legacy_hash = hashlib.sha256(
+            f"{connector_id}|{canonical_arrival}".encode()
+        ).hexdigest()
+        legacy_retry = (
+            previous.fee_decision == "legacy_exempt"
+            and accepted_fee_vnd is None
+            and accepted_policy_version is None
+            and previous.request_hash == legacy_hash
+        )
+        if (
+            previous.driver_id != driver_id
+            or previous.request_hash != digest
+            and not legacy_retry
+        ):
             raise HTTPException(409, "reservation_request_conflict")
         return previous
     if await db.get(ReservationCommand, request_id) is not None:
@@ -205,6 +222,19 @@ async def create_reservation(
     )
     if driver is None or driver.status != "active" or role is None:
         raise HTTPException(403, "permission_denied")
+    from src.modules.reservations.policy import quote
+
+    fee_policy = await quote(db, station.id)
+    fee = fee_policy["fee_vnd"]
+    if (
+        (accepted_fee_vnd is not None and accepted_fee_vnd != fee)
+        or (
+            accepted_policy_version is not None
+            and accepted_policy_version != fee_policy["version"]
+        )
+        or (fee > 0 and (accepted_fee_vnd is None or accepted_policy_version is None))
+    ):
+        raise HTTPException(409, "reservation_policy_changed")
     if (
         await db.scalar(
             select(Reservation.id).where(
@@ -216,6 +246,11 @@ async def create_reservation(
         raise HTTPException(409, "driver_already_reserved")
     if not await power_start_allowed(db, station.id):
         raise HTTPException(409, "power_unavailable")
+    from src.modules.wallet.models import Wallet
+
+    await db.scalar(
+        select(Wallet).where(Wallet.driver_id == driver_id).with_for_update()
+    )
     eligibility = await du_so_du_de_sac(
         db, driver_id=driver_id, station_id=station.id, now=now
     )
@@ -229,6 +264,18 @@ async def create_reservation(
             },
         )
     tag = await ensure_driver_resources(db, driver)
+    if (
+        eligibility.minimum_balance_vnd is not None
+        and eligibility.balance_vnd is not None
+        and eligibility.balance_vnd < eligibility.minimum_balance_vnd + fee
+    ):
+        raise HTTPException(
+            409,
+            {
+                "reason": "wallet_low",
+                "minimum_balance_vnd": eligibility.minimum_balance_vnd + fee,
+            },
+        )
     identity = await db.get(ChargingCard, tag.card_id)
     if (
         identity is None
@@ -245,6 +292,9 @@ async def create_reservation(
         card_id=tag.card_id,
         request_hash=digest,
         status="pending",
+        fee_vnd=fee,
+        fee_policy_version=fee_policy["version"],
+        fee_decision="pending",
         created_at=now,
         arrival_at=arrival,
         expires_at=arrival + timedelta(minutes=15),
@@ -304,6 +354,10 @@ async def request_release(
     reservation.no_show_exempt = reason == "station_unavailable" or (
         reason == "driver_cancel" and now < reservation.expires_at
     )
+    if reservation.no_show_exempt and reservation.fee_decision == "pending":
+        from src.modules.reservations.fees import decide
+
+        await decide(db, reservation, "waived", reason, now)
     reservation.updated_at = now
     if reserve is not None and reserve.status == "queued" and reserve.attempts == 0:
         reserve.status = "suppressed"
@@ -443,8 +497,35 @@ async def validate_start(
     ocpp_id: int | None,
     source_time: datetime,
     now: datetime,
+    message_id: str | None = None,
 ) -> tuple[bool, Reservation | None]:
     hold = await connector_hold(db, connector.id, lock=True)
+    if ocpp_id is not None and (hold is None or hold.ocpp_id != ocpp_id):
+        previous = await db.scalar(
+            select(Reservation)
+            .where(
+                Reservation.ocpp_id == ocpp_id, Reservation.connector_id == connector.id
+            )
+            .with_for_update()
+        )
+        if (
+            previous is not None
+            and card is not None
+            and previous.card_id == card.id
+            and previous.driver_id == card.driver_id
+            and previous.created_at - timedelta(seconds=30)
+            <= source_time
+            < previous.expires_at
+            and previous.status != "consumed"
+            and not previous.no_show_exempt
+        ):
+            if now > previous.expires_at + timedelta(seconds=30) or hold is not None:
+                from src.modules.reservations.fees import mark_late_start
+
+                await mark_late_start(db, previous, source_time, now, message_id)
+                return False, previous
+            if previous.status == "expired" and previous.cancel_reason == "expired":
+                hold = previous
     if hold is None:
         return ocpp_id is None, None
     if (
@@ -459,13 +540,24 @@ async def validate_start(
         and source_time <= now + timedelta(seconds=30)
         and now <= hold.expires_at + timedelta(seconds=30)
     )
+    if (
+        source_time < hold.expires_at
+        and source_time >= hold.created_at - timedelta(seconds=30)
+        and now > hold.expires_at + timedelta(seconds=30)
+        and not hold.no_show_exempt
+    ):
+        from src.modules.reservations.fees import mark_late_start
+
+        await mark_late_start(db, hold, source_time, now, message_id)
+        return False, hold
     state_ok = hold.status in {"pending", "uncertain", "active"} or (
-        hold.status == "expiry_release_pending" and hold.cancel_reason == "expired"
+        hold.status in {"expiry_release_pending", "expired"}
+        and hold.cancel_reason == "expired"
     )
     return bool(timely and state_ok), hold
 
 
-def consume(
+async def consume(
     db: AsyncSession, reservation: Reservation, charging: ChargingSession, now: datetime
 ) -> None:
     reservation.status, reservation.session_id, reservation.updated_at = (
@@ -474,6 +566,10 @@ def consume(
         now,
     )
     reservation.outcome = "StartTransaction"
+    if reservation.fee_decision == "pending":
+        from src.modules.reservations.fees import decide
+
+        await decide(db, reservation, "waived", "consumed", now)
     event(db, reservation, "consumed", now, session_id=charging.id)
 
 
