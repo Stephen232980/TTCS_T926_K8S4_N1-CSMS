@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-14T12:54:43.2727711+07:00",
+  "title": "Design System: CSMS Alerts — Incumbent Extension",
+  "extensions": {
+    "breakpoints": [
+      {
+        "name": "inherited-mobile",
+        "value": "800px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Secondary incident action",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Ordinary incident actions with inherited focus and disabled feedback.",
+      "html": "<button class=\"ds-alert-action\" type=\"button\">Tiếp nhận CP-01</button>",
+      "css": ".ds-alert-action { font: inherit; font-size: 13px; color: #244e60; background: #eaf2f5; border: 0; border-radius: 10px; min-height: 36px; padding: 7px 12px; cursor: pointer; } .ds-alert-action:hover { background: #dce9ee; } .ds-alert-action:focus-visible { outline: 3px solid #2688c1; outline-offset: 3px; } .ds-alert-action:disabled { opacity: .55; cursor: not-allowed; } @media (max-width: 800px) { .ds-alert-action { min-height: 44px; } }"
+    },
+    {
+      "name": "Close reason field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Native labelled reason for explicit incident closure.",
+      "html": "<label class=\"ds-alert-label\">Lý do đóng CP-01<input class=\"ds-alert-input\" maxlength=\"500\" /></label>",
+      "css": ".ds-alert-label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #193d4b; } .ds-alert-input { font: inherit; color: #193d4b; border: 1px solid #b9cdd6; border-radius: 9px; padding: 9px 12px; min-height: 42px; width: 100%; box-sizing: border-box; } .ds-alert-input:focus-visible { outline: 3px solid #2688c1; outline-offset: 3px; }"
+    },
+    {
+      "name": "Incident context",
+      "kind": "custom",
+      "description": "Wrapped operational identity with textual station, state and delivery context.",
+      "html": "<div class=\"ds-alert-details\"><strong>CP-01 · Ngoại tuyến quá ngưỡng</strong><span>Trạm A · Chưa xử lý</span><span>Mở lúc 14/10/2026 · Email đang chờ</span></div>",
+      "css": ".ds-alert-details { display: flex; flex-direction: column; gap: 4px; color: #193d4b; overflow-wrap: anywhere; } .ds-alert-details span { font-size: 13px; color: #526e7b; }"
+    }
+  ],
+  "narrative": {
+    "rules": [
+      {
+        "name": "The State Has a Name Rule",
+        "section": "colors",
+        "body": "Pair incident identity with textual status and delivery context; preserve explicit unavailable, empty and stale-data messages."
+      },
+      {
+        "name": "The Context Travels Rule",
+        "section": "layout",
+        "body": "Keep charge-point identity, station, incident state and update context available while rows and controls wrap."
+      },
+      {
+        "name": "The Authority Stays Visible Rule",
+        "section": "components",
+        "body": "Omit unavailable role actions, and keep permitted controls tied to incident state. Do not treat hidden controls as an authorization substitute."
+      }
+    ],
+    "overview": "This is a local record of the shared incident triage panel implemented in `AlertsPanel.tsx` and `alerts.css`. It extends the incumbent teal operating interface with a white container, quiet secondary actions and factual Vietnamese labels. The project-root owner design remains authoritative for its shell; this file governs only the alerts feature.\n\nThe panel inherits each host's typography and preserves existing monitoring beneath it. Operational facts, delivery state and recovery context take precedence over decoration. Owner presentation is read-only; operator and administrator actions follow the displayed incident state and role.",
+    "northStar": "CSMS operational workspace",
+    "donts": [
+      "**Don't** promote local container geometry, polling intervals or list heights into global design tokens.",
+      "**Don't** expose mutation controls in the read-only owner view.",
+      "**Don't** clear retained facts on refresh failure or imply that alerts replace live charge-point status.",
+      "**Don't** invent severity chips, navigation, imagery or a new brand palette for this extension."
+    ],
+    "dos": [
+      "**Do** keep this extension inside the alerts feature and retain the host workspace's font and layout.",
+      "**Do** preserve textual incident and email states, recovery context and update timestamps.",
+      "**Do** retain explicit stale-data errors, separate action feedback and native keyboard focus.",
+      "**Do** wrap long identifiers and action groups within the bounded incident list."
+    ],
+    "keyCharacteristics": [
+      "Incumbent teal ink and pale secondary actions.",
+      "Explicit incident, email and update context.",
+      "Wrapped rows and a bounded scrolling list.",
+      "Native labelled controls with visible keyboard focus."
+    ]
+  }
+}
