@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import { ControlAction } from '../ocpp/ControlAction'
 import { ManualCloseForm } from '../charging/ManualCloseForm'
 import { MeterChart } from '../charging/MeterChart'
+import { meterLocationLabel, meterUnitLabel } from '../charging/meterPresentation'
 import { Icon } from '../../components/icons/Icon'
 import {
   clock,
@@ -20,13 +21,23 @@ import {
   type MeterSample,
 } from './ownerApi'
 import { ChargerDrawing, Steps } from './OwnerVisuals'
+import { durationText, reviewGuidance, needsSessionWarning } from '../operator/operatorPresentation'
 
-export function OwnerCharging({ initialSessionId, onInitialSessionOpened, area = '', initialState = 'all' }: { initialSessionId?: number; onInitialSessionOpened?: () => void; area?: '' | 'ops'; initialState?: string } = {}) {
+export interface SessionListState {
+  page: number; state: string; search: string; stationFilter: string; reviewReason: string;
+  scrollTop: number; shellScrollTop: number; windowScrollTop: number;
+}
+
+export function OwnerCharging({ initialSessionId, onInitialSessionOpened, onSessionSelection, initialListState, onRememberList, area = '', initialState = 'all' }: { initialSessionId?: number; onInitialSessionOpened?: () => void; onSessionSelection?: (id?: number) => void; initialListState?: SessionListState; onRememberList?: (state: SessionListState) => void; area?: '' | 'ops'; initialState?: string } = {}) {
   const request = useCallback(<T,>(path: string, options?: RequestInit) => ownerRequest<T>(`${area ? '/' + area : ''}${path}`, options), [area])
   const [closing, setClosing] = useState(false)
   const [mode, setMode] = useState<'sessions' | 'cards' | 'pending'>('sessions')
-  const [state, setState] = useState(initialState)
-  const [page, setPage] = useState(1)
+  const [state, setState] = useState(initialListState?.state ?? initialState)
+  const isOperatorReview = area === 'ops' && initialState === 'review'
+  const [reviewReason, setReviewReason] = useState(initialListState?.reviewReason ?? '')
+  const [page, setPage] = useState(initialListState?.page ?? 1)
+  const listElement = useRef<HTMLDivElement>(null)
+  const restoredList = useRef(false)
   const [revision, setRevision] = useState(0)
   const [sessions, setSessions] = useState<OwnerPage<OwnerSession> | null>(null)
   const [cards, setCards] = useState<OwnerCard[]>([])
@@ -57,10 +68,28 @@ export function OwnerCharging({ initialSessionId, onInitialSessionOpened, area =
   const [expiry, setExpiry] = useState('')
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState('')
-  const [search, setSearch] = useState('')
-  const [stationFilter, setStationFilter] = useState('')
+  const [search, setSearch] = useState(initialListState?.search ?? '')
+  const [stationFilter, setStationFilter] = useState(initialListState?.stationFilter ?? '')
   const [sessionObservedAt, setSessionObservedAt] = useState(() => Date.now())
   const selectedId = selected?.id ?? initialSessionId
+  function rememberList() {
+    onRememberList?.({ page, state, search, stationFilter, reviewReason,
+      scrollTop: listElement.current?.scrollTop ?? 0,
+      shellScrollTop: document.querySelector('.operator-shell')?.scrollTop ?? 0,
+      windowScrollTop: window.scrollY })
+    restoredList.current = false
+  }
+  useEffect(() => {
+    if (selectedId !== undefined || loading || !initialListState || restoredList.current) return
+    const frame = requestAnimationFrame(() => {
+      if (listElement.current) listElement.current.scrollTop = initialListState.scrollTop
+      const shell = document.querySelector('.operator-shell')
+      if (shell) shell.scrollTop = initialListState.shellScrollTop
+      if (initialListState.windowScrollTop) window.scrollTo(0, initialListState.windowScrollTop)
+      restoredList.current = true
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [selectedId, loading, initialListState])
   useEffect(() => {
     const controller = new AbortController()
     let running = false
@@ -222,7 +251,7 @@ export function OwnerCharging({ initialSessionId, onInitialSessionOpened, area =
       setSaving(false)
     }
   }
-  const operatorSessions = (sessions?.items ?? []).filter(item => (!stationFilter || item.station_name === stationFilter) && `${item.station_name} ${item.charge_point_code} ${item.id}`.toLocaleLowerCase('vi-VN').includes(search.toLocaleLowerCase('vi-VN')))
+  const operatorSessions = (sessions?.items ?? []).filter(item => (!stationFilter || item.station_name === stationFilter) && (!isOperatorReview || !reviewReason || item.review_reasons.includes(reviewReason)) && `${item.station_name} ${item.charge_point_code} ${item.id}`.toLocaleLowerCase('vi-VN').includes(search.toLocaleLowerCase('vi-VN')))
   const groups = groupBy(sessions?.items ?? [], (item) => item.station_name)
   const visibleCards = cards.filter((card) =>
     card.driver_email.toLowerCase().includes(search.toLowerCase()),
@@ -230,7 +259,7 @@ export function OwnerCharging({ initialSessionId, onInitialSessionOpened, area =
   const drivers = groupBy(visibleCards, (card) => card.driver_email)
   return (
     <section className={`owner-page${selected ? ' owner-session-page' : ''}`}>
-      <nav className="owner-tabs" aria-label="Quản lý phiên sạc">
+      {!isOperatorReview && <nav className="owner-tabs" aria-label="Quản lý phiên sạc">
         {(
           [
             ['sessions', 'Phiên sạc'],
@@ -244,6 +273,7 @@ export function OwnerCharging({ initialSessionId, onInitialSessionOpened, area =
             onClick={() => {
               setMode(key)
               setSelected(null)
+              onSessionSelection?.()
               setWizard(false)
               setPage(1)
               setError('')
@@ -256,7 +286,7 @@ export function OwnerCharging({ initialSessionId, onInitialSessionOpened, area =
             {label}
           </button>
         ))}
-      </nav>
+      </nav>}
       <header className="owner-heading">
         <div>
           <h1>
@@ -265,7 +295,7 @@ export function OwnerCharging({ initialSessionId, onInitialSessionOpened, area =
               : selected
                 ? `Phiên #${selected.id}`
                 : mode === 'sessions'
-                  ? 'Phiên sạc'
+                  ? isOperatorReview ? 'Phiên cần xem xét' : 'Phiên sạc'
                   : mode === 'cards'
                     ? 'Thẻ tài xế'
                     : 'Chờ đối chiếu'}
@@ -273,7 +303,7 @@ export function OwnerCharging({ initialSessionId, onInitialSessionOpened, area =
           <p>
             {selected
               ? `${selected.station_name} · ${selected.charge_point_code} · Đầu nối ${selected.connector_number}`
-              : area ? 'Theo dõi phiên sạc toàn hệ thống.' : 'Theo dõi trong phạm vi trạm của bạn.'}
+              : isOperatorReview ? 'Đối chiếu phiên có cảnh báo: xem nguyên nhân, kiểm tra số đo và lịch sử trước khi xử lý.' : area ? 'Theo dõi toàn bộ phiên đang mở và đã kết thúc trên hệ thống.' : 'Theo dõi trong phạm vi trạm của bạn.'}
           </p>
         </div>
         {selected ? (
@@ -281,6 +311,7 @@ export function OwnerCharging({ initialSessionId, onInitialSessionOpened, area =
             className="secondary-button"
             onClick={() => {
               setSelected(null)
+              onSessionSelection?.()
               setClosing(false)
               setSamples(null)
             }}
@@ -441,7 +472,7 @@ export function OwnerCharging({ initialSessionId, onInitialSessionOpened, area =
             <ControlAction key={selected.id} sessionId={selected.id} label={`#${selected.id}`} onDone={() => setRevision(value => value + 1)} />
             {selected.abnormal_since && <button className="secondary-button" onClick={() => setClosing(true)}>Đóng hồ sơ phiên</button>}
           </div>}
-          {closing && area === 'ops' && !selected.ended_at && <ManualCloseForm key={selected.id} sessionId={selected.id} latestMeter={selected.latest_meter_wh} startMeter={selected.meter_start_wh} meterAt={selected.latest_meter_at} onCancel={() => setClosing(false)} onSubmit={async reason => {
+          {closing && area === 'ops' && !selected.ended_at && <ManualCloseForm key={`close-${selected.id}`} sessionId={selected.id} latestMeter={selected.latest_meter_wh} startMeter={selected.meter_start_wh} meterAt={selected.latest_meter_at} onCancel={() => setClosing(false)} onSubmit={async reason => {
             await ownerRequest(`/charging/sessions/${selected.id}/close`, jsonBody('POST', { reason }))
             setClosing(false); setRevision(value => value + 1); setNotice('Đã đóng hồ sơ phiên bằng số đo cuối. Trụ không nhận lệnh dừng sạc.')
           }} />}
@@ -475,13 +506,25 @@ export function OwnerCharging({ initialSessionId, onInitialSessionOpened, area =
               { key: 'Current.Import', label: 'Dòng điện', units: ['A'], unit: 'A' },
             ].map(metric => {
               const reading = latestSamples.filter(item => item.measurand === metric.key && !item.phase && metric.units.includes(item.unit) && item.value.trim() !== '' && Number.isFinite(Number(item.value))).sort((a, b) => b.timestamp.localeCompare(a.timestamp))[0]
-              return <div key={metric.key}><span>{metric.label}</span><strong>{reading ? decimal(Number(reading.value) / (reading.unit === 'W' ? 1000 : 1)) : '—'} <small>{metric.unit}</small></strong><small>{reading ? `${clock(reading.timestamp)} · ${reading.location || 'Chưa rõ vị trí'}` : 'Chưa nhận số đo tổng'}</small></div>
+              return <div key={metric.key}><span>{metric.label}</span><strong>{reading ? decimal(Number(reading.value) / (reading.unit === 'W' ? 1000 : 1)) : '—'} <small>{metric.unit}</small></strong><small>{reading ? `${clock(reading.timestamp)} · ${meterLocationLabel(reading.location) || 'Chưa rõ vị trí'}` : 'Chưa nhận số đo tổng'}</small></div>
             })}
           </div>}
           {selected.review_reasons.length > 0 && (
-            <p className="owner-error">
-              Cần kiểm tra · {selected.review_reasons.map(reason => reviewLabels[reason] ?? reason).join(', ')}
-            </p>
+            <details key={`guidance-${selected.id}`} className={`${needsSessionWarning(selected.review_reasons, !!selected.ended_at) ? 'owner-error' : 'owner-session-note'} owner-session-guidance`} aria-label="Hướng dẫn kiểm tra phiên">
+              <summary>
+                <Icon name="chevronRight" />
+                <span>{!needsSessionWarning(selected.review_reasons, !!selected.ended_at) ? 'Ghi chú dữ liệu phiên' : selected.review_reasons.includes('invoice_missing_tariff') ? 'Chưa thể lập hóa đơn vì thiếu biểu giá' : 'Phiên cần kiểm tra'}</span>
+                <span className="owner-guidance-toggle"><span className="when-closed">Xem hướng dẫn</span><span className="when-open">Thu gọn</span></span>
+              </summary>
+              {selected.review_reasons.includes('invoice_missing_tariff') && <>
+                <p>Không tìm thấy biểu giá có hiệu lực cho một phần thời gian phiên, từ {clock(selected.started_at)} đến {clock(selected.ended_at)}.</p>
+                <p>Phiên được tạo trước khi tính năng biểu giá được triển khai có thể gặp tình trạng này. Kiểm tra lịch sử biểu giá của trạm; nếu đây là phiên dữ liệu cũ, nhờ bộ phận vận hành kiểm tra và xử lý. Khai báo biểu giá mới không bổ sung biểu giá cho thời gian đã qua.</p>
+                {area === '' && <a className="secondary-button" href={selected.station_id ? `#tariffs?${new URLSearchParams({ station: selected.station_id })}` : '#tariffs'}>Xem biểu giá</a>}
+              </>}
+              {selected.review_reasons.filter(reason => reason !== 'invoice_missing_tariff').length > 0 && <p>
+                {area === 'ops' ? selected.review_reasons.filter(reason => reason !== 'invoice_missing_tariff').map(reason => <span className="operator-review-reason" key={reason}><strong>{reviewLabels[reason] ?? 'Cần đối chiếu dữ liệu phiên'}</strong><span>{reviewGuidance(reason)}</span></span>) : <>Cần kiểm tra · {selected.review_reasons.filter(reason => reason !== 'invoice_missing_tariff').map(reason => reviewLabels[reason] ?? reason).join(', ')}</>}
+              </p>}
+            </details>
           )}
           <nav className="owner-tabs">
             <button
@@ -529,10 +572,10 @@ export function OwnerCharging({ initialSessionId, onInitialSessionOpened, area =
                           <td>{clock(sample.timestamp)}</td>
                           <td>{measurementLabels[sample.measurand] ?? sample.measurand}</td>
                           <td>
-                            {decimal(sample.value)} {['Celsius', 'Celcius'].includes(sample.unit) ? '°C' : sample.unit}
+                            {decimal(sample.value)} {meterUnitLabel(sample.unit)}
                           </td>
                           <td>
-                            {sample.phase || '—'} / {sample.location || '—'}
+                            {sample.phase || '—'} / {meterLocationLabel(sample.location) || '—'}
                           </td>
                         </tr>
                       ))}
@@ -589,11 +632,19 @@ export function OwnerCharging({ initialSessionId, onInitialSessionOpened, area =
         </>
       ) : (
         <>
-          {area === 'ops' && mode === 'sessions' && <details className="operator-session-guide"><summary>Hướng dẫn thao tác nhanh</summary><p>Chọn một phiên trong danh sách để xem biểu đồ, số đo và lịch sử. Dừng từ xa cần xác nhận; phiên chỉ kết thúc khi trụ gửi tin kết thúc. Phiên bất thường có thể đóng hồ sơ sau khi kiểm tra trụ.</p></details>}
+          {area === 'ops' && mode === 'sessions' && <details className="operator-session-guide"><summary>{isOperatorReview ? 'Cách kiểm tra phiên có cảnh báo' : 'Hướng dẫn theo dõi phiên'}</summary><p>{isOperatorReview ? 'Chọn lý do cảnh báo, mở phiên để đọc hướng dẫn và đối chiếu số đo, lịch sử phục hồi. Danh sách có thể gồm phiên đã đóng hồ sơ; cảnh báo được giữ lại để truy vết, không đồng nghĩa tất cả đều chưa xử lý.' : 'Xem trạng thái, điện năng và thời lượng của mọi phiên. Chọn phiên để xem chi tiết hoặc dừng từ xa khi cần. Các phiên có cảnh báo được tập hợp riêng tại mục Cần xem xét.'}</p></details>}
+          {area === 'ops' && mode === 'sessions' && <p className="operator-filter-scope">Tìm kiếm và lọc trạm trong trang hiện tại. Nếu không thấy phiên cần tìm, hãy xóa lọc hoặc xem trang khác.</p>}
           <div className={`owner-toolbar${area === 'ops' && mode === 'sessions' ? ' operator-session-filters' : ''}`}>
             {area === 'ops' && mode === 'sessions' && <><label className="owner-search"><Icon name="search"/><input type="search" aria-label="Tìm phiên trong trang" placeholder="Tìm trạm hoặc mã trụ trong trang" value={search} onChange={event=>setSearch(event.target.value)}/></label><label>Trạm trong trang <select value={stationFilter} onChange={event=>setStationFilter(event.target.value)}><option value="">Tất cả trạm</option>{Array.from(new Set(sessions?.items.map(item=>item.station_name) ?? [])).sort().map(name=><option key={name} value={name}>{name}</option>)}</select></label></>}
 
-            {mode === 'sessions' ? (
+            {isOperatorReview ? (
+              <label>Lý do trong trang
+                <select value={reviewReason} onChange={event => setReviewReason(event.target.value)}>
+                  <option value="">Tất cả lý do</option>
+                  {Array.from(new Set(sessions?.items.flatMap(item => item.review_reasons) ?? [])).sort().map(reason => <option key={reason} value={reason}>{reviewLabels[reason] ?? 'Cần đối chiếu dữ liệu'}</option>)}
+                </select>
+              </label>
+            ) : mode === 'sessions' ? (
               <label>
                 Trạng thái{' '}
                 <select
@@ -638,7 +689,7 @@ export function OwnerCharging({ initialSessionId, onInitialSessionOpened, area =
               Làm mới
             </button>
           </div>
-          <div className="owner-scroll owner-grow" aria-busy={loading}>
+          <div ref={listElement} className="owner-scroll owner-grow" aria-busy={loading}>
             {loading ? (
               <div className="owner-placeholder" role="status">
                 Đang tải dữ liệu…
@@ -648,12 +699,15 @@ export function OwnerCharging({ initialSessionId, onInitialSessionOpened, area =
                 const energy = session.ended_at ? session.energy_kwh : session.latest_meter_wh !== null && Number(session.latest_meter_wh) >= Number(session.meter_start_wh) ? (Number(session.latest_meter_wh) - Number(session.meter_start_wh)) / 1000 : null
                 const duration = Math.max(0, Math.floor(((session.ended_at ? Date.parse(session.ended_at) : sessionObservedAt) - Date.parse(session.started_at)) / 60000))
                 const review = session.review_reasons.length > 0
-                return <button className="operator-session-row" key={session.id} onClick={()=>{setSelected(session);setSamples(null);setLatestSamples([]);setSamplePage(1);setDetailTab('samples');setDetailError('');setEvents([]);setEventsSessionId(undefined)}}>
-                  <span><strong>Phiên #{session.id}</strong><span className={`operator-session-status${review ? ' is-review' : session.ended_at ? ' is-closed' : ''}`}>{review ? 'Cần xem xét' : session.ended_at ? 'Đã kết thúc' : 'Đang mở'}</span></span>
+                const warning = needsSessionWarning(session.review_reasons, !!session.ended_at)
+                return <button className={`operator-session-row${isOperatorReview ? ' operator-review-row' : ''}`} key={session.id} onClick={()=>{rememberList();onSessionSelection?.(session.id);setSelected(session);setSamples(null);setLatestSamples([]);setSamplePage(1);setDetailTab('samples');setDetailError('');setEvents([]);setEventsSessionId(undefined)}}>
+                  <span><strong>Phiên #{session.id}</strong><span className={`operator-session-status${isOperatorReview && warning ? ' is-review' : session.ended_at ? ' is-closed' : ''}`}>{isOperatorReview ? warning ? 'Cần kiểm tra' : 'Ghi chú dữ liệu' : session.ended_at ? 'Đã kết thúc' : 'Đang mở'}</span></span>
                   <span>{session.station_name} · {session.charge_point_code} · Đầu nối {session.connector_number}</span>
-                  <span className="operator-session-summary"><span><b>{decimal(energy)}</b> <small>kWh{session.ended_at ? ' · đã chốt' : ' · điện đã cấp'}</small></span><span><b>{duration}</b> <small>phút</small></span><span>Số đo mới nhất: {clock(session.latest_meter_at)}</span></span>
+                  {isOperatorReview && <span className={`operator-review-focus${warning ? '' : ' is-note'}`}><strong>{session.review_reasons.map(reason => reviewLabels[reason] ?? 'Cần đối chiếu dữ liệu').join(' · ')}</strong><span>Xem hướng dẫn và đối chiếu phiên →</span></span>}
+                  <span className="operator-session-summary"><span><b>{decimal(energy)}</b> <small>kWh{session.ended_at ? ' · đã chốt' : ' · điện đã cấp'}</small></span><span><b>{durationText(duration)}</b></span><span>Số đo mới nhất: {clock(session.latest_meter_at)}</span></span>
+                  {review && (isOperatorReview || warning) && <span className="operator-session-reasons">{isOperatorReview ? session.ended_at ? 'Phiên đã kết thúc' : 'Phiên đang mở' : 'Có cảnh báo · xem tại Cần xem xét'}</span>}
                 </button>
-              })}</div> : <div className="owner-placeholder">{search || stationFilter ? 'Không có phiên khớp bộ lọc trong trang này.' : 'Chưa có phiên sạc phù hợp.'}</div>
+              })}</div> : <div className="owner-placeholder">{search || stationFilter || reviewReason ? 'Không có phiên khớp bộ lọc trong trang này. Hãy đổi hoặc xóa bộ lọc để xem lại danh sách.' : isOperatorReview ? 'Không có phiên cần xem xét trong trang này.' : 'Chưa có phiên sạc phù hợp.'}</div>
             ) : mode === 'sessions' ? (
               sessions?.items.length ? (
                 Array.from(groups).map(([stationName, items]) => (

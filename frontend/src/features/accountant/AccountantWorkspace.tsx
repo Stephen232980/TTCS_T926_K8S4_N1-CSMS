@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Icon } from '../../components/icons/Icon'
 import type { AuthenticatedUser } from '../auth/model/auth'
-import { ChargingSessionsPage } from '../charging/ChargingSessionsPage'
+import { FinancePage } from './FinancePage'
 import './accountant.css'
 
 type Area = 'sessions' | 'invoices' | 'reconciliation'
@@ -10,13 +10,13 @@ const areas: {
   label: string
   icon: 'session' | 'report' | 'settings'
 }[] = [
-  { id: 'sessions', label: 'Phiên sạc & Doanh thu', icon: 'session' },
-  { id: 'invoices', label: 'Hoá đơn điện tử', icon: 'report' },
-  { id: 'reconciliation', label: 'Đối soát đối tác', icon: 'settings' },
+  { id: 'sessions', label: 'Phiên sạc & thanh toán', icon: 'session' },
+  { id: 'invoices', label: 'Hóa đơn phí sạc', icon: 'report' },
+  { id: 'reconciliation', label: 'Cần đối chiếu', icon: 'settings' },
 ]
 
 const readArea = (): Area =>
-  areas.find((a) => window.location.hash === `#accountant-${a.id}`)?.id ?? 'sessions'
+  areas.find((a) => window.location.hash.split('?')[0] === `#accountant-${a.id}`)?.id ?? 'sessions'
 
 export function AccountantWorkspace({
   currentUser,
@@ -28,6 +28,7 @@ export function AccountantWorkspace({
   onExit?: () => void
 }) {
   const [area, setArea] = useState(readArea)
+  const [accountOpen, setAccountOpen] = useState(false)
   const [logoutError, setLogoutError] = useState('')
   const [loggingOut, setLoggingOut] = useState(false)
 
@@ -61,6 +62,8 @@ export function AccountantWorkspace({
           ))}
         </nav>
         <footer>
+          <button className="accountant-account-toggle" aria-expanded={accountOpen} aria-controls="accountant-account" onClick={() => setAccountOpen(!accountOpen)}>Tài khoản</button>
+          <div id="accountant-account" className={`accountant-account-body ${accountOpen ? 'is-open' : ''}`}>
           <strong>Kế toán</strong>
           <span title={currentUser.email}>{currentUser.email}</span>
           {onExit && <button onClick={onExit}>Đổi khu vực</button>}
@@ -81,57 +84,12 @@ export function AccountantWorkspace({
             <Icon name="logout" />
             {loggingOut ? 'Đang đăng xuất…' : 'Đăng xuất'}
           </button>
+        </div>
         </footer>
       </aside>
       <main className="accountant-page" key={area}>
-        {area === 'sessions' ? (
-          <ChargingSessionsPage area="accounting" canManage={false} canClose={false} />
-        ) : area === 'invoices' ? (
-          <AccountantInvoices />
-        ) : (
-          <AccountantReconciliation />
-        )}
+        <FinancePage area={area}/>
       </main>
     </div>
-  )
-}
-
-function AccountantInvoices() {
-  return (
-    <section className="accountant-panel" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-      <header className="accountant-heading" style={{ padding: '24px 24px 16px' }}>
-        <div>
-          <h1>Hoá đơn điện tử</h1>
-          <p>Quản lý và xuất hoá đơn cho các phiên sạc.</p>
-        </div>
-        <div className="accountant-actions">
-          <button className="accountant-primary">Xuất hoá đơn mới</button>
-        </div>
-      </header>
-      <div className="accountant-empty" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-        <h2>Chưa có hoá đơn nào</h2>
-        <p>Tính năng xuất và quản lý hoá đơn điện tử đang được hoàn thiện.</p>
-      </div>
-    </section>
-  )
-}
-
-function AccountantReconciliation() {
-  return (
-    <section className="accountant-panel" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
-      <header className="accountant-heading" style={{ padding: '24px 24px 16px' }}>
-        <div>
-          <h1>Đối soát đối tác</h1>
-          <p>Đối soát thanh toán với cổng thanh toán và chủ trạm.</p>
-        </div>
-        <div className="accountant-actions">
-          <button className="accountant-primary">Tạo kỳ đối soát</button>
-        </div>
-      </header>
-      <div className="accountant-empty" style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-        <h2>Không có dữ liệu đối soát</h2>
-        <p>Tính năng đối soát thanh toán đang được hoàn thiện.</p>
-      </div>
-    </section>
   )
 }

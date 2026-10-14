@@ -314,6 +314,22 @@ describe('journal and real health contracts', () => {
     expect(url).not.toContain('charge_point_code')
     expect(url).not.toContain('from_at')
   })
+  it('keeps selection consistent with detail and supports quick actor filtering', async () => {
+    const user = userEvent.setup()
+    render(<AdminAudit />)
+    const row = await screen.findByRole('button', { name: /Khởi động lại trụ/ })
+    expect(row).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('heading', { name: 'Chọn một thao tác' })).toBeInTheDocument()
+    await user.click(row)
+    expect(row).toHaveAttribute('aria-pressed', 'true')
+    const detail = screen.getByRole('complementary', { name: 'Chi tiết nhật ký' })
+    expect(within(detail).getByRole('heading', { name: 'Chi tiết thao tác' })).toBeInTheDocument()
+    await user.click(within(detail).getByRole('button', { name: 'Đóng chi tiết thao tác' }))
+    expect(row).toHaveAttribute('aria-pressed', 'false')
+    await user.click(screen.getByRole('button', { name: `Lọc nhật ký của ${currentUser.email}` }))
+    await waitFor(() => expect(fetcher.mock.calls.some(([url]) => url.includes(`actor_email=${encodeURIComponent(currentUser.email)}`))).toBe(true))
+    expect(screen.getByLabelText('Người thực hiện')).toHaveValue(currentUser.email)
+  })
   it('never connects a chart across null gaps and retains real zero', () => {
     const point = history.points[0]
     const segments = healthSegments(
@@ -359,6 +375,23 @@ describe('journal and real health contracts', () => {
     expect(screen.getByText('Không đọc được DB')).toBeInTheDocument()
     expect(screen.getAllByRole('img')).toHaveLength(4)
     expect(screen.getByText(/Đo lúc/)).toHaveTextContent('10:00:00')
+    expect(screen.getByText('Chưa cập nhật được')).toBeInTheDocument()
+    expect(screen.getByText(/Đang giữ dữ liệu của lần tải thành công trước/)).toBeInTheDocument()
+  })
+  it('reloads a changed history interval while paused and restores focus after Escape', async () => {
+    const user = userEvent.setup()
+    render(<AdminHealth />)
+    await screen.findByText(/Chưa đủ cửa sổ 5 phút/)
+    await user.click(screen.getByRole('button', { name: 'Tạm dừng cập nhật' }))
+    const calls = fetcher.mock.calls.length
+    await user.selectOptions(screen.getByLabelText('Gộp lịch sử theo'), '300')
+    await waitFor(() => expect(fetcher.mock.calls.length).toBe(calls + 2))
+    expect(fetcher.mock.calls.some(([url]) => url.includes('resolution_seconds=300'))).toBe(true)
+    await user.click(screen.getByRole('button', { name: 'Phóng to Trụ trực tuyến' }))
+    expect(screen.getAllByRole('img')).toHaveLength(1)
+    await user.keyboard('{Escape}')
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Phóng to Trụ trực tuyến' })).toHaveFocus())
+    expect(screen.getAllByRole('img')).toHaveLength(4)
   })
   it('does not fetch administrative data for a user without admin', () => {
     render(

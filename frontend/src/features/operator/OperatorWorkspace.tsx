@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { AuthenticatedUser } from "../auth/model/auth";
 import { Icon, type IconName } from "../../components/icons/Icon";
-import { OwnerCharging } from "../owner/OwnerCharging";
+import { OwnerCharging, type SessionListState } from "../owner/OwnerCharging";
 import { OperatorMonitoring } from "./OperatorMonitoring";
 import "../owner/owner.css";
 import "./operator.css";
@@ -12,9 +12,9 @@ const navigation: { area: Area; label: string; icon: IconName }[] = [
   { area: "review", label: "Cần xem xét", icon: "report" },
 ];
 function hashArea(): Area {
-  return window.location.hash === "#ops-sessions"
+  return window.location.hash.split("?")[0] === "#ops-sessions"
     ? "sessions"
-    : window.location.hash === "#ops-review"
+    : window.location.hash.split("?")[0] === "#ops-review"
       ? "review"
       : "monitor";
 }
@@ -28,20 +28,33 @@ export function OperatorWorkspace({
   onExit?: () => void;
 }) {
   const [area, setArea] = useState<Area>(hashArea);
-  const [sessionId, setSessionId] = useState<number>();
+  const lists = useRef<Partial<Record<Area, SessionListState>>>(window.history.state?.operatorLists ?? {});
+  const [listStates, setListStates] = useState<Partial<Record<Area, SessionListState>>>(() => window.history.state?.operatorLists ?? {});
+  const rememberList = useCallback((value: SessionListState) => {
+    lists.current[area] = value;
+    setListStates({ ...lists.current });
+    window.history.replaceState({ ...window.history.state, operatorLists: lists.current }, "");
+  }, [area]);
+  const [sessionId, setSessionId] = useState<number | undefined>(() => Number(new URLSearchParams(window.location.hash.split("?")[1]).get("session")) || undefined);
+  const [accountOpen, setAccountOpen] = useState(false);
   const [logoutError, setLogoutError] = useState("");
   const [loggingOut, setLoggingOut] = useState(false);
   useEffect(() => {
     const change = () => {
+      lists.current = window.history.state?.operatorLists ?? lists.current;
+      setListStates({ ...lists.current });
       setArea(hashArea());
-      setSessionId(undefined);
+      setSessionId(Number(new URLSearchParams(window.location.hash.split("?")[1]).get("session")) || undefined);
     };
     window.addEventListener("hashchange", change);
     return () => window.removeEventListener("hashchange", change);
   }, []);
-  const opened = useCallback(() => setSessionId(undefined), []);
+  function selectSession(id?: number) {
+    window.history.pushState({ ...window.history.state, operatorLists: lists.current }, "", `#ops-${area}${id ? `?session=${id}` : ""}`);
+    setSessionId(id);
+  }
   function navigate(next: Area) {
-    window.history.replaceState(null, "", `#ops-${next}`);
+    window.history.pushState({ ...window.history.state, operatorLists: lists.current }, "", `#ops-${next}`);
     setArea(next);
     setSessionId(undefined);
   }
@@ -67,7 +80,7 @@ export function OperatorWorkspace({
         <a
           className="owner-brand"
           href="#ops-monitor"
-          onClick={() => navigate("monitor")}
+          onClick={(event) => { event.preventDefault(); navigate("monitor"); }}
         >
           <Icon name="bolt" />
           CSMS
@@ -90,6 +103,8 @@ export function OperatorWorkspace({
           ))}
         </nav>
         <footer>
+          <button className="operator-account-toggle" aria-expanded={accountOpen} aria-controls="operator-account" onClick={() => setAccountOpen(!accountOpen)}>Tài khoản</button>
+          <div id="operator-account" className={`operator-account-body ${accountOpen ? "is-open" : ""}`}>
           <strong>Vận hành viên</strong>
           <span title={currentUser.email}>{currentUser.email}</span>
           {onExit && <button onClick={onExit}>Đổi khu vực</button>}
@@ -98,6 +113,7 @@ export function OperatorWorkspace({
             <Icon name="logout" />
             {loggingOut ? "Đang đăng xuất…" : "Đăng xuất"}
           </button>
+        </div>
         </footer>
       </aside>
       <main className="owner-main">
@@ -105,16 +121,19 @@ export function OperatorWorkspace({
           <OperatorMonitoring
             onOpenSession={(id) => {
               navigate("sessions");
+              window.history.replaceState(window.history.state, "", `#ops-sessions?session=${id}`);
               setSessionId(id);
             }}
           />
         ) : (
           <OwnerCharging
-            key={area}
+            key={`${area}-${sessionId ?? "list"}`}
             area="ops"
             initialState={area === "review" ? "review" : "all"}
             initialSessionId={sessionId}
-            onInitialSessionOpened={opened}
+            initialListState={listStates[area]}
+            onRememberList={rememberList}
+            onSessionSelection={selectSession}
           />
         )}
       </main>

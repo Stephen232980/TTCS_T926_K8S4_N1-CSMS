@@ -217,7 +217,12 @@ async def _status(socket: ClientConnection, status: str) -> None:
     await _call(
         socket,
         "StatusNotification",
-        {"connectorId": 1, "status": status, "errorCode": "NoError"},
+        {
+            "connectorId": 1,
+            "status": status,
+            "errorCode": "NoError",
+            "timestamp": datetime.now(UTC).isoformat(),
+        },
     )
 
 

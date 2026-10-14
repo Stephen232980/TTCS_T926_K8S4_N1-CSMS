@@ -87,3 +87,28 @@ cd C:\Users\LENOVO\CSMS\frontend
 $env:CSMS_DEV_API_TARGET = 'http://127.0.0.1:8015'
 npm.cmd run dev -- --host 127.0.0.1 --port 5173
 ```
+
+
+## Đặt mật khẩu mới
+
+Trong chi tiết tài khoản active/suspended, admin có nút Đổi mật khẩu với bước
+xác nhận email. Phiên cũ bị thu hồi; thao tác xuất hiện trong Nhật ký tài khoản.
+Xem [hợp đồng và kiểm chứng](ADMIN_ACCOUNT_PASSWORD.md).
+
+## Rà soát giao diện ngày 13/10/2026
+
+- Tài khoản: danh tính giữ ở đầu khung, nội dung cuộn riêng; thời điểm tạo/cập nhật thu gọn. Form mật khẩu có hướng dẫn, hiện/ẩn, bước xác nhận và thao tác đóng chi tiết. Chọn trên mobile đưa focus tới chi tiết.
+- Nhật ký: màu chọn phản ánh bản ghi đang mở; có đóng chi tiết, gợi ý từ trang hiện tại và lọc nhanh theo người/trụ. API vẫn khớp chính xác, không giả lập tìm kiếm toàn hệ thống.
+- Sức khỏe: biểu đồ có chiều cao tối thiểu và vùng cuộn; thể hiện tải/thiếu/cũ/lỗi, giữ dữ liệu lần trước khi lỗi. Đổi độ phân giải lúc tạm dừng vẫn tải một lần; Escape thu gọn và trả focus.
+
+## Nạp thủ công với phiếu tự sinh (bổ sung S-36)
+
+Frontend dùng hợp đồng backend `92b9fd7`, đã được tích hợp từ `origin/develop` (`5c88ec4`, PR #142) vào nhánh sửa giao diện. Không thay AC cũ, Jira hoặc workbook.
+
+Admin chọn tài xế, nhập tiền nguyên dương và tham chiếu chứng từ tùy chọn, rồi kiểm tra/xác nhận đã thu tiền. Chỉ khi gửi lần đầu mới tạo UUID v4. Body gửi `amount_vnd`, `request_id`, `payment_received: true` và `external_reference` nếu có; không gửi `receipt_code`.
+
+Khoản đã gửi được lưu trong sessionStorage theo ID admin. Sau timeout 30 giây, mất phản hồi hoặc quay lại màn hình trong cùng phiên trình duyệt, khóa sửa nội dung và thử lại cùng key/body. Lỗi `manual_topup_request_conflict` khóa gửi tiếp, không tự đổi UUID. Sau thành công mới mở thao tác ghi nhận khoản thu mới. Xác thực dữ liệu bị từ chối (422) cho quay lại sửa và giữ UUID trong luồng hiện tại.
+
+Phiếu hiển thị mã tự sinh, tài xế, số tiền, người ghi nhận, thời gian, tham chiếu và số dư snapshot ngay sau khoản nạp gốc. Không coi snapshot là số dư hiện tại; không tạo PDF/in phiếu và không nạp lại khoản VNPAY đã cộng ví.
+
+Kiểm chứng: 32 kiểm thử frontend admin, ESLint phần admin và build đạt; 10 kiểm thử backend generated receipt chạy trên DB kiểm thử tách biệt đạt. Kiểm tra Edge với dữ liệu mô phỏng ở 1366×768, 1920×1080 và 390×844 gồm reload sau mất phản hồi, body/key giữ nguyên và không tràn ngang. Các lượt rà tài khoản dùng backend local; nhật ký/sức khỏe dùng trạng thái mô phỏng. Đây không phải nghiệm thu staging.

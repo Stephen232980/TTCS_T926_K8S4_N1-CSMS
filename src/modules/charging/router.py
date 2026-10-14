@@ -67,6 +67,7 @@ class SessionQuery(BaseModel):
 
 class SessionResponse(BaseModel):
     id: int
+    station_id: UUID
     station_name: str
     charge_point_code: str
     connector_number: int
@@ -101,8 +102,12 @@ class SampleResponse(BaseModel):
     measurand: str
     phase: str
     location: str
-    value: Decimal
-    unit: str
+    value: Decimal = Field(
+        description="Canonical sample value; energy counters are Wh, not kWh."
+    )
+    unit: str = Field(
+        description="Canonical unit stored at ingestion; do not convert again on read."
+    )
 
 
 class SessionPage(BaseModel):
@@ -226,9 +231,11 @@ def session_row(
     number: int,
     meter: Decimal | None,
     timestamp: datetime | None,
+    station_id: UUID,
 ) -> SessionResponse:
     return SessionResponse(
         id=transaction.id,
+        station_id=station_id,
         station_name=name,
         charge_point_code=code,
         connector_number=number,
@@ -286,6 +293,7 @@ async def sessions(
             Connector.connector_number,
             latest.c.value,
             latest.c.timestamp,
+            Station.id,
         )
         .join(ChargePoint, ChargePoint.id == ChargingSession.charge_point_id)
         .join(Station, Station.id == ChargePoint.station_id)
@@ -323,7 +331,8 @@ async def sessions(
     ).all()
     return SessionPage(
         items=[
-            session_row(row[0], row[1], row[2], row[3], row[4], row[5]) for row in rows
+            session_row(row[0], row[1], row[2], row[3], row[4], row[5], row[6])
+            for row in rows
         ],
         total=total,
         page=query.page,

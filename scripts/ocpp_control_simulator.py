@@ -180,6 +180,7 @@ async def run(
                 "StatusNotification",
                 {
                     "connectorId": number,
+                    "timestamp": datetime.now(UTC).isoformat(),
                     "status": state.status,
                     "errorCode": "OtherError"
                     if state.status == "Faulted"

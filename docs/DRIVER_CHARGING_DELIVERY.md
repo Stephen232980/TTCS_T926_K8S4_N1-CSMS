@@ -10,7 +10,7 @@ CI remote hay nghiệm thu thiết bị thực.
 | Story | Điều kiện | Triển khai và kiểm chứng |
 |---|---|---|
 | S-22 | Hiển thị trụ, thời điểm bắt đầu, kWh và thời gian sạc của tài xế | Màn hình tài xế đọc phiên thật từ tài khoản đăng nhập; API current không nhận driver/session ID do trình duyệt lựa chọn. |
-| S-22 | MeterValues cập nhật trong 2 giây, không reload | Poll tuần tự mỗi 1 giây sau phản hồi; chỉ đọc số đo năng lượng tổng, Wh, Outlet. Test frontend cập nhật kWh sau một nhịp; demo WebSocket cập nhật số đo và thời gian trên màn hình. Mốc này cần mạng/API đáp ứng bình thường. |
+| S-22 | MeterValues cập nhật trong 2 giây, không reload | SSE đọc snapshot đã commit mỗi 0,5 giây theo mẫu T-25, phát dữ liệu khi phiên/số đo/yêu cầu bắt đầu thay đổi. Đồng hồ chạy tại trình duyệt; polling 1 giây là dự phòng cho trình duyệt không hỗ trợ EventSource. Test HTTP SSE thật và test frontend phủ cập nhật, reconnect và rollback. |
 | S-22 | Không có phiên: thông báo và tìm trạm | Có trạng thái trống và liên kết tới bản đồ trạm trong cùng màn hình. |
 | S-22 | GET phiên tài xế khác trả 403 | Endpoint chi tiết kiểm tra driver_id với actor đăng nhập; test truy cập chéo và current trống cho tài xế khác. |
 | S-24 | Bắt đầu với thẻ ảo của tài xế | Server cấp duy nhất một id_tag riêng mỗi driver trong bảng id_tags, liên kết charging_cards; tái sử dụng luồng Authorize/StartTransaction của thẻ vật lý. |
@@ -24,13 +24,33 @@ CI remote hay nghiệm thu thiết bị thực.
 Tất cả endpoint dưới đây yêu cầu session đăng nhập và role driver.
 
 - `GET /api/v1/driver/charging/current`: `{session, start_request}` theo actor hiện tại.
+- `GET /api/v1/driver/charging/current/events`: SSE cùng cấu trúc current, gửi snapshot mới nhất ngay khi kết nối/nối lại; cookie đăng nhập và role được kiểm tra lại mỗi chu kỳ. Xem [hợp đồng và kiểm chứng T-48](T48_DRIVER_REALTIME.md).
 - `GET /api/v1/driver/charging/sessions/{session_id}`: chỉ phiên của chính tài xế; 403 nếu thuộc tài xế khác.
 - `GET /api/v1/driver/stations/{station_id}/connectors`: đầu nối chưa archive tại trạm active, không trả owner/card data.
 - `POST /api/v1/driver/charging/start`: chỉ `{request_id: UUID, connector_id: UUID}`; từ chối trường bổ sung như id_tag hoặc driver_id.
 
+Trước khi lưu/gửi yêu cầu bắt đầu, API kiểm tra điều kiện ví; nếu không đạt, trả HTTP 409
+với `{"detail": "<mã lý do>"}` (`wallet_low`, `wallet_missing`, `wallet_locked` hoặc
+`tariff_unavailable`) và không tạo yêu cầu OCPP.
+
 Request ID là khóa chống gửi trùng. Gửi lại cùng ID/driver/connector trả kết quả đã lưu,
 không gửi thêm OCPP; đổi chủ thể/đầu nối với cùng ID trả 409. Mất phản hồi mạng ở UI
 giữ nguyên ID khi thử lại. Server không gửi lại lệnh sau khởi động lại.
+
+Nếu ví trở nên không đủ điều kiện sau khi gửi RemoteStart nhưng trước StartTransaction,
+yêu cầu khớp driver/đầu nối/thẻ ảo chuyển ngay thành `Rejected`, kết thúc lease và lưu
+`rejection_reason` (`wallet_low`, `wallet_missing`, `wallet_locked`, `tariff_unavailable`).
+API start khi retry cùng ID, API current và SSE đều trả lý do này sau reload.
+`reply_status` vẫn phản ánh phản hồi lệnh RemoteStart của trụ (có thể là `Accepted`);
+phản hồi lệnh đến muộn không ghi đè `Rejected`. Không tạo phiên sạc khi ví bị từ chối.
+Thẻ vật lý không kết thúc một yêu cầu dùng thẻ ảo. T-106 dùng `rejection_reason` để
+hiển thị thông báo/nạp tiền; PR T-105 chỉ bổ sung backend và contract.
+
+Migration `d180018a2026` nối sau `d170017a2026`, thêm cột nullable
+`driver_start_requests.rejection_reason`; phải upgrade trước khi chạy phiên bản mới.
+Kiểm thử tích hợp: `pytest tests/test_wallet_start_integration.py -q` với PostgreSQL
+đã migrate. Bao phủ ngưỡng 12.499/12.500 VND (5 kWh × 2.500), thay đổi ví/biểu giá
+giữa API và StartTransaction, và cả hai thứ tự phản hồi lệnh/từ chối phiên.
 
 Trạng thái: Pending, Accepted, Started, Rejected, StartNotConfirmed, Offline,
 Timeout, Disconnected, ProtocolError. Accepted có deadline; Started có session_id thật.
@@ -82,6 +102,13 @@ OCPP chứa thẻ vào log bên ngoài ứng dụng.
    nội dung audit không chứa thẻ ảo.
 
 ## Bằng chứng kiểm thử
+
+Bổ sung T-48 ngày 08/10/2026: SSE và phục hồi/phân quyền đã kiểm chứng;
+tổng 869 ca backend qua hồi quy Linux, hai gate latency riêng và Compose
+trên Windows; frontend 205 ca đạt. HTTP SSE khoảng 537 ms; OCPP WebSocket
+20 trụ tối đa 106,5 ms. Quality gate đạt, build còn cảnh báo chunk lớn.
+Chi tiết và giới hạn tải tại [T48_DRIVER_REALTIME.md](T48_DRIVER_REALTIME.md).
+Các số liệu nhóm 6 dưới đây là bằng chứng lịch sử trước bổ sung T-48.
 
 Đã kiểm tra Ruff lint/format, mypy, ESLint, TypeScript/build; migration downgrade nhóm6,
 upgrade head và Alembic check không có schema drift. Bộ backend có 310 test đạt trên

@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { AuthApiError, type AuthApi } from './features/auth/api/authApi'
 import type { AuthenticatedUser } from './features/auth/model/auth'
@@ -42,6 +42,7 @@ class AppAuthApi implements AuthApi {
 }
 
 describe('App', () => {
+  beforeEach(() => { window.history.replaceState(null, '', '/') })
   it('requires an explicit workspace and preserves the approved owner and admin homes', async () => {
     const user = userEvent.setup()
     window.location.hash = ''
@@ -94,7 +95,7 @@ describe('App', () => {
     ['operator', 'Giám sát trụ'],
     ['admin', 'Tài khoản & vai trò'],
     ['driver', 'Phiên sạc của bạn'],
-    ['accountant', 'Phiên sạc'],
+    ['accountant', 'Phiên sạc & thanh toán'],
   ])('routes the %s role to its permitted screen', async (role, heading) => {
     const stationApi = new MockStationApi(undefined, 0)
     const listStations = vi.spyOn(stationApi, 'listStations')

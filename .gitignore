@@ -40,3 +40,5 @@ Thumbs.db
 
 # Local UI previews
 /impeccable/
+
+node_modules/

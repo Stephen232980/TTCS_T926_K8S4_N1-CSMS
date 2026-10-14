@@ -26,7 +26,7 @@ Làm sớm phần bản đồ vị trí của S-47: tài xế xem trạm active,
 | Bản đồ tài xế | GET /api/v1/driver/stations, driver-only; lọc active/non-archived ở SQL; schema không có owner_id | Leaflet, điểm trạm từ API, tìm kiếm và phân trang | Test API lọc/phân quyền; test tải/tìm/retry; QA desktop/mobile |
 | API quản lý giữ phạm vi | Không cấp driver quyền API quản lý | Không hiện tạo/sửa cho driver | Test driver gọi /api/v1/stations trả 403 |
 
-Nguồn tile mặc định: OpenStreetMap, có attribution; VITE_MAP_TILE_URL và VITE_MAP_ATTRIBUTION cho đổi nhà cung cấp. Không tải hàng loạt tile. Vị trí người dùng chỉ được yêu cầu khi bấm định vị; không gửi vị trí lên API CSMS.
+Nguồn tile mặc định: CARTO Light, có attribution OpenStreetMap và CARTO, thống nhất giữa local và bản build staging. VITE_MAP_TILE_URL và VITE_MAP_ATTRIBUTION cho đổi nhà cung cấp ở thời điểm build frontend. Không tải hàng loạt tile. Vị trí người dùng chỉ được yêu cầu khi bấm định vị; không gửi vị trí lên API CSMS.
 
 ## Nhóm giám sát S-09–S-12
 

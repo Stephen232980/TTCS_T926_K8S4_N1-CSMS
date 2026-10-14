@@ -46,7 +46,7 @@ const definitions: {
     name: 'Thời gian phản hồi',
     unit: 'ms',
     description:
-      'Trung bình từ lúc backend nhận CALL đến khi gửi xong phản hồi. Không phải thời gian trụ thực thi lệnh.',
+      'Trung bình từ lúc hệ thống nhận thông điệp CALL đến khi gửi xong phản hồi. Không phải thời gian trụ thực thi lệnh.',
   },
 ]
 export function AdminHealth() {
@@ -61,6 +61,7 @@ export function AdminHealth() {
   const [resolution, setResolution] = useState(3600)
   const [version, setVersion] = useState(0)
   const [expanded, setExpanded] = useState<MetricKey | null>(null)
+  const chartButtons = useRef(new Map<MetricKey, HTMLButtonElement>())
   const [now, setNow] = useState(Date.now)
   const manualVersion = useRef(version)
   useEffect(() => {
@@ -129,7 +130,10 @@ export function AdminHealth() {
   useEffect(() => {
     if (!expanded) return
     const escape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setExpanded(null)
+      if (e.key === 'Escape') {
+        setExpanded(null)
+        window.requestAnimationFrame(() => chartButtons.current.get(expanded)?.focus())
+      }
     }
     window.addEventListener('keydown', escape)
     return () => window.removeEventListener('keydown', escape)
@@ -176,9 +180,9 @@ export function AdminHealth() {
       <ErrorNotice error={error} onRetry={() => setVersion((v) => v + 1)} />
       <div className="admin-health-toolbar">
         <span
-          className={`admin-badge ${stale ? 'warning' : snapshot ? 'good' : 'neutral'}`}
+          className={`admin-badge ${error || stale ? 'warning' : snapshot ? 'good' : 'neutral'}`}
         >
-          {stale
+          {error ? 'Chưa cập nhật được' : stale
             ? 'Dữ liệu đã cũ'
             : snapshot
               ? 'Có dữ liệu gần nhất'
@@ -192,10 +196,10 @@ export function AdminHealth() {
               : 'Chờ hệ thống thu thập'}
         </span>
         <label>
-          Khoảng lấy mẫu
+          Gộp lịch sử theo
           <select
             value={resolution}
-            onChange={(e) => setResolution(Number(e.target.value))}
+            onChange={(e) => { setResolution(Number(e.target.value)); setVersion(v => v + 1) }}
           >
             <option value={3600}>1 giờ</option>
             <option value={1800}>30 phút</option>
@@ -204,6 +208,9 @@ export function AdminHealth() {
           </select>
         </label>
       </div>
+      {paused && <p className="admin-muted admin-health-paused" role="status">Đang tạm dừng tự cập nhật. Bạn vẫn có thể cập nhật ngay hoặc đổi khoảng hiển thị.</p>}
+      {!!error && !!data && <p className="admin-inline-warning" role="status">Đang giữ dữ liệu của lần tải thành công trước. Chưa xác nhận được tình trạng hiện tại; hãy cập nhật lại.</p>}
+      {!busy && !snapshot && !error && <p className="admin-inline-warning" role="status">Chưa có lần đo nào. Các dấu — và vùng trống chưa thể dùng để kết luận hệ thống đang hoạt động bình thường.</p>}
       {stale && (
         <p className="admin-inline-warning" role="status">
           Các giá trị dưới đây là dữ liệu lần đo trước. Hãy cập nhật lại để kiểm
@@ -241,6 +248,8 @@ export function AdminHealth() {
                   </p>
                 </div>
                 <button
+                  ref={button => { if (button) chartButtons.current.set(d.key, button); else chartButtons.current.delete(d.key) }}
+                  aria-expanded={expanded === d.key}
                   onClick={() => setExpanded(expanded ? null : d.key)}
                   aria-label={`${expanded ? 'Thu gọn' : 'Phóng to'} ${d.name}`}
                 >
@@ -248,6 +257,8 @@ export function AdminHealth() {
                 </button>
               </header>
               <HealthPlot
+                key={`${d.key}-${data?.history.resolution_seconds ?? resolution}`}
+                loading={busy && !data}
                 history={data?.history}
                 metric={d.key}
                 name={d.name}
@@ -284,11 +295,13 @@ export function AdminHealth() {
 }
 
 function HealthPlot({
+  loading,
   history,
   metric,
   name,
   unit,
 }: {
+  loading: boolean
   history?: HealthHistory
   metric: MetricKey
   name: string
@@ -325,7 +338,8 @@ function HealthPlot({
   const x = (time: number) =>
     left + ((time - start) / Math.max(1, end - start)) * (right - left)
   const y = (value: number) => bottom - (value / max) * (bottom - top)
-  const selected = inspect == null ? undefined : history?.points[inspect]
+  const index = Math.min(inspect ?? Math.max(0, (history?.points.length ?? 1) - 1), Math.max(0, (history?.points.length ?? 1) - 1))
+  const selected = history?.points[index]
   const t = (value: number) =>
     new Date(value).toLocaleTimeString('vi-VN', {
       timeZone: 'Asia/Ho_Chi_Minh',
@@ -404,7 +418,7 @@ function HealthPlot({
           )}
         </svg>
         {!values.length && (
-          <p className="admin-plot-empty">Chưa có số đo cho chỉ số này.</p>
+          <p className="admin-plot-empty">{loading ? 'Đang tải số đo…' : 'Chưa có số đo cho chỉ số này.'}</p>
         )}
       </div>
       {history && (
@@ -416,7 +430,8 @@ function HealthPlot({
               type="range"
               min={0}
               max={Math.max(0, history.points.length - 1)}
-              value={inspect ?? Math.max(0, history.points.length - 1)}
+              value={index}
+              disabled={history.points.length < 2}
               onChange={(e) => setInspect(Number(e.target.value))}
             />
           </label>

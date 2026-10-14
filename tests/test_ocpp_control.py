@@ -8,7 +8,7 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
@@ -22,6 +22,7 @@ from src.modules.ocpp.control import execute_command, scan_control_deadlines
 from src.modules.ocpp.control_models import ControlRequest, ControlResult
 from src.modules.ocpp.frames import Frame, decode_frame, encode_frame
 from src.modules.ocpp.transport import handle_message
+from src.platform.audit.models import AuditLog
 from src.platform.database.session import SessionFactory, engine, get_db_session
 from tests.test_charging_sessions import setup, start
 
@@ -356,6 +357,11 @@ async def test_reset_audit_uses_endpoint_permission_and_role_snapshot(db_session
         entry = await db_session.get(ControlRequest, uid)
         assert entry.permission == "ops.connector.reset"
         assert entry.actor_roles == ["admin", "operator", "station_owner"]
+        audit = await db_session.scalar(
+            select(AuditLog).where(AuditLog.data["request_id"].astext == str(uid))
+        )
+        assert audit.permission == entry.permission
+        assert audit.actor_roles == entry.actor_roles
         spoof = await client.post(
             f"/api/v1/ocpp/charge-points/{charger.id}/reset",
             json={"request_id": str(uuid4()), "permission": "admin.accounts.manage"},

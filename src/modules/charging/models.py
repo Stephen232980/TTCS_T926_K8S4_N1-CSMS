@@ -3,6 +3,8 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Identity,
@@ -54,7 +56,25 @@ class AuthorizationAttempt(Base):
 class ChargingSession(Base):
     __tablename__ = "charging_sessions"
     __table_args__ = (
+        CheckConstraint(
+            "billing_lifecycle_version IN (0, 1)", name="ck_charging_billing_version"
+        ),
+        CheckConstraint(
+            "release_detection IN ('explicit', 'available')",
+            name="ck_charging_release_detection",
+        ),
+        CheckConstraint(
+            "connector_released_at IS NULL OR connector_released_at >= started_at",
+            name="ck_charging_release_time",
+        ),
+        CheckConstraint(
+            "(settlement_completed_at IS NULL AND settlement_reason IS NULL) OR "
+            "(settlement_completed_at IS NOT NULL AND settlement_reason IS NOT NULL "
+            "AND settlement_reason IN ('debited', 'zero_invoice', 'legacy_exempt'))",
+            name="ck_charging_sessions_settlement",
+        ),
         Index("ix_charging_sessions_charge_point_id", "charge_point_id"),
+        Index("ix_charging_sessions_connector_latest", "connector_id", "id"),
         Index(
             "uq_charging_sessions_open_connector",
             "connector_id",
@@ -78,6 +98,20 @@ class ChargingSession(Base):
     authorization_status: Mapped[str] = mapped_column(String(20))
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    idle_since: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    billing_lifecycle_version: Mapped[int] = mapped_column(
+        Integer, default=1, server_default="1"
+    )
+    release_detection: Mapped[str] = mapped_column(
+        String(20), default="explicit", server_default="explicit"
+    )
+    connector_released_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    settlement_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    settlement_reason: Mapped[str | None] = mapped_column(String(20))
     meter_start_wh: Mapped[Decimal] = mapped_column(Numeric(24, 6))
     meter_stop_wh: Mapped[Decimal | None] = mapped_column(Numeric(24, 6))
     energy_kwh: Mapped[Decimal | None] = mapped_column(Numeric(24, 6))
@@ -95,6 +129,34 @@ class ChargingSession(Base):
     received_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
+
+
+class OccupationInterval(Base):
+    """Source-clock intervals retained even when charging resumes without a fee."""
+
+    __tablename__ = "charging_occupation_intervals"
+    __table_args__ = (
+        CheckConstraint(
+            "ended_at IS NULL OR ended_at >= started_at", name="ck_occupation_time"
+        ),
+        Index("ix_occupation_session", "session_id"),
+        Index(
+            "uq_occupation_open",
+            "session_id",
+            unique=True,
+            postgresql_where=text("ended_at IS NULL"),
+        ),
+    )
+    id: Mapped[int] = mapped_column(Integer, Identity(), primary_key=True)
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("charging_sessions.id", ondelete="CASCADE")
+    )
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    confirmed: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
+    end_reason: Mapped[str | None] = mapped_column(String(20))
 
 
 class MeterSample(Base):

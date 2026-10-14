@@ -3,7 +3,23 @@ from decimal import Decimal
 from typing import Literal, Self
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+    field_validator,
+    model_validator,
+)
+
+from src.modules.stations.connector_status import (
+    ConnectorStatusGroup,
+    connector_status_group,
+)
+from src.modules.stations.timezones import (
+    DEFAULT_STATION_TIMEZONE,
+    validate_station_timezone,
+)
 
 
 class StationCreateRequest(BaseModel):
@@ -14,6 +30,13 @@ class StationCreateRequest(BaseModel):
 
     name: str = Field(min_length=1, max_length=150)
     address: str = Field(min_length=1, max_length=500)
+    timezone: str = Field(default=DEFAULT_STATION_TIMEZONE, max_length=64)
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, value: str) -> str:
+        return validate_station_timezone(value)
+
     latitude: Decimal = Field(
         ge=Decimal(-90),
         le=Decimal(90),
@@ -32,6 +55,13 @@ class StationUpdateRequest(BaseModel):
 
     name: str | None = Field(default=None, min_length=1, max_length=150)
     address: str | None = Field(default=None, min_length=1, max_length=500)
+    timezone: str | None = Field(default=None, max_length=64)
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, value: str | None) -> str | None:
+        return validate_station_timezone(value) if value is not None else None
+
     latitude: Decimal | None = Field(
         default=None,
         ge=Decimal(-90),
@@ -79,6 +109,7 @@ class StationResponse(BaseModel):
     latitude: float
     longitude: float
     status: str
+    timezone: str
     created_at: datetime
     updated_at: datetime
 
@@ -199,6 +230,11 @@ class ConnectorResponse(BaseModel):
     amperage: Decimal | None = None
     created_at: datetime
     updated_at: datetime
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def status_group(self) -> ConnectorStatusGroup:
+        return connector_status_group(self.status)
 
 
 class ChargePointResponse(BaseModel):

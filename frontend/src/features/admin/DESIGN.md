@@ -239,3 +239,9 @@ Navigation uses the existing shared SVG icon component; graphs are authored SVG.
 - **Don't** ship QA screenshots or reuse their test identities as product assets/data.
 
 **Not canonized:** The CSMS brand label and metric readout are utility identity/data roles, not a reusable system-font display treatment. Single-use decorative colors, arbitrary plot geometry and test snapshot values are not tokens. No detected kicker, eyebrow, glyph-icon or hard-offset-shadow defect is made into a future system rule.
+
+## Refinements, 13 October 2026
+
+Account and audit details keep identity outside the scrollable body. Empty states retain the same horizontal inset. Mobile selection moves to detail and closing restores focus to the selected row. Password confirmation keeps primary and cancellation actions distinct.
+
+Health charts retain at least 320px per panel and scroll when the viewport is short; missing observations remain gaps. Generated manual receipts use a two-step review with an explicit payment-received checkbox, optional external reference and a separate success receipt. A submitted receipt is immutable in the UI while its outcome is uncertain; retry uses its original request identity. The driver picker scrolls within a bounded region instead of pushing confirmation out of reach.

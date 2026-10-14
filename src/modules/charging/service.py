@@ -4,11 +4,13 @@ import hashlib
 import logging
 from collections.abc import Sequence
 from datetime import UTC, datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
-from sqlalchemy import select, true
+from sqlalchemy import case, literal, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.config import settings
+from src.modules.charging.meter_units import UNITS, numeric_sample
 from src.modules.charging.models import (
     AuthorizationAttempt,
     ChargingCard,
@@ -17,11 +19,11 @@ from src.modules.charging.models import (
     MeterSample,
     PendingChargingMessage,
 )
+from src.modules.charging.occupation import flag, note_stop
 from src.modules.charging.payloads import (
     AuthorizePayload,
     MeterBlock,
     MeterPayload,
-    SamplePayload,
     StartPayload,
     StopPayload,
 )
@@ -29,6 +31,7 @@ from src.modules.identity.models import Role, User, UserRole
 from src.modules.ocpp.frames import Frame
 from src.modules.stations.models import ChargePoint, Connector, Station
 from src.modules.stations.repository import StationRepository
+from src.modules.wallet.eligibility import ChargingEligibility, du_so_du_de_sac
 
 logger = logging.getLogger("csms.ocpp")
 
@@ -44,7 +47,7 @@ def review(transaction: ChargingSession, reason: str) -> None:
 
 async def authorize(
     session: AsyncSession, charger: ChargePoint, tag: str
-) -> tuple[str, ChargingCard | None]:
+) -> tuple[str, ChargingCard | None, ChargingEligibility | None]:
     row = (
         await session.execute(
             select(ChargingCard, User.status)
@@ -74,6 +77,18 @@ async def authorize(
             result = "Accepted"
     if station is None or station.archived_at is not None or station.status != "active":
         result = "Blocked"
+    wallet_failure = None
+    if result == "Accepted":
+        if card is None:
+            raise RuntimeError("Accepted authorization has no matching card")
+        eligibility = await du_so_du_de_sac(
+            session, driver_id=card.driver_id, station_id=charger.station_id
+        )
+        if not eligibility.allowed:
+            wallet_failure = eligibility
+            if eligibility.reason is None:
+                raise RuntimeError("Ineligible wallet has no rejection reason")
+            result = "Blocked"
     session.add(
         AuthorizationAttempt(
             charge_point_id=charger.id, tag_tail=tag[-4:], result=result
@@ -86,7 +101,7 @@ async def authorize(
             tag[-4:],
             result,
         )
-    return result, card
+    return result, card, wallet_failure
 
 
 def pending(
@@ -111,35 +126,6 @@ def pending(
     )
 
 
-UNITS: dict[str, tuple[str, dict[str, Decimal]]] = {
-    "Energy.Active.Import.Register": ("Wh", {"Wh": Decimal(1), "kWh": Decimal(1000)}),
-    "Power.Active.Import": ("W", {"W": Decimal(1), "kW": Decimal(1000)}),
-    "Power.Offered": ("W", {"W": Decimal(1), "kW": Decimal(1000)}),
-    "Current.Import": ("A", {"A": Decimal(1)}),
-    "Voltage": ("V", {"V": Decimal(1)}),
-    "SoC": ("Percent", {"Percent": Decimal(1)}),
-    "Frequency": ("Hertz", {"Hertz": Decimal(1)}),
-    "Temperature": ("Celsius", {"Celsius": Decimal(1), "Celcius": Decimal(1)}),
-}
-
-
-def numeric_sample(sample: SamplePayload) -> tuple[Decimal, str] | None:
-    supported = UNITS.get(sample.measurand)
-    if supported is None or sample.format != "Raw":
-        return None
-    unit, conversions = supported
-    factor = conversions.get(sample.unit or unit)
-    if factor is None:
-        return None
-    try:
-        value = Decimal(sample.value) * factor
-        if not value.is_finite() or abs(value) >= Decimal("1e18"):
-            return None
-        return value.quantize(Decimal("0.000001")), unit
-    except InvalidOperation:
-        return None
-
-
 async def store_samples(
     session: AsyncSession,
     transaction: ChargingSession,
@@ -147,9 +133,10 @@ async def store_samples(
     *,
     backfill: bool = False,
     latest: dict[tuple[str, str, str], tuple[datetime, Decimal]] | None = None,
+    history: dict[tuple[str, str, str], dict[datetime, Decimal]] | None = None,
 ) -> None:
     if backfill:
-        await store_recovery_samples(session, transaction, blocks)
+        await store_recovery_samples(session, transaction, blocks, history=history)
         return
     if latest is None:
         previous = (
@@ -227,19 +214,25 @@ async def store_samples(
 
 
 async def store_recovery_samples(
-    session: AsyncSession, transaction: ChargingSession, blocks: Sequence[MeterBlock]
+    session: AsyncSession,
+    transaction: ChargingSession,
+    blocks: Sequence[MeterBlock],
+    *,
+    history: dict[tuple[str, str, str], dict[datetime, Decimal]] | None = None,
 ) -> None:
     """Late buffered samples retain their timestamps, including gaps before newest data."""
-    values = (
-        await session.scalars(
-            select(MeterSample).where(MeterSample.session_id == transaction.id)
-        )
-    ).all()
-    series: dict[tuple[str, str, str], dict[datetime, Decimal]] = {}
-    for item in values:
-        series.setdefault((item.measurand, item.phase, item.location), {})[
-            item.timestamp
-        ] = item.value
+    if history is None:
+        values = (
+            await session.scalars(
+                select(MeterSample).where(MeterSample.session_id == transaction.id)
+            )
+        ).all()
+        history = {}
+        for item in values:
+            history.setdefault((item.measurand, item.phase, item.location), {})[
+                item.timestamp
+            ] = item.value
+    series = history
     for block in sorted(blocks, key=lambda item: item.timestamp):
         if block.timestamp < transaction.started_at or (
             transaction.ended_at is not None and block.timestamp > transaction.ended_at
@@ -288,6 +281,25 @@ async def store_recovery_samples(
 async def start_transaction(
     session: AsyncSession, charger: ChargePoint, frame: Frame, payload: StartPayload
 ) -> dict[str, object]:
+    # Invoice closure locks session -> station. Lock the prior session before
+    # station here too, so reuse cannot deadlock against an in-flight invoice.
+    previous = await session.scalar(
+        select(ChargingSession)
+        .join(Connector, Connector.id == ChargingSession.connector_id)
+        .where(
+            ChargingSession.charge_point_id == charger.id,
+            Connector.connector_number == payload.connectorId,
+            Connector.archived_at.is_(None),
+        )
+        .order_by(ChargingSession.id.desc())
+        .limit(1)
+        .with_for_update(of=ChargingSession)
+    )
+    # Serialize the first session with station-timezone changes. The dispatcher
+    # already holds the charger lock.
+    await session.scalar(
+        select(Station.id).where(Station.id == charger.station_id).with_for_update()
+    )
     connector = await session.scalar(
         select(Connector)
         .where(
@@ -299,7 +311,14 @@ async def start_transaction(
     )
     if connector is None:
         raise ValueError("Connector is not registered")
-    result, card = await authorize(session, charger, payload.idTag)
+    result, card, wallet_failure = await authorize(session, charger, payload.idTag)
+    if wallet_failure is not None:
+        from src.modules.charging.driver import reject_remote_start
+
+        await reject_remote_start(session, connector, card, wallet_failure)
+        assert wallet_failure.reason is not None
+        pending(session, charger, frame, wallet_failure.reason)
+        return {"transactionId": 0, "idTagInfo": {"status": "Blocked"}}
     old = await session.scalar(
         select(ChargingSession)
         .where(
@@ -319,6 +338,13 @@ async def start_transaction(
             "ocpp_open_session_replaced transaction=%s charger=%s", old.id, charger.id
         )
         await session.flush()
+    if (
+        previous is not None
+        and previous.billing_lifecycle_version == 1
+        and previous.ended_at is not None
+        and previous.connector_released_at is None
+    ):
+        flag(previous, "occupation_replaced_before_release")
     transaction = ChargingSession(
         charge_point_id=charger.id,
         connector_id=connector.id,
@@ -328,6 +354,9 @@ async def start_transaction(
         started_at=payload.timestamp,
         meter_start_wh=Decimal(payload.meterStart),
         review_reasons=[],
+        release_detection="available"
+        if settings.billing_available_confirms_unplug
+        else "explicit",
     )
     if result != "Accepted":
         review(transaction, "authorization_" + result.lower())
@@ -351,8 +380,13 @@ async def start_transaction(
 async def meter_values(
     session: AsyncSession, charger: ChargePoint, frame: Frame, payload: MeterPayload
 ) -> dict[str, object]:
-    # Read the session and its latest series in one round trip while keeping
-    # the same charger -> session lock order and durable replay transaction.
+    # Recovery needs every timestamp to validate buffered gaps; ordinary reports
+    # need only the newest point per series. Fetch either in the same locked read.
+    recovery_timestamp = (
+        case((ChargingSession.recovery_at.is_not(None), MeterSample.timestamp))
+        if payload.transactionId is not None
+        else case((literal(False), MeterSample.timestamp))
+    )
     latest_sample = (
         select(
             MeterSample.measurand,
@@ -362,11 +396,17 @@ async def meter_values(
             MeterSample.value,
         )
         .where(MeterSample.session_id == ChargingSession.id)
-        .distinct(MeterSample.measurand, MeterSample.phase, MeterSample.location)
+        .distinct(
+            MeterSample.measurand,
+            MeterSample.phase,
+            MeterSample.location,
+            recovery_timestamp,
+        )
         .order_by(
             MeterSample.measurand,
             MeterSample.phase,
             MeterSample.location,
+            recovery_timestamp,
             MeterSample.timestamp.desc(),
         )
         .lateral("latest_meter_sample")
@@ -386,9 +426,14 @@ async def meter_values(
         statement = statement.where(ChargingSession.ended_at.is_(None))
     rows = (await session.execute(statement.with_for_update(of=ChargingSession))).all()
     transaction = rows[0][0] if rows else None
-    latest = {
-        (row[1], row[2], row[3]): (row[4], row[5]) for row in rows if row[1] is not None
-    }
+    latest: dict[tuple[str, str, str], tuple[datetime, Decimal]] = {}
+    history: dict[tuple[str, str, str], dict[datetime, Decimal]] = {}
+    for row in rows:
+        if row[1] is not None:
+            key = (row[1], row[2], row[3])
+            history.setdefault(key, {})[row[4]] = row[5]
+            if key not in latest or row[4] > latest[key][0]:
+                latest[key] = (row[4], row[5])
     if (
         transaction is None
         or transaction.manual_closed_at is not None
@@ -401,6 +446,7 @@ async def meter_values(
             transaction,
             payload.meterValue,
             latest=latest,
+            history=history,
             backfill=payload.transactionId is not None
             and transaction.recovery_at is not None,
         )
@@ -490,6 +536,7 @@ async def stop_transaction(
         transaction.energy_kwh = (
             Decimal(payload.meterStop) - transaction.meter_start_wh
         ) / Decimal(1000)
+    await note_stop(session, transaction)
     return {}
 
 
@@ -503,7 +550,7 @@ async def charging_call(
     raw = json.dumps(frame.payload)
     if frame.action == "Authorize":
         payload = AuthorizePayload.model_validate_json(raw)
-        result, _ = await authorize(session, charger, payload.idTag)
+        result, _, _ = await authorize(session, charger, payload.idTag)
         return {"idTagInfo": {"status": result}}
     if frame.action == "StartTransaction":
         return await start_transaction(

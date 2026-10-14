@@ -17,6 +17,7 @@ from src.modules.charging.service import review
 from src.modules.identity.authorization import AuthorizationEvidence
 from src.modules.ocpp.monitoring import expired
 from src.modules.stations.models import ChargePoint, Connector
+from src.platform.audit.service import ghi_nhat_ky
 
 
 async def note_reconnection(session: AsyncSession, charger_id: UUID) -> None:
@@ -156,22 +157,22 @@ async def manual_close(
         raise HTTPException(
             409, "Thời gian số đo không hợp lệ. Hãy kiểm tra đồng hồ của trụ."
         )
-    transaction.meter_stop_wh = latest.value
-    transaction.energy_kwh = (latest.value - transaction.meter_start_wh) / 1000
-    transaction.ended_at = now
-    transaction.manual_closed_at = now
-    transaction.closed_by = actor_id
-    transaction.manual_close_reason = reason
-    transaction.stop_reason = "ManualClosure"
-    transaction.abnormal_since = None
-    transaction.review_reasons = [
-        r
-        for r in transaction.review_reasons
-        if r not in ("offline_timeout", "available_with_open_session")
-    ]
-    review(transaction, "manual_closure")
-    session.add(
-        ChargingSessionEvent(
+    async with session.begin_nested():
+        transaction.meter_stop_wh = latest.value
+        transaction.energy_kwh = (latest.value - transaction.meter_start_wh) / 1000
+        transaction.ended_at = now
+        transaction.manual_closed_at = now
+        transaction.closed_by = actor_id
+        transaction.manual_close_reason = reason
+        transaction.stop_reason = "ManualClosure"
+        transaction.abnormal_since = None
+        transaction.review_reasons = [
+            r
+            for r in transaction.review_reasons
+            if r not in ("offline_timeout", "available_with_open_session")
+        ]
+        review(transaction, "manual_closure")
+        event = ChargingSessionEvent(
             session_id=transaction.id,
             actor_id=actor_id,
             action="manual_closure",
@@ -184,4 +185,15 @@ async def manual_close(
                 "energy_kwh": str(transaction.energy_kwh),
             },
         )
-    )
+        session.add(event)
+        await session.flush()
+        await ghi_nhat_ky(
+            session,
+            actor_id=actor_id,
+            action="charging.manual_close",
+            object_type="charging_session",
+            object_id=str(transaction.id),
+            data={"event_id": str(event.id)},
+            permission=authorization.permission if authorization else None,
+            actor_roles=authorization.roles if authorization else None,
+        )

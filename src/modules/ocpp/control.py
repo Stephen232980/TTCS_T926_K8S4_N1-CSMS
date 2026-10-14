@@ -1,6 +1,7 @@
 """Shared server-to-charger calls, durable audit and stop confirmation deadline."""
 
 import asyncio
+import json
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -9,12 +10,14 @@ from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.config import settings
 from src.modules.charging.models import ChargingSession, ChargingSessionEvent
 from src.modules.identity.authorization import AuthorizationEvidence
 from src.modules.identity.models import User
 from src.modules.ocpp.connection_registry import OcppConnection, ocpp_connections
 from src.modules.ocpp.control_models import ControlRequest, ControlResult
-from src.modules.stations.models import ChargePoint, Station
+from src.modules.stations.models import ChargePoint, Connector, Station
+from src.platform.audit.service import ghi_nhat_ky
 from src.platform.database.session import SessionFactory
 
 COMMAND_TIMEOUT = 30.0
@@ -48,7 +51,16 @@ async def execute_command(
     reset_type: str = "Soft",
     *,
     authorization: AuthorizationEvidence | None = None,
+    driver_id: UUID | None = None,
 ) -> dict[str, object]:
+    if action not in {"Reset", "RemoteStopTransaction", "DataTransfer"}:
+        raise HTTPException(422, "Unsupported charger command")
+    if driver_id is not None and driver_id != actor_id:
+        raise HTTPException(403, "permission_denied")
+    if action == "DataTransfer" and (
+        driver_id is None or not settings.demo_driver_unplug_enabled
+    ):
+        raise HTTPException(404, "demo_unplug_disabled")
     now = datetime.now(UTC)
     payload: dict[str, object] = (
         {"type": reset_type} if action == "Reset" else {"transactionId": target}
@@ -60,6 +72,38 @@ async def execute_command(
             text("SELECT pg_advisory_xact_lock(:key)"),
             {"key": command_id.int % (2**63 - 1)},
         )
+        charging = None
+        if driver_id is not None:
+            if action == "Reset":
+                raise HTTPException(403, "permission_denied")
+            charging = await session.get(ChargingSession, target)
+            if charging is None:
+                raise HTTPException(404, "resource_not_found")
+            if charging.driver_id != driver_id:
+                raise HTTPException(403, "permission_denied")
+        if action == "DataTransfer":
+            assert charging is not None
+            demo_charger = await session.get(ChargePoint, charging.charge_point_id)
+            demo_connector = await session.get(Connector, charging.connector_id)
+            if demo_charger is None or not demo_charger.code.upper().startswith(
+                "DEMO-STG-"
+            ):
+                raise HTTPException(404, "not_a_demo_charger")
+            if charging.release_detection != "available":
+                raise HTTPException(409, "session_requires_explicit_unplug")
+            if demo_connector is None:
+                raise HTTPException(404, "resource_not_found")
+            payload = {
+                "vendorId": "CSMS-DEMO",
+                "messageId": "Unplug",
+                "data": json.dumps(
+                    {
+                        "transactionId": charging.id,
+                        "connectorId": demo_connector.connector_number,
+                    },
+                    sort_keys=True,
+                ),
+            }
         previous = await session.get(ControlRequest, command_id)
         if previous is not None:
             matches_target = (
@@ -79,12 +123,14 @@ async def execute_command(
                 "status": await command_status(session, command_id),
             }
         transaction_id = None
-        if action == "RemoteStopTransaction":
-            charging = await session.get(ChargingSession, target)
+        if action in {"RemoteStopTransaction", "DataTransfer"}:
+            charging = charging or await session.get(ChargingSession, target)
             if charging is None:
                 raise HTTPException(404, "Không tìm thấy phiên sạc.")
-            if charging.ended_at is not None:
+            if action == "RemoteStopTransaction" and charging.ended_at is not None:
                 raise HTTPException(409, "Phiên đã kết thúc.")
+            if action == "DataTransfer" and charging.connector_released_at is not None:
+                raise HTTPException(409, "connector_already_released")
             charger_id = charging.charge_point_id
             transaction_id = charging.id
         else:
@@ -114,6 +160,20 @@ async def execute_command(
             )
         )
         await session.flush()
+        await ghi_nhat_ky(
+            session,
+            actor_id=actor_id,
+            action={
+                "Reset": "ocpp.reset",
+                "RemoteStopTransaction": "ocpp.remote_stop",
+                "DataTransfer": "demo.unplug_requested",
+            }[action],
+            object_type="charge_point" if action == "Reset" else "charging_session",
+            object_id=str(charger_id if action == "Reset" else transaction_id),
+            data={"request_id": str(command_id)},
+            permission=authorization.permission if authorization else None,
+            actor_roles=authorization.roles if authorization else None,
+        )
         connection = await ocpp_connections.get(charger.code.strip().lower())
         live = (
             charger.last_seen_at is not None

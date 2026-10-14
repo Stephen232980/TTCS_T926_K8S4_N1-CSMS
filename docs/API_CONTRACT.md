@@ -1,5 +1,7 @@
 # API contract CSMS
 
+Tra cứu kế toán (13/10/2026): role accountant có API GET `/api/v1/accounting/finance/sessions`, `/invoices`, `/stations`, `/sessions/{session_id}`, `/insights/{area}` với quyền đọc toàn phạm vi, tìm kiếm/lọc/phân trang và tổng hợp hóa đơn/sổ cái. Xem [hợp đồng và giới hạn kế toán](ACCOUNTING_FINANCE_DELIVERY.md). Không có phát hành hóa đơn điện tử, sửa tiền hoặc đối soát đối tác qua các endpoint này.
+
 Phân quyền endpoint cập nhật 05/10/2026: xem [contract phạm vi và chuyển API](ENDPOINT_AUTHORIZATION_DELIVERY.md). Các endpoint `/stations`, `/charge-points`, `/charging` (đọc/quản lý thẻ), `/ocpp/connections` cũ là alias chủ trạm, luôn `owned`; vận hành dùng `/api/v1/ops/...`, quản trị đọc dùng `/api/v1/admin/...`, kế toán đọc phiên dùng `/api/v1/accounting/...`. Reset/RemoteStop/đóng tay chỉ cần vai trò operator, admin đơn thuần không được gửi lệnh. Đây là quy tắc hiện hành thay thế các mô tả quyền chung trong phần lịch sử bên dưới.
 
 API quản trị tài khoản bổ sung ngày 05/10/2026: xem
@@ -477,6 +479,198 @@ S-16, S-23, S-27 thêm Reset, dừng phiên từ xa và nhật ký bất biến.
 S-22 và S-24 thêm phiên hiện tại theo tài khoản đăng nhập, cập nhật kWh/thời gian và bắt đầu bằng thẻ ảo qua RemoteStartTransaction. Accepted chờ StartTransaction thật; thiếu xác nhận sau 60 giây cho thử lại. Đầu nối bận/Reserved bị chặn; quyền sở hữu đặt chỗ thuộc phần đặt chỗ sau. Nâng migration c60318a4d962. Xem [AC, API và kiểm thử thủ công](DRIVER_CHARGING_DELIVERY.md). Bằng chứng local không thay Jira/CI.
 
 
+## Realtime phiên tài xế
+
+`GET /api/v1/driver/charging/current/events` dùng cookie `session`, quyền
+`driver.current`, scope `own`, role `driver`. Trả `text/event-stream` với
+`Cache-Control: no-store` và `X-Accel-Buffering: no`. 401/403 trước khi mở
+stream theo kiểm tra đăng nhập/quyền hiện hành.
+
+Message mặc định chứa `{session, start_request}` như API current. Mỗi lần
+kết nối/nối lại nhận full snapshot mới nhất. Backend đọc snapshot đã commit
+mỗi 0,5 giây, phát dữ liệu khi phiên, số đo hoặc yêu cầu bắt đầu thay đổi;
+các lượt khác gửi comment keepalive. `retry: 1000` hướng dẫn nối lại.
+`elapsed_seconds` là thời gian tại snapshot; trình duyệt tăng đồng hồ tại
+chỗ. Stream phản ánh trạng thái mới nhất, không phát lại mọi số đo theo
+Last-Event-ID. Thông tin phiên luôn tra theo tài khoản đăng nhập.
+
+Cookie, thời hạn, trạng thái tài khoản và role được kiểm tra lại mỗi chu kỳ.
+Mất quyền phát `event: access-denied` với `data: {}` rồi đóng stream.
+
 ## Bổ sung API phục vụ thiết kế chủ trạm
 
 Ảnh đại diện trạm, tên trụ và cấu hình danh định đầu nối được mô tả trong [OWNER_UI_API_DELIVERY.md](OWNER_UI_API_DELIVERY.md). Migration `a4d901ce8207` bổ sung ảnh trạm. Đây là mở rộng API cho thiết kế đã chốt, chưa triển khai giao diện và không thay các story biểu giá/phân bổ công suất/doanh thu/đổi trạng thái trạm.
+
+## Quản trị nạp ví theo phiếu thu
+
+`POST /api/v1/admin/drivers/{driver_id}/wallet/manual-topups` dùng cookie
+`session`, quyền `admin.wallet.manual_topup`, phạm vi `all`, chỉ admin hoạt động.
+
+Body: `{"amount_vnd": 500000, "receipt_code": "PT-001"}`. Tiền phải là số
+nguyên dương (không nhận boolean, số lẻ hay chuỗi); tối đa mặc định 10.000.000
+đồng, cấu hình `WALLET_MANUAL_TOPUP_MAX_VND`. Mã phiếu 1–128 ký tự sau khi bỏ
+khoảng trắng ở hai đầu, phân biệt hoa/thường; từ chối trường thừa.
+
+201 trả `ledger_id`, `wallet_id`, `driver_id`, `amount_vnd`,
+`balance_after_vnd`, `receipt_code`, `actor_id`, `created_at`. Số dư trả về là
+số dư ngay sau dòng nạp này. Một giao dịch ghi cả sổ cái và nhật ký; không
+nạp nếu không ghi được nhật ký. Không tự tạo ví cho tài xế chưa có ví.
+
+401 chưa đăng nhập; 403 không đủ quyền; 404 `resource_not_found` nếu không
+có ví; 409 `receipt_already_used` nếu mã phiếu đã dùng, hoặc `wallet_locked`
+nếu ví khoá; 422 với tên trường `amount_vnd` nếu vượt giới hạn/tràn số dư,
+và lỗi schema cho các đầu vào sai khác. Gửi lại cùng phiếu, kể cả cùng ví và
+số tiền, trả 409. Mã phiếu duy nhất toàn hệ thống trong loại `manual_topup`;
+hai request cùng phiếu đồng thời chỉ một request thành công.
+
+## Quản trị đối chiếu ví
+
+Ba lệnh dưới đây dùng cookie `session`, scope `all`, chỉ admin hoạt động.
+Tất cả ghi audit cùng giao dịch nghiệp vụ. Ví không tồn tại trả 404;
+chưa đăng nhập trả 401, không đủ quyền trả 403. Chưa có giao diện.
+
+| Method/path | Quyền | Body | Kết quả |
+| --- | --- | --- | --- |
+| POST `/api/v1/admin/wallets/{wallet_id}/repair-cache` | admin.wallet.repair_cache | `{"reason":"Đã kiểm sổ cái"}` | 200: wallet_id, balance_vnd, status |
+| POST `/api/v1/admin/wallets/{wallet_id}/unlock` | admin.wallet.unlock | Không có | 200: wallet_id, balance_vnd, status |
+| POST `/api/v1/admin/wallets/{wallet_id}/adjustments` | admin.wallet.adjust | `{"amount_vnd":-5000,"reason":"Điều chỉnh đã duyệt","audit_id":"UUID-mới"}` | 201: ledger_id, wallet_id, audit_id, amount_vnd, balance_after_vnd |
+
+`reason` là chuỗi 1–500 ký tự sau trim. Điều chỉnh nhận số nguyên khác 0
+trong BIGINT, không nhận boolean, chuỗi hoặc số lẻ; từ chối trường thừa.
+`audit_id` là mã idempotency do người gọi tạo, đồng thời là `wallet_audits.id`
+và mã tham chiếu sổ cái. Gửi lại cùng mã, ví, người, số tiền và lý do trả
+dòng cũ; đổi một trong các dữ liệu đó trả 409 `adjustment_conflict`.
+
+Sửa cache kiểm các hoá đơn `debited` dưới khoá dòng ví rồi đặt số dư bằng
+tổng sổ cái, không thêm dòng tiền hoặc mở khoá. Điều chỉnh ghi được vào ví
+khoá nhưng yêu cầu cache khớp tổng sổ cái trước khi ghi; không tự mở khoá.
+Mở khoá kiểm lại cả số dư và các hoá đơn `debited` dưới khoá dòng ví.
+Nếu còn lỗi, trả 409 với detail
+`{"code":"wallet_checks_failed","checks":["invoice_debit_count"]}` và giữ khoá.
+
+Các mã kiểm tra: balance_mismatch, ledger_total_overflow, invoice_driver_mismatch,
+invoice_debit_count, invoice_debit_wallet, invoice_debit_type,
+invoice_debit_reference, invoice_debit_amount. Số tiền trừ phải bằng âm
+invoice.total_vnd; đúng một dòng charging_debit với reference_type
+charging_session và reference_id là mã phiên dạng chuỗi chuẩn.
+
+Sửa cache hoặc mở khoá đã đạt trạng thái mong muốn không tạo thêm audit.
+Adjustment không thay thế dòng trừ phí sai/thiếu, nên không làm các kiểm tra
+hoá đơn sai trở thành đạt chỉ vì số dư tổng đã khớp.
+
+
+## Nhóm trạng thái đầu nối
+
+Các response đầu nối trong API quản lý trạm/trụ, snapshot/SSE theo dõi OCPP
+và `GET /api/v1/driver/stations/{station_id}/connectors` có thêm
+`status_group` (chỉ đọc, tính từ `status`). Trường `status` và trạng thái
+OCPP chi tiết giữ nguyên hợp đồng hiện tại.
+
+| status | status_group | Ý nghĩa hiển thị |
+| --- | --- | --- |
+| Available | available | Rảnh |
+| Preparing, Charging, SuspendedEV, SuspendedEVSE, Finishing | occupied | Đang sử dụng |
+| Reserved | reserved | Đặt chỗ |
+| Unavailable | unavailable | Không khả dụng |
+| Faulted | faulted | Lỗi |
+| unknown, NULL hoặc giá trị không nhận diện | unknown | Chưa rõ |
+
+API theo dõi ngoại tuyến trả `status='unknown'` và `status_group='unknown'`
+kể cả khi database còn quan sát Available cũ. Các API cấu hình đầu nối
+vẫn mô tả trạng thái được lưu; nhóm tổng hợp không phải quyền bắt đầu sạc.
+Quyết định bắt đầu phiên tiếp tục kiểm trạm, liên lạc, đầu nối và phiên mở
+ở dịch vụ hiện hành, không dựa vào status_group.
+
+StatusNotification không hợp lệ tiếp tục nhận PropertyConstraintViolation,
+không ghi đè trạng thái hợp lệ. Log chẩn đoán chỉ ghi mã trụ nội bộ và mã
+sự kiện; không ghi payload hoặc giá trị trạng thái tuỳ ý. Không thêm bảng
+hay cột trạng thái tổng hợp.
+
+## Hợp đồng đơn vị số đo phiên sạc
+
+`GET /api/v1/charging/sessions/{transaction_id}/samples` trả số đo đã chuẩn
+hoá khi nhận OCPP. Với `measurand=Energy.Active.Import.Register`, `unit`
+là `Wh`; `value` là chỉ số công tơ tích luỹ dạng chuỗi Decimal, tối đa sáu
+chữ số thập phân Wh. Đầu vào 1 kWh và 1000 Wh đều trả value tương đương
+1000 Wh. Đơn vị gốc không còn là đơn vị của giá trị trả về.
+
+Đầu đọc tính tiền sử dụng giá trị Wh trực tiếp, lấy hiệu chỉ số và chỉ
+chia 1000 khi chuyển phần chênh lệch sang kWh; không nhân 1000 lần nữa.
+Chọn đúng measurand/phase/location. Power chuẩn hoá về W, Current về A,
+Voltage về V; không dùng các đại lượng này như chỉ số điện năng. Đơn vị
+không hỗ trợ hoặc giá trị không hợp lệ không được suy thành số đo 0.
+
+## S-38 / T-105 — Wallet rejection at charging boundaries
+
+`POST /api/v1/driver/charging/start` rejects an ineligible wallet with HTTP 409
+and `detail` equal to `wallet_low`, `wallet_missing`, `wallet_locked`, or
+`tariff_unavailable`, before creating a start/control request or sending OCPP.
+An existing request ID still replays its persisted result without another command.
+
+If eligibility changes before StartTransaction, the matching virtual-tag request
+becomes `status: "Rejected"`, `session_id: null`, `deadline: null`, with persisted
+`rejection_reason` equal to the same reason codes. `reply_status` remains the
+RemoteStart command result (which may be `Accepted`). The additive nullable
+`rejection_reason` field is returned by start responses/replays and by
+`start_request` in current/SSE snapshots. A late command reply does not overwrite
+the wallet denial. No charging session is created. Physical-card rejections do not
+terminate an unrelated virtual-tag request. T-106 owns UI reason mapping/top-up.
+
+## S-35 / T-93 — Driver wallet topups
+
+- `POST /api/v1/driver/wallet/topups`: `driver.wallet.topup`, `own_wallet`, driver; body chỉ có amount_vnd nguyên. Ngưỡng mặc định 10.000–5.000.000 đồng, cấu hình bằng WALLET_TOPUP_MIN_VND/WALLET_TOPUP_MAX_VND. Body/query chỉ định wallet_id/driver_id trả 403.
+- `GET /api/v1/driver/wallet/topups/{order_id}`: `driver.wallet.topup.read`, `own_wallet`, driver; đọc status/reason của lệnh cùng driver_id. Lệnh lạ hoặc của người khác cùng trả 404.
+- Chưa có adapter: 503, không tạo lệnh. Timeout/lỗi sau khi gửi: 503 với detail.order_id, giữ pending đã commit để hỏi trạng thái; không tự retry POST và không cộng ví.
+- POST thành công trả 201 với order_id, amount_vnd, status, reason, created_at, redirect_url. GET trả cùng dữ liệu trừ redirect_url. Adapter T-92 chưa tích hợp; dùng gateway thử trong kiểm thử. Chi tiết ở [T93_WALLET_TOPUP_API.md](T93_WALLET_TOPUP_API.md).
+
+
+## S-40 — own-wallet transaction details and exact money
+
+`GET /api/v1/driver/wallet/transactions/{entry_id}` requires
+`driver.wallet.ledger` / `own_wallet`. Returns the persisted ledger item plus
+nullable `topup_order_id`, `topup_status`, `topup_reason`. The top-up joins on
+both the authenticated driver and the gateway transaction reference. Manual
+top-ups retain their receipt reference. GET never credits or settles anything.
+Missing entry is 404; another driver's entry is 403. Balance/list/detail reject
+`driver_id` or `wallet_id` query selectors with 403. Ledger pagination defaults
+to 50 (maximum 50) and uses the last returned ID as its cursor.
+
+All monetary fields on the driver wallet balance, ledger list and detail
+responses serialize as integer decimal **strings**, including `_vnd` fields
+and compatibility aliases. Example: `"balance_vnd":"9007199254740993"`.
+Use BigInt/Decimal/integer parsing on clients; JSON number parsing loses đồng
+above 2^53-1. Internal Python/DB integers and existing top-up request formats
+are unchanged. See S40_WALLET_DEPENDENCIES.md for the complete field list.
+
+
+### Phiếu nạp thủ công do hệ thống tạo (bổ sung S-36)
+
+Cùng endpoint và quyền ở trên, không gửi receipt_code. Body:
+
+```json
+{"amount_vnd":100000,"request_id":"12345678-1234-4234-8234-123456789abc","payment_received":true,"external_reference":"CHUNG-TU-001"}
+```
+
+request_id là UUID frontend tạo một lần cho khoản thu đang xác nhận. Bắt buộc
+payment_received là boolean true; đây là xác nhận của admin đã thu tiền bên
+ngoài, không phải CSMS kiểm chứng ngân hàng. external_reference tùy chọn,
+1–128 ký tự sau trim; dùng mã chứng từ, không dùng mã VNPAY đã ghi nhận ví.
+Không trộn các trường này với receipt_code. Prefix PT-AUTO- dành riêng hệ thống.
+
+201 trả các trường phiếu cũ, thêm request_id, payment_received và
+external_reference; receipt_code = PT-AUTO- cộng 32 ký tự hex UUID. Cùng key,
+admin, tài xế, số tiền và tham chiếu trả lại chính phiếu gốc (cùng ledger_id,
+created_at và balance_after_vnd lịch sử), không ghi thêm ledger/audit. Đổi một
+trong các thông tin đó với key cũ trả 409 manual_topup_request_conflict.
+Sau timeout/mất response, retry giữ nguyên body/key. Chỉ tạo UUID mới khi admin
+xác nhận một khoản thu mới; không tự đổi key khi gặp lỗi để tránh cộng trùng.
+
+Người thực hiện và thời gian lấy từ phiên admin và DB. Sổ cái, số dư và audit
+cùng transaction; lỗi audit rollback toàn bộ. Metadata xác nhận/tham chiếu lưu
+trong audit append-only cùng ledger_id. Không cần migration hoặc quyền DB mới.
+Luồng receipt_code cũ vẫn giữ quy tắc trùng mã trả 409 receipt_already_used.
+Phần frontend được triển khai riêng, backend không tạo/in chứng từ thu tiền.
+
+## Tài xế dừng sạc và demo rút súng
+
+Hợp đồng endpoint, trạng thái, quyền sở hữu, retry và chế độ demo: [DRIVER_STOP_DEMO_UNPLUG.md](DRIVER_STOP_DEMO_UNPLUG.md). Dừng/checkbox không chốt tiền; backend chờ bằng chứng từ trụ. Giá trị demo mặc định tắt; chỉ phiên mới capture cấu hình xác nhận Available.

@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-import secrets
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -12,14 +11,16 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.charging.driver_models import DriverStartRequest, DriverVirtualTag
+from src.modules.charging.driver_provisioning import ensure_driver_resources
 from src.modules.charging.models import ChargingCard, ChargingSession
-from src.modules.charging.service import tag_hash
 from src.modules.identity.authorization import AuthorizationEvidence
 from src.modules.identity.models import Role, User, UserRole
 from src.modules.ocpp import control
 from src.modules.ocpp.connection_registry import ocpp_connections
 from src.modules.ocpp.control_models import ControlRequest
+from src.modules.ocpp.monitoring import database_time
 from src.modules.stations.models import ChargePoint, Connector, Station
+from src.modules.wallet.eligibility import ChargingEligibility, du_so_du_de_sac
 from src.platform.database.session import SessionFactory
 
 START_CONFIRMATION_SECONDS = 60
@@ -51,20 +52,7 @@ async def expire_start_requests(
 
 
 async def virtual_tag(session: AsyncSession, driver: User) -> str:
-    tag = await session.get(DriverVirtualTag, driver.id)
-    if tag is None:
-        raw = secrets.token_urlsafe(15)
-        card = ChargingCard(
-            tag_hash=tag_hash(raw),
-            tag_tail=raw[-4:],
-            driver_id=driver.id,
-            issuer_id=driver.id,
-        )
-        session.add(card)
-        await session.flush()
-        tag = DriverVirtualTag(driver_id=driver.id, card_id=card.id, id_tag=raw)
-        session.add(tag)
-        await session.flush()
+    tag = await ensure_driver_resources(session, driver)
     stored_card = await session.get(ChargingCard, tag.card_id)
     if (
         stored_card is None
@@ -88,6 +76,10 @@ def start_result(request: DriverStartRequest) -> dict[str, object]:
         "id": request.id,
         "status": status,
         "reply_status": request.reply_status,
+        "rejection_reason": request.rejection_reason,
+        "connector_id": request.connector_id,
+        "balance_vnd": request.balance_vnd,
+        "minimum_balance_vnd": request.minimum_balance_vnd,
         "session_id": request.session_id,
         "deadline": request.lease_until if status == "Accepted" else None,
     }
@@ -159,7 +151,11 @@ async def remote_start(
         )
         occupied = await session.scalar(
             select(ChargingSession.id).where(
-                ChargingSession.ended_at.is_(None),
+                or_(
+                    ChargingSession.ended_at.is_(None),
+                    (ChargingSession.billing_lifecycle_version == 1)
+                    & ChargingSession.connector_released_at.is_(None),
+                ),
                 or_(
                     ChargingSession.connector_id == connector_id,
                     ChargingSession.driver_id == driver_id,
@@ -176,13 +172,28 @@ async def remote_start(
                 409,
                 "Đầu nối đang bận, được đặt chỗ hoặc chưa sẵn sàng. Vui lòng chọn đầu nối khác.",
             )
+        eligibility = await du_so_du_de_sac(
+            session, driver_id=driver_id, station_id=charger.station_id
+        )
+        if not eligibility.allowed:
+            if eligibility.reason is None:
+                raise RuntimeError("Ineligible wallet has no rejection reason")
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "reason": eligibility.reason,
+                    "balance_vnd": eligibility.balance_vnd,
+                    "minimum_balance_vnd": eligibility.minimum_balance_vnd,
+                },
+            )
         connection = await ocpp_connections.get(charger.code.strip().lower())
+        observed_at = await database_time(session)
         online = (
             connection is not None
             and connection.boot_accepted
             and charger.last_seen_at is not None
             and charger.last_seen_at
-            >= now - timedelta(seconds=charger.heartbeat_interval_seconds * 2)
+            >= observed_at - timedelta(seconds=charger.heartbeat_interval_seconds * 2)
         )
         status = "Pending" if online else "Offline"
         request = DriverStartRequest(
@@ -238,7 +249,7 @@ async def remote_start(
             outcome = await control.command_status(session, request_id)
             completed.reply_status = outcome
             completed.reply_at = received
-            if completed.status != "Started":
+            if completed.status not in ("Started", "Rejected"):
                 completed.status = outcome
                 completed.lease_until = (
                     received + timedelta(seconds=START_CONFIRMATION_SECONDS)
@@ -246,6 +257,46 @@ async def remote_start(
                     else received
                 )
         return start_result(completed)
+
+
+async def reject_remote_start(
+    session: AsyncSession,
+    connector: Connector,
+    card: ChargingCard | None,
+    eligibility: ChargingEligibility,
+) -> None:
+    """A wallet denial terminates only the matching virtual-tag start request.
+
+    The OCPP dispatcher already holds charger/connector locks. Keep the command
+    reply separate: a charger may accept RemoteStart but fail authorization later.
+    """
+    if card is None:
+        return
+    tag = await session.scalar(
+        select(DriverVirtualTag).where(DriverVirtualTag.card_id == card.id)
+    )
+    if tag is None:
+        return
+    request = await session.scalar(
+        select(DriverStartRequest)
+        .where(
+            DriverStartRequest.driver_id == card.driver_id,
+            DriverStartRequest.connector_id == connector.id,
+            DriverStartRequest.session_id.is_(None),
+            DriverStartRequest.status.in_(
+                ["Pending", "Accepted", "StartNotConfirmed", "Timeout", "Disconnected"]
+            ),
+        )
+        .order_by(DriverStartRequest.created_at.desc())
+        .limit(1)
+        .with_for_update()
+    )
+    if request is not None:
+        request.status = "Rejected"
+        request.rejection_reason = eligibility.reason
+        request.balance_vnd = eligibility.balance_vnd
+        request.minimum_balance_vnd = eligibility.minimum_balance_vnd
+        request.lease_until = datetime.now(UTC)
 
 
 async def attach_remote_start(

@@ -20,6 +20,7 @@ from src.modules.ocpp import control
 from src.modules.ocpp.connection_registry import ocpp_connections
 from src.modules.ocpp.control_models import ControlRequest
 from src.modules.ocpp.frames import decode_frame
+from src.modules.wallet.eligibility import ChargingEligibility
 from tests.test_charging_sessions import call, meter_payload, setup, start
 from tests.test_ocpp_control import db_session as control_database
 from tests.test_ocpp_control import reply_with
@@ -60,7 +61,12 @@ async def test_start_reply_reuse_virtual_tag_and_safe_audit(
     await db_session.refresh(driver)
     assert await virtual_tag(db_session, driver) == raw
     assert (
-        await db_session.scalar(select(func.count()).select_from(DriverVirtualTag)) == 1
+        await db_session.scalar(
+            select(func.count())
+            .select_from(DriverVirtualTag)
+            .where(DriverVirtualTag.driver_id == driver.id)
+        )
+        == 1
     )
     request = await db_session.get(ControlRequest, key)
     assert request.payload == {"connectorId": 1}
@@ -193,10 +199,16 @@ async def test_driver_endpoint_roles_body_and_empty_state(db_session, fixture):
         assert (await client.get("/api/v1/driver/charging/current")).json() == {
             "session": None,
             "start_request": None,
+            "awaiting_unplug": None,
         }
         assert (
             await client.get(f"/api/v1/driver/stations/{station.id}/connectors")
         ).json()["items"][0]["id"] == str(connector.id)
+        connector_payload = (
+            await client.get(f"/api/v1/driver/stations/{station.id}/connectors")
+        ).json()["items"][0]
+        assert connector_payload["status"] == "Available"
+        assert connector_payload["status_group"] == "available"
         assert (
             await client.post(
                 "/api/v1/driver/charging/start",
@@ -218,6 +230,45 @@ async def test_driver_endpoint_roles_body_and_empty_state(db_session, fixture):
             )
         ).status_code == 403
         conn.websocket.send_text.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "reason",
+    ["wallet_low", "wallet_missing", "wallet_locked", "tariff_unavailable"],
+)
+async def test_start_api_returns_wallet_rejection_without_creating_request(
+    db_session, fixture, monkeypatch, reason
+):
+    _, _, connector, driver, _, conn, _ = fixture
+    check_wallet = AsyncMock(
+        return_value=ChargingEligibility(False, reason, None, None, None)
+    )
+    monkeypatch.setattr(driver_service, "du_so_du_de_sac", check_wallet)
+    app.dependency_overrides[get_current_actor] = lambda: CurrentActor(
+        driver.id, frozenset({"driver"})
+    )
+    request_id = uuid4()
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.post(
+            "/api/v1/driver/charging/start",
+            json={"request_id": str(request_id), "connector_id": str(connector.id)},
+        )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": {
+            "reason": reason,
+            "balance_vnd": None,
+            "minimum_balance_vnd": None,
+        }
+    }
+    assert await db_session.get(DriverStartRequest, request_id) is None
+    assert await db_session.get(ControlRequest, request_id) is None
+    check_wallet.assert_awaited_once()
+    conn.websocket.send_text.assert_not_awaited()
 
 
 async def test_pending_scan_releases_request_without_resend(db_session, fixture):
@@ -283,3 +334,18 @@ async def test_idempotency_key_cannot_be_rebound(db_session, fixture):
         await remote_start(uuid4(), key, connector.id)
     assert error.value.status_code == 409
     assert conn.websocket.send_text.await_count == 1
+
+
+async def test_remote_start_checks_contact_using_database_time(
+    db_session, fixture, monkeypatch
+):
+    _, charger, connector, driver, _, conn, _ = fixture
+    database_now = charger.last_seen_at + timedelta(
+        seconds=2 * charger.heartbeat_interval_seconds + 1
+    )
+    clock = AsyncMock(return_value=database_now)
+    monkeypatch.setattr(driver_service, "database_time", clock)
+    result = await remote_start(driver.id, uuid4(), connector.id)
+    assert result["status"] == "Offline"
+    assert conn.websocket.send_text.await_count == 0
+    clock.assert_awaited_once()

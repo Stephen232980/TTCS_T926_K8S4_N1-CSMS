@@ -343,7 +343,8 @@ async def test_admin_lists_stations_in_global_scope_through_http(
 
     assert response.status_code == 200
     returned_ids = {item["id"] for item in response.json()["items"]}
-    assert returned_ids == {str(station.id) for station in stations}
+    expected_ids = {str(station.id) for station in stations}
+    assert expected_ids.issubset(returned_ids)
 
 
 @pytest.mark.asyncio

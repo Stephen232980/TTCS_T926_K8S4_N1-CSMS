@@ -3,7 +3,20 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, expect, it, vi } from 'vitest'
 import { DriverCharging } from './DriverCharging'
 
-afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers() })
+class FakeDriverStream {
+  static instances: FakeDriverStream[] = []
+  onmessage: ((event: { data: string }) => void) | null = null
+  onerror: (() => void) | null = null
+  listeners = new Map<string, () => void>()
+  close = vi.fn()
+  url: string
+  options: EventSourceInit
+  constructor(url: string, options: EventSourceInit) { this.url = url; this.options = options; FakeDriverStream.instances.push(this) }
+  addEventListener(name: string, listener: () => void) { this.listeners.set(name, listener) }
+  send(data: object) { this.onmessage?.({ data: JSON.stringify(data) }) }
+}
+
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); FakeDriverStream.instances = [] })
 const empty = { session: null, start_request: null }
 const connectors = { items: [{ id: 'connector-one', charge_point_code: 'TRU-01', connector_number: 1, status: 'Available' }, { id: 'busy', charge_point_code: 'TRU-02', connector_number: 1, status: 'Reserved' }] }
 function mockApi(current: object = empty, result: object = { id: 'request-one', status: 'Accepted', deadline: new Date(Date.now() + 60000).toISOString() }) {
@@ -49,6 +62,82 @@ it('explains rejected starts and allows another attempt', async () => {
   await user.click(screen.getByRole('button', { name: 'Bắt đầu sạc' }))
   expect(await screen.findByText(/Trụ từ chối/)).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Bắt đầu sạc' })).toBeEnabled()
+})
+
+it.each([
+  ['wallet_low', 'Số dư ví hiện tại chưa đạt mức tối thiểu', true],
+  ['wallet_missing', 'Chưa tìm thấy ví của bạn', false],
+  ['wallet_locked', 'Ví của bạn hiện đang bị khóa', false],
+  ['tariff_unavailable', 'Chưa có thông tin giá sạc hợp lệ', false],
+] as const)('shows the %s wallet eligibility reason', async (reason, message, canTopUp) => {
+  const fetchMock = mockApi()
+  fetchMock.mockImplementation(async (url: string, options?: RequestInit) => options?.method === 'POST'
+    ? { ok: false, json: async () => ({ detail: reason }) }
+    : { ok: true, json: async () => url.includes('/connectors') ? connectors : empty })
+  const user = userEvent.setup()
+  render(<DriverCharging stationId="station-one" />)
+  await user.selectOptions(await screen.findByLabelText('Trụ và đầu nối'), 'connector-one')
+  await user.click(screen.getByRole('checkbox'))
+  await user.click(screen.getByRole('button', { name: 'Bắt đầu sạc' }))
+  const alert = await screen.findByRole('alert')
+  expect(alert).toHaveTextContent(message)
+  if (canTopUp) {
+    expect(screen.getByRole('link', { name: 'Nạp tiền' })).toHaveAttribute('href', '#driver-wallet')
+  } else {
+    expect(screen.queryByRole('link', { name: 'Nạp tiền' })).not.toBeInTheDocument()
+  }
+})
+
+it('shows amounts and clears the denial when choosing a connector or station, then retries with a fresh identity', async () => {
+  let funded = false
+  const requests: string[] = []
+  vi.stubGlobal('fetch', vi.fn(async (url: string, options?: RequestInit) => {
+    if (options?.method === 'POST') {
+      requests.push(JSON.parse(options.body as string).request_id)
+      return funded ? { ok: true, json: async () => ({ id: 'funded', status: 'Accepted', deadline: new Date(Date.now() + 60000).toISOString() }) }
+        : { ok: false, json: async () => ({ detail: { reason: 'wallet_low', balance_vnd: 20000, minimum_balance_vnd: 22500 } }) }
+    }
+    return { ok: true, json: async () => url.includes('/connectors') ? connectors : empty }
+  }))
+  const user = userEvent.setup()
+  const view = render(<DriverCharging stationId="station-one" />)
+  await user.selectOptions(await screen.findByLabelText('Trụ và đầu nối'), 'connector-one')
+  await user.click(screen.getByRole('checkbox'))
+  await user.click(screen.getByRole('button', { name: 'Bắt đầu sạc' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('20.000đ')
+  expect(screen.getByRole('alert')).toHaveTextContent('22.500đ')
+  await user.selectOptions(screen.getByLabelText('Trụ và đầu nối'), '')
+  expect(screen.queryByRole('link', { name: 'Nạp tiền' })).not.toBeInTheDocument()
+  await user.selectOptions(screen.getByLabelText('Trụ và đầu nối'), 'connector-one')
+  await user.click(screen.getByRole('checkbox'))
+  await user.click(screen.getByRole('button', { name: 'Bắt đầu sạc' }))
+  expect(await screen.findByRole('alert')).toBeInTheDocument()
+  view.rerender(<DriverCharging stationId="station-two" />)
+  await waitFor(() => expect(screen.queryByRole('link', { name: 'Nạp tiền' })).not.toBeInTheDocument())
+  funded = true
+  await user.selectOptions(screen.getByLabelText('Trụ và đầu nối'), 'connector-one')
+  await user.click(screen.getByRole('checkbox'))
+  await user.click(screen.getByRole('button', { name: 'Bắt đầu sạc' }))
+  expect(await screen.findByText(/Trụ đã chấp nhận/)).toBeInTheDocument()
+  expect(new Set(requests).size).toBe(3)
+})
+
+it('renders a delayed wallet rejection received over SSE and clears it on selection change', async () => {
+  vi.stubGlobal('EventSource', FakeDriverStream)
+  mockApi()
+  const user = userEvent.setup()
+  render(<DriverCharging stationId="station-one" />)
+  await user.selectOptions(await screen.findByLabelText('Trụ và đầu nối'), 'connector-one')
+  await user.click(screen.getByRole('checkbox'))
+  await user.click(screen.getByRole('button', { name: 'Bắt đầu sạc' }))
+  await act(async () => FakeDriverStream.instances[0].send({ session: null, start_request: { id: 'request-one', status: 'Rejected', reply_status: 'Accepted', connector_id: 'connector-one', rejection_reason: 'wallet_low', balance_vnd: 0, minimum_balance_vnd: 22500, deadline: null } }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('0đ')
+  expect(screen.getByRole('alert')).toHaveTextContent('22.500đ')
+  expect(screen.queryByText(/Trụ từ chối/)).not.toBeInTheDocument()
+  await user.selectOptions(screen.getByLabelText('Trụ và đầu nối'), '')
+  expect(screen.queryByRole('link', { name: 'Nạp tiền' })).not.toBeInTheDocument()
+  await user.selectOptions(screen.getByLabelText('Trụ và đầu nối'), 'connector-one')
+  expect(screen.queryByRole('link', { name: 'Nạp tiền' })).not.toBeInTheDocument()
 })
 
 it('opens the session view only after current confirms the matching started session', async () => {
@@ -111,4 +200,96 @@ it('retains the same request key on a network failure and blocks start if curren
   await waitFor(() => expect(screen.getByText(/Trụ từ chối/)).toBeInTheDocument())
   const posts = fetchMock.mock.calls.filter(([, options]) => options?.method === 'POST')
   expect(posts[0][1].body).toBe(posts[1][1].body)
+})
+
+const liveSession = { id: 7, station_name: 'Trạm SSE', charge_point_code: 'TRU-SSE', connector_number: 1, started_at: '2026-10-08T01:00:00Z', energy_kwh: 1.5, elapsed_seconds: 125, latest_meter_at: '2026-10-08T01:02:05Z', needs_attention: false }
+
+it('receives SSE energy without polling and advances elapsed time locally', async () => {
+  vi.useFakeTimers()
+  vi.stubGlobal('EventSource', FakeDriverStream)
+  const fetchMock = mockApi()
+  render(<DriverCharging />)
+  await act(async () => { await vi.advanceTimersByTimeAsync(1) })
+  const stream = FakeDriverStream.instances[0]
+  expect(stream.url).toContain('/api/v1/driver/charging/current/events')
+  expect(stream.options.withCredentials).toBe(true)
+  act(() => stream.send({ session: liveSession, start_request: null }))
+  expect(screen.getByText('1,5')).toBeInTheDocument()
+  await act(async () => { await vi.advanceTimersByTimeAsync(4000) })
+  expect(screen.getByText('2 phút 8 giây')).toBeInTheDocument()
+  expect(fetchMock).toHaveBeenCalledTimes(1)
+  act(() => stream.send({ session: { ...liveSession, energy_kwh: 2.7 }, start_request: null }))
+  expect(screen.getByText('2,7')).toBeInTheDocument()
+})
+
+it('keeps a newer SSE snapshot when the initial HTTP response arrives late', async () => {
+  vi.useFakeTimers()
+  vi.stubGlobal('EventSource', FakeDriverStream)
+  let resolve!: (response: object) => void
+  vi.stubGlobal('fetch', vi.fn(() => new Promise(done => { resolve = done })))
+  render(<DriverCharging />)
+  await act(async () => { await vi.advanceTimersByTimeAsync(1) })
+  act(() => FakeDriverStream.instances[0].send({ session: liveSession, start_request: null }))
+  await act(async () => { resolve({ ok: true, json: async () => empty }) })
+  expect(screen.getByText('Trạm SSE')).toBeInTheDocument()
+  expect(screen.queryByText('Bạn chưa có phiên sạc đang diễn ra.')).not.toBeInTheDocument()
+})
+
+it('restores a fresh snapshot after reconnect and closes the stream on unmount', async () => {
+  vi.useFakeTimers()
+  vi.stubGlobal('EventSource', FakeDriverStream)
+  mockApi({ session: liveSession, start_request: null })
+  const view = render(<DriverCharging />)
+  await act(async () => { await vi.advanceTimersByTimeAsync(1) })
+  const stream = FakeDriverStream.instances[0]
+  await act(async () => stream.onerror?.())
+  expect(screen.getByRole('alert')).toHaveTextContent('có thể đã cũ')
+  act(() => stream.send({ session: { ...liveSession, energy_kwh: 4.5 }, start_request: null }))
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(screen.getByText('4,5')).toBeInTheDocument()
+  act(() => stream.send(empty))
+  expect(screen.getByText('Bạn chưa có phiên sạc đang diễn ra.')).toBeInTheDocument()
+  view.unmount()
+  expect(stream.close).toHaveBeenCalledOnce()
+  act(() => stream.send({ session: liveSession, start_request: null }))
+})
+
+it('clears private data and stops retries when stream authorization is denied', async () => {
+  vi.useFakeTimers()
+  vi.stubGlobal('EventSource', FakeDriverStream)
+  const fetchMock = mockApi({ session: liveSession, start_request: null })
+  const unauthorized = vi.fn()
+  window.addEventListener('csms:session-unauthorized', unauthorized)
+  try {
+    render(<DriverCharging />)
+    await act(async () => { await vi.advanceTimersByTimeAsync(1) })
+    const stream = FakeDriverStream.instances[0]
+    act(() => stream.listeners.get('access-denied')?.())
+    expect(stream.close).toHaveBeenCalled()
+    expect(unauthorized).toHaveBeenCalledOnce()
+    expect(screen.queryByText('Trạm SSE')).not.toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('không còn quyền')
+    act(() => stream.send({ session: liveSession, start_request: null }))
+    await act(async () => { await vi.advanceTimersByTimeAsync(3000) })
+    expect(screen.queryByText('Trạm SSE')).not.toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  } finally { window.removeEventListener('csms:session-unauthorized', unauthorized) }
+})
+
+it('reopens a malformed stream and waits for a valid recovery snapshot', async () => {
+  vi.useFakeTimers()
+  vi.stubGlobal('EventSource', FakeDriverStream)
+  mockApi()
+  render(<DriverCharging />)
+  await act(async () => { await vi.advanceTimersByTimeAsync(1) })
+  const first = FakeDriverStream.instances[0]
+  act(() => first.onmessage?.({ data: 'not-json' }))
+  expect(first.close).toHaveBeenCalledOnce()
+  expect(screen.getByRole('alert')).toHaveTextContent('đang kết nối lại')
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+  act(() => FakeDriverStream.instances[1].send({ session: liveSession, start_request: null }))
+  expect(screen.getByText('Trạm SSE')).toBeInTheDocument()
+  act(() => first.send(empty))
+  expect(screen.getByText('Trạm SSE')).toBeInTheDocument()
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })

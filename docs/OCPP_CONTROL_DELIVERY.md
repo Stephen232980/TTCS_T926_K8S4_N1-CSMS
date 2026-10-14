@@ -1,5 +1,11 @@
 # Nhóm 5 — điều khiển OCPP
 
+T-57 phần B bổ sung chỉ mục `audit_logs` dùng chung cho Reset và dừng từ
+xa, cùng giao dịch với yêu cầu trước khi gửi lệnh. Một yêu cầu có một audit;
+kết quả vẫn ở `ocpp_control_results` và được join như API hiện có. Người
+phụ trách S-27 đã chốt cách nghiệm thu này ngày 08/10/2026. Xem
+[hợp đồng và ma trận kiểm chứng phần B](T57_AUDIT_INTEGRATION.md).
+
 > Phân quyền hiện hành cập nhật 05/10/2026: [nền phân quyền endpoint](ENDPOINT_AUTHORIZATION_DELIVERY.md) thay thế quy tắc admin/operator tự nhận global scope và quyền điều khiển trong các mô tả lịch sử bên dưới. Chủ trạm dùng owned; vận hành/kế toán đọc qua namespace riêng; admin đơn thuần không gửi Reset/Stop/đóng tay.
 
 Phạm vi: S-16 Reset, S-23 RemoteStopTransaction, S-27 nhật ký điều khiển.

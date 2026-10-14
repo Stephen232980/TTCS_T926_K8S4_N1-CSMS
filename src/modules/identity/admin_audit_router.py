@@ -29,7 +29,9 @@ class AccountAuditQuery(BaseModel):
     page_size: int = Field(default=20, ge=1, le=100)
     actor_email: str | None = Field(default=None, min_length=1, max_length=320)
     target_id: UUID | None = None
-    action: Literal["account_created", "account_updated"] | None = None
+    action: (
+        Literal["account_created", "account_updated", "account_password_reset"] | None
+    ) = None
     from_at: AwareDatetime | None = None
     to_at: AwareDatetime | None = None
 

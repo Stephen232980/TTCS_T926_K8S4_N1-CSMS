@@ -1,0 +1,1570 @@
+{
+  "schema_version": 2,
+  "story": "S-32",
+  "task": "T-77",
+  "prepared_date": "2026-10-11",
+  "assigned_to": "Hoàng Hữu Đạt",
+  "assigned_reviewer": "Đào Minh Tâm",
+  "confirmation": {
+    "approved": true,
+    "reviewer": "Đào Minh Tâm",
+    "date": "2026-10-11",
+    "evidence": "Người dùng tự xác nhận là Đào Minh Tâm và xác nhận T-77 trong chat"
+  },
+  "provenance": "Đáp án được Codex lập theo công thức nghiệp vụ, không gọi hoặc lấy expected từ mã CSMS. Không phải bằng chứng người tính tay độc lập.",
+  "source": "Chia_viec_Sprint_4-5_cap_nhat.xlsx: Ca kiểm thử S-32; Thống nhất đã chốt #1,#2,#16 và hợp đồng T-70/T-71/T-64. Backlog CSMS.xlsx: S-32.",
+  "missing_source": "Nguồn chỉ mô tả KT-01–KT-03. Người dùng yêu cầu bổ sung để phủ AC: KT-04–KT-22 là bộ ca mở rộng, không tuyên bố lấy từ file refinement gốc.",
+  "tariff_profiles": {
+    "A": {
+      "2026-10-10": {
+        "bands": [
+          {
+            "start_min": 0,
+            "end_min": 360,
+            "rate_vnd": 2000,
+            "label": "Dem som"
+          },
+          {
+            "start_min": 360,
+            "end_min": 1320,
+            "rate_vnd": 3000,
+            "label": "Ban ngay"
+          },
+          {
+            "start_min": 1320,
+            "end_min": 1440,
+            "rate_vnd": 2000,
+            "label": "Dem muon"
+          }
+        ],
+        "idle_rate_vnd_per_minute": 200,
+        "grace_minutes": 5
+      }
+    },
+    "AB": {
+      "2026-10-10": {
+        "bands": [
+          {
+            "start_min": 0,
+            "end_min": 360,
+            "rate_vnd": 2000,
+            "label": "Dem som"
+          },
+          {
+            "start_min": 360,
+            "end_min": 1320,
+            "rate_vnd": 3000,
+            "label": "Ban ngay"
+          },
+          {
+            "start_min": 1320,
+            "end_min": 1440,
+            "rate_vnd": 2000,
+            "label": "Dem muon"
+          }
+        ],
+        "idle_rate_vnd_per_minute": 200,
+        "grace_minutes": 5
+      },
+      "2026-10-11": {
+        "bands": [
+          {
+            "start_min": 0,
+            "end_min": 360,
+            "rate_vnd": 2500,
+            "label": "Dem som"
+          },
+          {
+            "start_min": 360,
+            "end_min": 1320,
+            "rate_vnd": 3500,
+            "label": "Ban ngay"
+          },
+          {
+            "start_min": 1320,
+            "end_min": 1440,
+            "rate_vnd": 2500,
+            "label": "Dem muon"
+          }
+        ],
+        "idle_rate_vnd_per_minute": 300,
+        "grace_minutes": 5
+      }
+    },
+    "R": {
+      "2026-10-10": {
+        "bands": [
+          {
+            "start_min": 0,
+            "end_min": 360,
+            "rate_vnd": 2500,
+            "label": "Dem som"
+          },
+          {
+            "start_min": 360,
+            "end_min": 1320,
+            "rate_vnd": 2500,
+            "label": "Ban ngay"
+          },
+          {
+            "start_min": 1320,
+            "end_min": 1440,
+            "rate_vnd": 2500,
+            "label": "Dem muon"
+          }
+        ],
+        "idle_rate_vnd_per_minute": 200,
+        "grace_minutes": 5
+      }
+    },
+    "ABC": {
+      "2026-10-10": {
+        "bands": [
+          {
+            "start_min": 0,
+            "end_min": 360,
+            "rate_vnd": 2000,
+            "label": "Dem som"
+          },
+          {
+            "start_min": 360,
+            "end_min": 1320,
+            "rate_vnd": 3000,
+            "label": "Ban ngay"
+          },
+          {
+            "start_min": 1320,
+            "end_min": 1440,
+            "rate_vnd": 2000,
+            "label": "Dem muon"
+          }
+        ],
+        "idle_rate_vnd_per_minute": 200,
+        "grace_minutes": 5,
+        "effective_from": "2026-10-10"
+      },
+      "2026-10-11": {
+        "bands": [
+          {
+            "start_min": 0,
+            "end_min": 360,
+            "rate_vnd": 2500,
+            "label": "Dem som"
+          },
+          {
+            "start_min": 360,
+            "end_min": 1320,
+            "rate_vnd": 3500,
+            "label": "Ban ngay"
+          },
+          {
+            "start_min": 1320,
+            "end_min": 1440,
+            "rate_vnd": 2500,
+            "label": "Dem muon"
+          }
+        ],
+        "idle_rate_vnd_per_minute": 300,
+        "grace_minutes": 5,
+        "effective_from": "2026-10-11"
+      },
+      "2026-10-12": {
+        "bands": [
+          {
+            "start_min": 0,
+            "end_min": 360,
+            "rate_vnd": 2500,
+            "label": "Dem som"
+          },
+          {
+            "start_min": 360,
+            "end_min": 1320,
+            "rate_vnd": 3500,
+            "label": "Ban ngay"
+          },
+          {
+            "start_min": 1320,
+            "end_min": 1440,
+            "rate_vnd": 2500,
+            "label": "Dem muon"
+          }
+        ],
+        "idle_rate_vnd_per_minute": 300,
+        "grace_minutes": 5,
+        "effective_from": "2026-10-11"
+      }
+    }
+  },
+  "cases": [
+    {
+      "case_id": "KT-01",
+      "title": "Mot khung, khong chiem tru",
+      "source_status": "Mo ta nguon; dau vao so duoc bo sung",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "started_at": "2026-10-10T10:00:00+07:00",
+      "ended_at": "2026-10-10T11:00:00+07:00",
+      "tariff_profile": "A",
+      "samples": [
+        {
+          "at": "2026-10-10T10:00:00+07:00",
+          "cumulative_wh": 1000
+        },
+        {
+          "at": "2026-10-10T11:00:00+07:00",
+          "cumulative_wh": 3000
+        }
+      ],
+      "idle_since": null,
+      "grace_minutes": 5,
+      "idle_duration_seconds": 0,
+      "expected": {
+        "segments": [
+          {
+            "local_date": "2026-10-10",
+            "started_at": "2026-10-10T10:00:00+07:00",
+            "ended_at": "2026-10-10T11:00:00+07:00",
+            "energy_wh": 2000,
+            "rate_vnd": 3000,
+            "band_label": "Ban ngay",
+            "interpolated": false,
+            "amount_vnd": 6000
+          }
+        ],
+        "energy_total_vnd": 6000,
+        "idle_billed_minutes": 0,
+        "idle_lines": [],
+        "idle_total_vnd": 0,
+        "total_vnd": 6000
+      },
+      "working": "3000 - 1000 = 2000 Wh; 2000 × 3000 / 1000 = 6000 đ.",
+      "prepared_by": "Codex (AI)",
+      "prepared_date": "2026-10-11",
+      "human_calculator": "Hoàng Hữu Đạt",
+      "human_calculation_date": "2026-10-11",
+      "human_reviewer": "Đào Minh Tâm",
+      "acceptance_status": "Đã xác nhận T-77",
+      "assigned_to": "Hoàng Hữu Đạt",
+      "assigned_reviewer": "Đào Minh Tâm",
+      "human_review_date": "2026-10-11",
+      "human_confirmation_status": "Đào Minh Tâm đã xác nhận T-77 trong chat ngày 11/10/2026"
+    },
+    {
+      "case_id": "KT-02",
+      "title": "21:30–23:30, ranh 22:00",
+      "source_status": "Mo ta nguon; dau vao so duoc bo sung",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "started_at": "2026-10-10T21:30:00+07:00",
+      "ended_at": "2026-10-10T23:30:00+07:00",
+      "tariff_profile": "A",
+      "samples": [
+        {
+          "at": "2026-10-10T21:30:00+07:00",
+          "cumulative_wh": 0
+        },
+        {
+          "at": "2026-10-10T23:30:00+07:00",
+          "cumulative_wh": 20000
+        }
+      ],
+      "idle_since": null,
+      "grace_minutes": 5,
+      "idle_duration_seconds": 0,
+      "expected": {
+        "segments": [
+          {
+            "local_date": "2026-10-10",
+            "started_at": "2026-10-10T21:30:00+07:00",
+            "ended_at": "2026-10-10T22:00:00+07:00",
+            "energy_wh": 5000,
+            "rate_vnd": 3000,
+            "band_label": "Ban ngay",
+            "interpolated": true,
+            "amount_vnd": 15000
+          },
+          {
+            "local_date": "2026-10-10",
+            "started_at": "2026-10-10T22:00:00+07:00",
+            "ended_at": "2026-10-10T23:30:00+07:00",
+            "energy_wh": 15000,
+            "rate_vnd": 2000,
+            "band_label": "Dem muon",
+            "interpolated": true,
+            "amount_vnd": 30000
+          }
+        ],
+        "energy_total_vnd": 45000,
+        "idle_billed_minutes": 0,
+        "idle_lines": [],
+        "idle_total_vnd": 0,
+        "total_vnd": 45000
+      },
+      "working": "Ranh: 0 + 20000 × 30/120 = 5000 Wh; đoạn sau 20000 - 5000 = 15000 Wh; tiền 15000 + 30000 = 45000 đ.",
+      "prepared_by": "Codex (AI)",
+      "prepared_date": "2026-10-11",
+      "human_calculator": "Hoàng Hữu Đạt",
+      "human_calculation_date": "2026-10-11",
+      "human_reviewer": "Đào Minh Tâm",
+      "acceptance_status": "Đã xác nhận T-77",
+      "assigned_to": "Hoàng Hữu Đạt",
+      "assigned_reviewer": "Đào Minh Tâm",
+      "human_review_date": "2026-10-11",
+      "human_confirmation_status": "Đào Minh Tâm đã xác nhận T-77 trong chat ngày 11/10/2026"
+    },
+    {
+      "case_id": "KT-03",
+      "title": "Qua ngay, doi bieu gia",
+      "source_status": "Mo ta nguon; dau vao so duoc bo sung",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "started_at": "2026-10-10T23:00:00+07:00",
+      "ended_at": "2026-10-11T01:00:00+07:00",
+      "tariff_profile": "AB",
+      "samples": [
+        {
+          "at": "2026-10-10T23:00:00+07:00",
+          "cumulative_wh": 0
+        },
+        {
+          "at": "2026-10-11T01:00:00+07:00",
+          "cumulative_wh": 10000
+        }
+      ],
+      "idle_since": null,
+      "grace_minutes": 5,
+      "idle_duration_seconds": 0,
+      "expected": {
+        "segments": [
+          {
+            "local_date": "2026-10-10",
+            "started_at": "2026-10-10T23:00:00+07:00",
+            "ended_at": "2026-10-11T00:00:00+07:00",
+            "energy_wh": 5000,
+            "rate_vnd": 2000,
+            "band_label": "Dem muon",
+            "interpolated": true,
+            "amount_vnd": 10000
+          },
+          {
+            "local_date": "2026-10-11",
+            "started_at": "2026-10-11T00:00:00+07:00",
+            "ended_at": "2026-10-11T01:00:00+07:00",
+            "energy_wh": 5000,
+            "rate_vnd": 2500,
+            "band_label": "Dem som",
+            "interpolated": true,
+            "amount_vnd": 12500
+          }
+        ],
+        "energy_total_vnd": 22500,
+        "idle_billed_minutes": 0,
+        "idle_lines": [],
+        "idle_total_vnd": 0,
+        "total_vnd": 22500
+      },
+      "working": "Nửa đêm: 10000 × 60/120 = 5000 Wh; 5000 × 2000/1000 + 5000 × 2500/1000 = 22500 đ.",
+      "prepared_by": "Codex (AI)",
+      "prepared_date": "2026-10-11",
+      "human_calculator": "Hoàng Hữu Đạt",
+      "human_calculation_date": "2026-10-11",
+      "human_reviewer": "Đào Minh Tâm",
+      "acceptance_status": "Đã xác nhận T-77",
+      "assigned_to": "Hoàng Hữu Đạt",
+      "assigned_reviewer": "Đào Minh Tâm",
+      "human_review_date": "2026-10-11",
+      "human_confirmation_status": "Đào Minh Tâm đã xác nhận T-77 trong chat ngày 11/10/2026"
+    },
+    {
+      "case_id": "KT-04",
+      "title": "Bat dau dung ranh 22:00",
+      "source_status": "Ca bổ sung được người dùng yêu cầu để phủ AC; không phải đề bài refinement gốc",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "started_at": "2026-10-10T22:00:00+07:00",
+      "ended_at": "2026-10-10T23:00:00+07:00",
+      "tariff_profile": "A",
+      "samples": [
+        {
+          "at": "2026-10-10T22:00:00+07:00",
+          "cumulative_wh": 0
+        },
+        {
+          "at": "2026-10-10T23:00:00+07:00",
+          "cumulative_wh": 1000
+        }
+      ],
+      "idle_since": null,
+      "grace_minutes": 5,
+      "idle_duration_seconds": 0,
+      "expected": {
+        "segments": [
+          {
+            "local_date": "2026-10-10",
+            "started_at": "2026-10-10T22:00:00+07:00",
+            "ended_at": "2026-10-10T23:00:00+07:00",
+            "energy_wh": 1000,
+            "rate_vnd": 2000,
+            "band_label": "Dem muon",
+            "interpolated": false,
+            "amount_vnd": 2000
+          }
+        ],
+        "energy_total_vnd": 2000,
+        "idle_billed_minutes": 0,
+        "idle_lines": [],
+        "idle_total_vnd": 0,
+        "total_vnd": 2000
+      },
+      "working": "22:00 thuộc khung đêm muộn [22:00,24:00); 1000 × 2000/1000 = 2000 đ; không có đoạn 0 giây.",
+      "prepared_by": "Codex (AI)",
+      "prepared_date": "2026-10-11",
+      "human_calculator": "Hoàng Hữu Đạt",
+      "human_calculation_date": "2026-10-11",
+      "human_reviewer": "Đào Minh Tâm",
+      "acceptance_status": "Đã xác nhận T-77",
+      "assigned_to": "Hoàng Hữu Đạt",
+      "assigned_reviewer": "Đào Minh Tâm",
+      "human_review_date": "2026-10-11",
+      "human_confirmation_status": "Đào Minh Tâm đã xác nhận T-77 trong chat ngày 11/10/2026"
+    },
+    {
+      "case_id": "KT-05",
+      "title": "Ket thuc dung ranh 22:00",
+      "source_status": "Ca bổ sung được người dùng yêu cầu để phủ AC; không phải đề bài refinement gốc",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "started_at": "2026-10-10T21:00:00+07:00",
+      "ended_at": "2026-10-10T22:00:00+07:00",
+      "tariff_profile": "A",
+      "samples": [
+        {
+          "at": "2026-10-10T21:00:00+07:00",
+          "cumulative_wh": 0
+        },
+        {
+          "at": "2026-10-10T22:00:00+07:00",
+          "cumulative_wh": 1000
+        }
+      ],
+      "idle_since": null,
+      "grace_minutes": 5,
+      "idle_duration_seconds": 0,
+      "expected": {
+        "segments": [
+          {
+            "local_date": "2026-10-10",
+            "started_at": "2026-10-10T21:00:00+07:00",
+            "ended_at": "2026-10-10T22:00:00+07:00",
+            "energy_wh": 1000,
+            "rate_vnd": 3000,
+            "band_label": "Ban ngay",
+            "interpolated": false,
+            "amount_vnd": 3000
+          }
+        ],
+        "energy_total_vnd": 3000,
+        "idle_billed_minutes": 0,
+        "idle_lines": [],
+        "idle_total_vnd": 0,
+        "total_vnd": 3000
+      },
+      "working": "Khoảng [21:00,22:00) chỉ thuộc ban ngày: 1000 × 3000/1000 = 3000 đ; không sinh đoạn sau Stop.",
+      "prepared_by": "Codex (AI)",
+      "prepared_date": "2026-10-11",
+      "human_calculator": "Hoàng Hữu Đạt",
+      "human_calculation_date": "2026-10-11",
+      "human_reviewer": "Đào Minh Tâm",
+      "acceptance_status": "Đã xác nhận T-77",
+      "assigned_to": "Hoàng Hữu Đạt",
+      "assigned_reviewer": "Đào Minh Tâm",
+      "human_review_date": "2026-10-11",
+      "human_confirmation_status": "Đào Minh Tâm đã xác nhận T-77 trong chat ngày 11/10/2026"
+    },
+    {
+      "case_id": "KT-06",
+      "title": "Cat ranh 06:00",
+      "source_status": "Ca bổ sung được người dùng yêu cầu để phủ AC; không phải đề bài refinement gốc",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "started_at": "2026-10-10T05:30:00+07:00",
+      "ended_at": "2026-10-10T06:30:00+07:00",
+      "tariff_profile": "A",
+      "samples": [
+        {
+          "at": "2026-10-10T05:30:00+07:00",
+          "cumulative_wh": 0
+        },
+        {
+          "at": "2026-10-10T06:30:00+07:00",
+          "cumulative_wh": 1200
+        }
+      ],
+      "idle_since": null,
+      "grace_minutes": 5,
+      "idle_duration_seconds": 0,
+      "expected": {
+        "segments": [
+          {
+            "local_date": "2026-10-10",
+            "started_at": "2026-10-10T05:30:00+07:00",
+            "ended_at": "2026-10-10T06:00:00+07:00",
+            "energy_wh": 600,
+            "rate_vnd": 2000,
+            "band_label": "Dem som",
+            "interpolated": true,
+            "amount_vnd": 1200
+          },
+          {
+            "local_date": "2026-10-10",
+            "started_at": "2026-10-10T06:00:00+07:00",
+            "ended_at": "2026-10-10T06:30:00+07:00",
+            "energy_wh": 600,
+            "rate_vnd": 3000,
+            "band_label": "Ban ngay",
+            "interpolated": true,
+            "amount_vnd": 1800
+          }
+        ],
+        "energy_total_vnd": 3000,
+        "idle_billed_minutes": 0,
+        "idle_lines": [],
+        "idle_total_vnd": 0,
+        "total_vnd": 3000
+      },
+      "working": "1200 × 30/60 = 600 Wh mỗi đoạn; 1200 + 1800 = 3000 đ.",
+      "prepared_by": "Codex (AI)",
+      "prepared_date": "2026-10-11",
+      "human_calculator": "Hoàng Hữu Đạt",
+      "human_calculation_date": "2026-10-11",
+      "human_reviewer": "Đào Minh Tâm",
+      "acceptance_status": "Đã xác nhận T-77",
+      "assigned_to": "Hoàng Hữu Đạt",
+      "assigned_reviewer": "Đào Minh Tâm",
+      "human_review_date": "2026-10-11",
+      "human_confirmation_status": "Đào Minh Tâm đã xác nhận T-77 trong chat ngày 11/10/2026"
+    },
+    {
+      "case_id": "KT-07",
+      "title": "Ba khung, hai ranh",
+      "source_status": "Ca bổ sung được người dùng yêu cầu để phủ AC; không phải đề bài refinement gốc",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "started_at": "2026-10-10T05:00:00+07:00",
+      "ended_at": "2026-10-10T23:00:00+07:00",
+      "tariff_profile": "A",
+      "samples": [
+        {
+          "at": "2026-10-10T05:00:00+07:00",
+          "cumulative_wh": 0
+        },
+        {
+          "at": "2026-10-10T23:00:00+07:00",
+          "cumulative_wh": 18000
+        }
+      ],
+      "idle_since": null,
+      "grace_minutes": 5,
+      "idle_duration_seconds": 0,
+      "expected": {
+        "segments": [
+          {
+            "local_date": "2026-10-10",
+            "started_at": "2026-10-10T05:00:00+07:00",
+            "ended_at": "2026-10-10T06:00:00+07:00",
+            "energy_wh": 1000,
+            "rate_vnd": 2000,
+            "band_label": "Dem som",
+            "interpolated": true,
+            "amount_vnd": 2000
+          },
+          {
+            "local_date": "2026-10-10",
+            "started_at": "2026-10-10T06:00:00+07:00",
+            "ended_at": "2026-10-10T22:00:00+07:00",
+            "energy_wh": 16000,
+            "rate_vnd": 3000,
+            "band_label": "Ban ngay",
+            "interpolated": true,
+            "amount_vnd": 48000
+          },
+          {
+            "local_date": "2026-10-10",
+            "started_at": "2026-10-10T22:00:00+07:00",
+            "ended_at": "2026-10-10T23:00:00+07:00",
+            "energy_wh": 1000,
+            "rate_vnd": 2000,
+            "band_label": "Dem muon",
+            "interpolated": true,
+            "amount_vnd": 2000
+          }
+        ],
+        "energy_total_vnd": 52000,
+        "idle_billed_minutes": 0,
+        "idle_lines": [],
+        "idle_total_vnd": 0,
+        "total_vnd": 52000
+      },
+      "working": "18000/18 = 1000 Wh/giờ; chỉ số tại 06:00 = 1000, tại 22:00 = 17000; ΔWh = 1000,16000,1000; tiền 2000 + 48000 + 2000 = 52000 đ.",
+      "prepared_by": "Codex (AI)",
+      "prepared_date": "2026-10-11",
+      "human_calculator": "Hoàng Hữu Đạt",
+      "human_calculation_date": "2026-10-11",
+      "human_reviewer": "Đào Minh Tâm",
+      "acceptance_status": "Đã xác nhận T-77",
+      "assigned_to": "Hoàng Hữu Đạt",
+      "assigned_reviewer": "Đào Minh Tâm",
+      "human_review_date": "2026-10-11",
+      "human_confirmation_status": "Đào Minh Tâm đã xác nhận T-77 trong chat ngày 11/10/2026"
+    },
+    {
+      "case_id": "KT-08",
+      "title": "So do thua, doc theo cap ke nhau",
+      "source_status": "Ca bổ sung được người dùng yêu cầu để phủ AC; không phải đề bài refinement gốc",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "started_at": "2026-10-10T21:30:00+07:00",
+      "ended_at": "2026-10-10T22:30:00+07:00",
+      "tariff_profile": "A",
+      "samples": [
+        {
+          "at": "2026-10-10T21:30:00+07:00",
+          "cumulative_wh": 0
+        },
+        {
+          "at": "2026-10-10T21:50:00+07:00",
+          "cumulative_wh": 300
+        },
+        {
+          "at": "2026-10-10T22:30:00+07:00",
+          "cumulative_wh": 1500
+        }
+      ],
+      "idle_since": null,
+      "grace_minutes": 5,
+      "idle_duration_seconds": 0,
+      "expected": {
+        "segments": [
+          {
+            "local_date": "2026-10-10",
+            "started_at": "2026-10-10T21:30:00+07:00",
+            "ended_at": "2026-10-10T22:00:00+07:00",
+            "energy_wh": 600,
+            "rate_vnd": 3000,
+            "band_label": "Ban ngay",
+            "interpolated": true,
+            "amount_vnd": 1800
+          },
+          {
+            "local_date": "2026-10-10",
+            "started_at": "2026-10-10T22:00:00+07:00",
+            "ended_at": "2026-10-10T22:30:00+07:00",
+            "energy_wh": 900,
+            "rate_vnd": 2000,
+            "band_label": "Dem muon",
+            "interpolated": true,
+            "amount_vnd": 1800
+          }
+        ],
+        "energy_total_vnd": 3600,
+        "idle_billed_minutes": 0,
+        "idle_lines": [],
+        "idle_total_vnd": 0,
+        "total_vnd": 3600
+      },
+      "working": "Ranh thuộc cặp 21:50–22:30: 300 + (1500-300) × 10/40 = 600 Wh; ΔWh = 600,900; tiền 1800 + 1800 = 3600 đ. Không nội suy đều cả phiên.",
+      "prepared_by": "Codex (AI)",
+      "prepared_date": "2026-10-11",
+      "human_calculator": "Hoàng Hữu Đạt",
+      "human_calculation_date": "2026-10-11",
+      "human_reviewer": "Đào Minh Tâm",
+      "acceptance_status": "Đã xác nhận T-77",
+      "assigned_to": "Hoàng Hữu Đạt",
+      "assigned_reviewer": "Đào Minh Tâm",
+      "human_review_date": "2026-10-11",
+      "human_confirmation_status": "Đào Minh Tâm đã xác nhận T-77 trong chat ngày 11/10/2026"
+    },
+    {
+      "case_id": "KT-09",
+      "title": "Noi suy .5 Wh, bao toan tong",
+      "source_status": "Ca bổ sung được người dùng yêu cầu để phủ AC; không phải đề bài refinement gốc",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "started_at": "2026-10-10T21:30:00+07:00",
+      "ended_at": "2026-10-10T22:30:00+07:00",
+      "tariff_profile": "A",
+      "samples": [
+        {
+          "at": "2026-10-10T21:30:00+07:00",
+          "cumulative_wh": 100
+        },
+        {
+          "at": "2026-10-10T22:30:00+07:00",
+          "cumulative_wh": 105
+        }
+      ],
+      "idle_since": null,
+      "grace_minutes": 5,
+      "idle_duration_seconds": 0,
+      "expected": {
+        "segments": [
+          {
+            "local_date": "2026-10-10",
+            "started_at": "2026-10-10T21:30:00+07:00",
+            "ended_at": "2026-10-10T22:00:00+07:00",
+            "energy_wh": 3,
+            "rate_vnd": 3000,
+            "band_label": "Ban ngay",
+            "interpolated": true,
+            "amount_vnd": 9
+          },
+          {
+            "local_date": "2026-10-10",
+            "started_at": "2026-10-10T22:00:00+07:00",
+            "ended_at": "2026-10-10T22:30:00+07:00",
+            "energy_wh": 2,
+            "rate_vnd": 2000,
+            "band_label": "Dem muon",
+            "interpolated": true,
+            "amount_vnd": 4
+          }
+        ],
+        "energy_total_vnd": 13,
+        "idle_billed_minutes": 0,
+        "idle_lines": [],
+        "idle_total_vnd": 0,
+        "total_vnd": 13
+      },
+      "working": "Chỉ số ranh 100 + 5 × 30/60 = 102.5 → 103 Wh; ΔWh = 103-100 = 3 và 105-103 = 2; tiền 9 + 4 = 13 đ. Không làm tròn riêng hai delta thành 3+3.",
+      "prepared_by": "Codex (AI)",
+      "prepared_date": "2026-10-11",
+      "human_calculator": "Hoàng Hữu Đạt",
+      "human_calculation_date": "2026-10-11",
+      "human_reviewer": "Đào Minh Tâm",
+      "acceptance_status": "Đã xác nhận T-77",
+      "assigned_to": "Hoàng Hữu Đạt",
+      "assigned_reviewer": "Đào Minh Tâm",
+      "human_review_date": "2026-10-11",
+      "human_confirmation_status": "Đào Minh Tâm đã xác nhận T-77 trong chat ngày 11/10/2026"
+    },
+    {
+      "case_id": "KT-10",
+      "title": "Tien tai diem nua dong",
+      "source_status": "Ca bổ sung được người dùng yêu cầu để phủ AC; không phải đề bài refinement gốc",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "started_at": "2026-10-10T23:00:00+07:00",
+      "ended_at": "2026-10-10T23:01:00+07:00",
+      "tariff_profile": "R",
+      "samples": [
+        {
+          "at": "2026-10-10T23:00:00+07:00",
+          "cumulative_wh": 0
+        },
+        {
+          "at": "2026-10-10T23:01:00+07:00",
+          "cumulative_wh": 1
+        }
+      ],
+      "idle_since": null,
+      "grace_minutes": 5,
+      "idle_duration_seconds": 0,
+      "expected": {
+        "segments": [
+          {
+            "local_date": "2026-10-10",
+            "started_at": "2026-10-10T23:00:00+07:00",
+            "ended_at": "2026-10-10T23:01:00+07:00",
+            "energy_wh": 1,
+            "rate_vnd": 2500,
+            "band_label": "Dem muon",
+            "interpolated": false,
+            "amount_vnd": 3
+          }
+        ],
+        "energy_total_vnd": 3,
+        "idle_billed_minutes": 0,
+        "idle_lines": [],
+        "idle_total_vnd": 0,
+        "total_vnd": 3
+      },
+      "working": "1 × 2500/1000 = 2.5 → 3 đ (nửa lên).",
+      "prepared_by": "Codex (AI)",
+      "prepared_date": "2026-10-11",
+      "human_calculator": "Hoàng Hữu Đạt",
+      "human_calculation_date": "2026-10-11",
+      "human_reviewer": "Đào Minh Tâm",
+      "acceptance_status": "Đã xác nhận T-77",
+      "assigned_to": "Hoàng Hữu Đạt",
+      "assigned_reviewer": "Đào Minh Tâm",
+      "human_review_date": "2026-10-11",
+      "human_confirmation_status": "Đào Minh Tâm đã xác nhận T-77 trong chat ngày 11/10/2026"
+    },
+    {
+      "case_id": "KT-11",
+      "title": "Lam tron moi doan roi cong",
+      "source_status": "Ca bổ sung được người dùng yêu cầu để phủ AC; không phải đề bài refinement gốc",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "started_at": "2026-10-10T21:30:00+07:00",
+      "ended_at": "2026-10-10T22:30:00+07:00",
+      "tariff_profile": "R",
+      "samples": [
+        {
+          "at": "2026-10-10T21:30:00+07:00",
+          "cumulative_wh": 0
+        },
+        {
+          "at": "2026-10-10T22:30:00+07:00",
+          "cumulative_wh": 2
+        }
+      ],
+      "idle_since": null,
+      "grace_minutes": 5,
+      "idle_duration_seconds": 0,
+      "expected": {
+        "segments": [
+          {
+            "local_date": "2026-10-10",
+            "started_at": "2026-10-10T21:30:00+07:00",
+            "ended_at": "2026-10-10T22:00:00+07:00",
+            "energy_wh": 1,
+            "rate_vnd": 2500,
+            "band_label": "Ban ngay",
+            "interpolated": true,
+            "amount_vnd": 3
+          },
+          {
+            "local_date": "2026-10-10",
+            "started_at": "2026-10-10T22:00:00+07:00",
+            "ended_at": "2026-10-10T22:30:00+07:00",
+            "energy_wh": 1,
+            "rate_vnd": 2500,
+            "band_label": "Dem muon",
+            "interpolated": true,
+            "amount_vnd": 3
+          }
+        ],
+        "energy_total_vnd": 6,
+        "idle_billed_minutes": 0,
+        "idle_lines": [],
+        "idle_total_vnd": 0,
+        "total_vnd": 6
+      },
+      "working": "Chỉ số ranh 1 Wh; hai đoạn nhãn khác nhau dù cùng giá; mỗi đoạn 1 × 2500/1000 = 2.5 → 3 đ; tổng 6 đ, không phải 5 đ.",
+      "prepared_by": "Codex (AI)",
+      "prepared_date": "2026-10-11",
+      "human_calculator": "Hoàng Hữu Đạt",
+      "human_calculation_date": "2026-10-11",
+      "human_reviewer": "Đào Minh Tâm",
+      "acceptance_status": "Đã xác nhận T-77",
+      "assigned_to": "Hoàng Hữu Đạt",
+      "assigned_reviewer": "Đào Minh Tâm",
+      "human_review_date": "2026-10-11",
+      "human_confirmation_status": "Đào Minh Tâm đã xác nhận T-77 trong chat ngày 11/10/2026"
+    },
+    {
+      "case_id": "KT-12",
+      "title": "Khong tang dien nang",
+      "source_status": "Ca bổ sung được người dùng yêu cầu để phủ AC; không phải đề bài refinement gốc",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "started_at": "2026-10-10T10:00:00+07:00",
+      "ended_at": "2026-10-10T11:00:00+07:00",
+      "tariff_profile": "A",
+      "samples": [
+        {
+          "at": "2026-10-10T10:00:00+07:00",
+          "cumulative_wh": 42
+        },
+        {
+          "at": "2026-10-10T11:00:00+07:00",
+          "cumulative_wh": 42
+        }
+      ],
+      "idle_since": null,
+      "grace_minutes": 5,
+      "idle_duration_seconds": 0,
+      "expected": {
+        "segments": [],
+        "energy_total_vnd": 0,
+        "idle_billed_minutes": 0,
+        "idle_lines": [],
+        "idle_total_vnd": 0,
+        "total_vnd": 0
+      },
+      "working": "42 - 42 = 0 Wh; không sinh dòng điện 0 Wh; không chiếm trụ nên tổng 0 đ. Là ca tính tiền 0, không phải ca thiếu biểu giá hoặc cần xem xét.",
+      "prepared_by": "Codex (AI)",
+      "prepared_date": "2026-10-11",
+      "human_calculator": "Hoàng Hữu Đạt",
+      "human_calculation_date": "2026-10-11",
+      "human_reviewer": "Đào Minh Tâm",
+      "acceptance_status": "Đã xác nhận T-77",
+      "assigned_to": "Hoàng Hữu Đạt",
+      "assigned_reviewer": "Đào Minh Tâm",
+      "human_review_date": "2026-10-11",
+      "human_confirmation_status": "Đào Minh Tâm đã xác nhận T-77 trong chat ngày 11/10/2026"
+    },
+    {
+      "case_id": "KT-13",
+      "title": "Chiem tru vuot an han 5 phut",
+      "source_status": "Ca bổ sung được người dùng yêu cầu để phủ AC; không phải đề bài refinement gốc",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "started_at": "2026-10-10T10:00:00+07:00",
+      "ended_at": "2026-10-10T11:00:00+07:00",
+      "tariff_profile": "A",
+      "samples": [
+        {
+          "at": "2026-10-10T10:00:00+07:00",
+          "cumulative_wh": 0
+        },
+        {
+          "at": "2026-10-10T10:50:00+07:00",
+          "cumulative_wh": 1000
+        },
+        {
+          "at": "2026-10-10T11:00:00+07:00",
+          "cumulative_wh": 1000
+        }
+      ],
+      "idle_since": "2026-10-10T10:50:00+07:00",
+      "grace_minutes": 5,
+      "idle_duration_seconds": 600,
+      "expected": {
+        "segments": [
+          {
+            "local_date": "2026-10-10",
+            "started_at": "2026-10-10T10:00:00+07:00",
+            "ended_at": "2026-10-10T11:00:00+07:00",
+            "energy_wh": 1000,
+            "rate_vnd": 3000,
+            "band_label": "Ban ngay",
+            "interpolated": false,
+            "amount_vnd": 3000
+          }
+        ],
+        "energy_total_vnd": 3000,
+        "idle_billed_minutes": 5,
+        "idle_lines": [
+          {
+            "started_at": "2026-10-10T10:55:00+07:00",
+            "ended_at": "2026-10-10T11:00:00+07:00",
+            "billed_minutes": 5,
+            "rate_vnd_per_minute": 200,
+            "amount_vnd": 1000
+          }
+        ],
+        "idle_total_vnd": 1000,
+        "total_vnd": 4000
+      },
+      "working": "Điện 3000 đ; idle 600 giây - 300 giây ân hạn = 300 giây; ceil(300/60)=5 phút; 5 × 200=1000 đ; tổng 4000 đ.",
+      "prepared_by": "Codex (AI)",
+      "prepared_date": "2026-10-11",
+      "human_calculator": "Hoàng Hữu Đạt",
+      "human_calculation_date": "2026-10-11",
+      "human_reviewer": "Đào Minh Tâm",
+      "acceptance_status": "Đã xác nhận T-77",
+      "assigned_to": "Hoàng Hữu Đạt",
+      "assigned_reviewer": "Đào Minh Tâm",
+      "human_review_date": "2026-10-11",
+      "human_confirmation_status": "Đào Minh Tâm đã xác nhận T-77 trong chat ngày 11/10/2026"
+    },
+    {
+      "case_id": "KT-14",
+      "title": "Chiem tru dung an han",
+      "source_status": "Ca bổ sung được người dùng yêu cầu để phủ AC; không phải đề bài refinement gốc",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "started_at": "2026-10-10T10:00:00+07:00",
+      "ended_at": "2026-10-10T11:00:00+07:00",
+      "tariff_profile": "A",
+      "samples": [
+        {
+          "at": "2026-10-10T10:00:00+07:00",
+          "cumulative_wh": 0
+        },
+        {
+          "at": "2026-10-10T10:55:00+07:00",
+          "cumulative_wh": 1000
+        },
+        {
+          "at": "2026-10-10T11:00:00+07:00",
+          "cumulative_wh": 1000
+        }
+      ],
+      "idle_since": "2026-10-10T10:55:00+07:00",
+      "grace_minutes": 5,
+      "idle_duration_seconds": 300,
+      "expected": {
+        "segments": [
+          {
+            "local_date": "2026-10-10",
+            "started_at": "2026-10-10T10:00:00+07:00",
+            "ended_at": "2026-10-10T11:00:00+07:00",
+            "energy_wh": 1000,
+            "rate_vnd": 3000,
+            "band_label": "Ban ngay",
+            "interpolated": false,
+            "amount_vnd": 3000
+          }
+        ],
+        "energy_total_vnd": 3000,
+        "idle_billed_minutes": 0,
+        "idle_lines": [],
+        "idle_total_vnd": 0,
+        "total_vnd": 3000
+      },
+      "working": "Idle 300 giây = ân hạn 300 giây; max(0,300-300)=0; phí 0 đ; tổng 3000 đ.",
+      "prepared_by": "Codex (AI)",
+      "prepared_date": "2026-10-11",
+      "human_calculator": "Hoàng Hữu Đạt",
+      "human_calculation_date": "2026-10-11",
+      "human_reviewer": "Đào Minh Tâm",
+      "acceptance_status": "Đã xác nhận T-77",
+      "assigned_to": "Hoàng Hữu Đạt",
+      "assigned_reviewer": "Đào Minh Tâm",
+      "human_review_date": "2026-10-11",
+      "human_confirmation_status": "Đào Minh Tâm đã xác nhận T-77 trong chat ngày 11/10/2026"
+    },
+    {
+      "case_id": "KT-15",
+      "title": "Vuot an han mot giay",
+      "source_status": "Ca bổ sung được người dùng yêu cầu để phủ AC; không phải đề bài refinement gốc",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "started_at": "2026-10-10T10:00:00+07:00",
+      "ended_at": "2026-10-10T11:00:00+07:00",
+      "tariff_profile": "A",
+      "samples": [
+        {
+          "at": "2026-10-10T10:00:00+07:00",
+          "cumulative_wh": 0
+        },
+        {
+          "at": "2026-10-10T10:54:59+07:00",
+          "cumulative_wh": 1000
+        },
+        {
+          "at": "2026-10-10T11:00:00+07:00",
+          "cumulative_wh": 1000
+        }
+      ],
+      "idle_since": "2026-10-10T10:54:59+07:00",
+      "grace_minutes": 5,
+      "idle_duration_seconds": 301,
+      "expected": {
+        "segments": [
+          {
+            "local_date": "2026-10-10",
+            "started_at": "2026-10-10T10:00:00+07:00",
+            "ended_at": "2026-10-10T11:00:00+07:00",
+            "energy_wh": 1000,
+            "rate_vnd": 3000,
+            "band_label": "Ban ngay",
+            "interpolated": false,
+            "amount_vnd": 3000
+          }
+        ],
+        "energy_total_vnd": 3000,
+        "idle_billed_minutes": 1,
+        "idle_lines": [
+          {
+            "started_at": "2026-10-10T10:59:59+07:00",
+            "ended_at": "2026-10-10T11:00:00+07:00",
+            "billed_minutes": 1,
+            "rate_vnd_per_minute": 200,
+            "amount_vnd": 200
+          }
+        ],
+        "idle_total_vnd": 200,
+        "total_vnd": 3200
+      },
+      "working": "Idle 301 giây - 300 = 1 giây; ceil(1/60)=1 phút; 1 × 200=200 đ; tổng 3200 đ.",
+      "prepared_by": "Codex (AI)",
+      "prepared_date": "2026-10-11",
+      "human_calculator": "Hoàng Hữu Đạt",
+      "human_calculation_date": "2026-10-11",
+      "human_reviewer": "Đào Minh Tâm",
+      "acceptance_status": "Đã xác nhận T-77",
+      "assigned_to": "Hoàng Hữu Đạt",
+      "assigned_reviewer": "Đào Minh Tâm",
+      "human_review_date": "2026-10-11",
+      "human_confirmation_status": "Đào Minh Tâm đã xác nhận T-77 trong chat ngày 11/10/2026"
+    },
+    {
+      "case_id": "KT-16",
+      "title": "Chiem tru qua ngay, an han mot lan",
+      "source_status": "Ca bổ sung được người dùng yêu cầu để phủ AC; không phải đề bài refinement gốc",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "started_at": "2026-10-10T23:00:00+07:00",
+      "ended_at": "2026-10-11T00:10:20+07:00",
+      "tariff_profile": "AB",
+      "samples": [
+        {
+          "at": "2026-10-10T23:00:00+07:00",
+          "cumulative_wh": 0
+        },
+        {
+          "at": "2026-10-10T23:50:00+07:00",
+          "cumulative_wh": 1000
+        },
+        {
+          "at": "2026-10-11T00:00:00+07:00",
+          "cumulative_wh": 1000
+        },
+        {
+          "at": "2026-10-11T00:10:20+07:00",
+          "cumulative_wh": 1000
+        }
+      ],
+      "idle_since": "2026-10-10T23:50:00+07:00",
+      "grace_minutes": 5,
+      "idle_duration_seconds": 1220,
+      "expected": {
+        "segments": [
+          {
+            "local_date": "2026-10-10",
+            "started_at": "2026-10-10T23:00:00+07:00",
+            "ended_at": "2026-10-11T00:00:00+07:00",
+            "energy_wh": 1000,
+            "rate_vnd": 2000,
+            "band_label": "Dem muon",
+            "interpolated": false,
+            "amount_vnd": 2000
+          }
+        ],
+        "energy_total_vnd": 2000,
+        "idle_billed_minutes": 16,
+        "idle_lines": [
+          {
+            "started_at": "2026-10-10T23:55:00+07:00",
+            "ended_at": "2026-10-11T00:00:00+07:00",
+            "billed_minutes": 5,
+            "rate_vnd_per_minute": 200,
+            "amount_vnd": 1000
+          },
+          {
+            "started_at": "2026-10-11T00:00:00+07:00",
+            "ended_at": "2026-10-11T00:10:20+07:00",
+            "billed_minutes": 11,
+            "rate_vnd_per_minute": 300,
+            "amount_vnd": 3300
+          }
+        ],
+        "idle_total_vnd": 4300,
+        "total_vnd": 6300
+      },
+      "working": "Điện 1000 ×2000/1000=2000 đ; sau 23:50 chỉ số đứng yên, đoạn ngày mới 0 Wh không sinh dòng. Idle 1220-300=920 giây; ceil(920/60)=16 phút. Bắt đầu thu 23:55: 5 phút bắt đầu ngày cũ ×200=1000; 11 phút bắt đầu ngày mới ×300=3300; idle 4300; tổng 6300 đ. Không cấp lại ân hạn hoặc làm tròn tổng Wh.",
+      "prepared_by": "Codex (AI)",
+      "prepared_date": "2026-10-11",
+      "human_calculator": "Hoàng Hữu Đạt",
+      "human_calculation_date": "2026-10-11",
+      "human_reviewer": "Đào Minh Tâm",
+      "acceptance_status": "Đã xác nhận T-77",
+      "assigned_to": "Hoàng Hữu Đạt",
+      "assigned_reviewer": "Đào Minh Tâm",
+      "human_review_date": "2026-10-11",
+      "human_confirmation_status": "Đào Minh Tâm đã xác nhận T-77 trong chat ngày 11/10/2026"
+    },
+    {
+      "case_id": "KT-17",
+      "title": "Idle dưới ân hạn",
+      "source_status": "Ca bổ sung được người dùng yêu cầu để phủ AC; không phải đề bài refinement gốc",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "started_at": "2026-10-10T10:00:00+07:00",
+      "ended_at": "2026-10-10T11:00:00+07:00",
+      "tariff_profile": "A",
+      "samples": [
+        {
+          "at": "2026-10-10T10:00:00+07:00",
+          "cumulative_wh": 0
+        },
+        {
+          "at": "2026-10-10T10:56:00+07:00",
+          "cumulative_wh": 1000
+        },
+        {
+          "at": "2026-10-10T11:00:00+07:00",
+          "cumulative_wh": 1000
+        }
+      ],
+      "idle_since": "2026-10-10T10:56:00+07:00",
+      "grace_minutes": 5,
+      "idle_duration_seconds": 240,
+      "expected": {
+        "segments": [
+          {
+            "local_date": "2026-10-10",
+            "started_at": "2026-10-10T10:00:00+07:00",
+            "ended_at": "2026-10-10T11:00:00+07:00",
+            "energy_wh": 1000,
+            "rate_vnd": 3000,
+            "band_label": "Ban ngay",
+            "interpolated": false,
+            "amount_vnd": 3000
+          }
+        ],
+        "energy_total_vnd": 3000,
+        "idle_billed_minutes": 0,
+        "idle_lines": [],
+        "idle_total_vnd": 0,
+        "total_vnd": 3000
+      },
+      "working": "Idle 240 giây < grace 300 giây; thời gian thu max(0,240-300)=0; phí 0, tổng 3000 đ.",
+      "prepared_by": "Codex (AI)",
+      "prepared_date": "2026-10-11",
+      "human_calculator": "Hoàng Hữu Đạt",
+      "human_calculation_date": "2026-10-11",
+      "human_reviewer": "Đào Minh Tâm",
+      "acceptance_status": "Đã xác nhận T-77",
+      "assigned_to": "Hoàng Hữu Đạt",
+      "assigned_reviewer": "Đào Minh Tâm",
+      "human_review_date": "2026-10-11",
+      "human_confirmation_status": "Đào Minh Tâm đã xác nhận T-77 trong chat ngày 11/10/2026"
+    },
+    {
+      "case_id": "KT-18",
+      "title": "Đúng một phút sau ân hạn",
+      "source_status": "Ca bổ sung được người dùng yêu cầu để phủ AC; không phải đề bài refinement gốc",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "started_at": "2026-10-10T10:00:00+07:00",
+      "ended_at": "2026-10-10T11:00:00+07:00",
+      "tariff_profile": "A",
+      "samples": [
+        {
+          "at": "2026-10-10T10:00:00+07:00",
+          "cumulative_wh": 0
+        },
+        {
+          "at": "2026-10-10T10:54:00+07:00",
+          "cumulative_wh": 1000
+        },
+        {
+          "at": "2026-10-10T11:00:00+07:00",
+          "cumulative_wh": 1000
+        }
+      ],
+      "idle_since": "2026-10-10T10:54:00+07:00",
+      "grace_minutes": 5,
+      "idle_duration_seconds": 360,
+      "expected": {
+        "segments": [
+          {
+            "local_date": "2026-10-10",
+            "started_at": "2026-10-10T10:00:00+07:00",
+            "ended_at": "2026-10-10T11:00:00+07:00",
+            "energy_wh": 1000,
+            "rate_vnd": 3000,
+            "band_label": "Ban ngay",
+            "interpolated": false,
+            "amount_vnd": 3000
+          }
+        ],
+        "energy_total_vnd": 3000,
+        "idle_billed_minutes": 1,
+        "idle_lines": [
+          {
+            "started_at": "2026-10-10T10:59:00+07:00",
+            "ended_at": "2026-10-10T11:00:00+07:00",
+            "billed_minutes": 1,
+            "rate_vnd_per_minute": 200,
+            "amount_vnd": 200
+          }
+        ],
+        "idle_total_vnd": 200,
+        "total_vnd": 3200
+      },
+      "working": "Idle 360-300=60 giây; ceil(60/60)=1, không tính 2 phút; phí 200, tổng 3200 đ.",
+      "prepared_by": "Codex (AI)",
+      "prepared_date": "2026-10-11",
+      "human_calculator": "Hoàng Hữu Đạt",
+      "human_calculation_date": "2026-10-11",
+      "human_reviewer": "Đào Minh Tâm",
+      "acceptance_status": "Đã xác nhận T-77",
+      "assigned_to": "Hoàng Hữu Đạt",
+      "assigned_reviewer": "Đào Minh Tâm",
+      "human_review_date": "2026-10-11",
+      "human_confirmation_status": "Đào Minh Tâm đã xác nhận T-77 trong chat ngày 11/10/2026"
+    },
+    {
+      "case_id": "KT-19",
+      "title": "26 giờ, ba ngày và giá hiệu lực kế thừa",
+      "source_status": "Ca bổ sung được người dùng yêu cầu để phủ AC; không phải đề bài refinement gốc",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "started_at": "2026-10-10T23:00:00+07:00",
+      "ended_at": "2026-10-12T01:00:00+07:00",
+      "tariff_profile": "ABC",
+      "samples": [
+        {
+          "at": "2026-10-10T23:00:00+07:00",
+          "cumulative_wh": 0
+        },
+        {
+          "at": "2026-10-12T01:00:00+07:00",
+          "cumulative_wh": 26000
+        }
+      ],
+      "idle_since": null,
+      "grace_minutes": 5,
+      "idle_duration_seconds": 0,
+      "expected": {
+        "segments": [
+          {
+            "local_date": "2026-10-10",
+            "started_at": "2026-10-10T23:00:00+07:00",
+            "ended_at": "2026-10-11T00:00:00+07:00",
+            "energy_wh": 1000,
+            "rate_vnd": 2000,
+            "band_label": "Dem muon",
+            "interpolated": true,
+            "amount_vnd": 2000
+          },
+          {
+            "local_date": "2026-10-11",
+            "started_at": "2026-10-11T00:00:00+07:00",
+            "ended_at": "2026-10-11T06:00:00+07:00",
+            "energy_wh": 6000,
+            "rate_vnd": 2500,
+            "band_label": "Dem som",
+            "interpolated": true,
+            "amount_vnd": 15000
+          },
+          {
+            "local_date": "2026-10-11",
+            "started_at": "2026-10-11T06:00:00+07:00",
+            "ended_at": "2026-10-11T22:00:00+07:00",
+            "energy_wh": 16000,
+            "rate_vnd": 3500,
+            "band_label": "Ban ngay",
+            "interpolated": true,
+            "amount_vnd": 56000
+          },
+          {
+            "local_date": "2026-10-11",
+            "started_at": "2026-10-11T22:00:00+07:00",
+            "ended_at": "2026-10-12T00:00:00+07:00",
+            "energy_wh": 2000,
+            "rate_vnd": 2500,
+            "band_label": "Dem muon",
+            "interpolated": true,
+            "amount_vnd": 5000
+          },
+          {
+            "local_date": "2026-10-12",
+            "started_at": "2026-10-12T00:00:00+07:00",
+            "ended_at": "2026-10-12T01:00:00+07:00",
+            "energy_wh": 1000,
+            "rate_vnd": 2500,
+            "band_label": "Dem som",
+            "interpolated": true,
+            "amount_vnd": 2500
+          }
+        ],
+        "energy_total_vnd": 80500,
+        "idle_billed_minutes": 0,
+        "idle_lines": [],
+        "idle_total_vnd": 0,
+        "total_vnd": 80500
+      },
+      "working": "26000/26=1000 Wh/giờ. Chỉ số ranh lần lượt 1000,7000,23000,25000. Tiền 2000+15000+56000+5000+2500=80500 đ; ngày 12/10 kế thừa phiên bản hiệu lực 11/10, không tạo phiên bản mới.",
+      "prepared_by": "Codex (AI)",
+      "prepared_date": "2026-10-11",
+      "human_calculator": "Hoàng Hữu Đạt",
+      "human_calculation_date": "2026-10-11",
+      "human_reviewer": "Đào Minh Tâm",
+      "acceptance_status": "Đã xác nhận T-77",
+      "assigned_to": "Hoàng Hữu Đạt",
+      "assigned_reviewer": "Đào Minh Tâm",
+      "human_review_date": "2026-10-11",
+      "human_confirmation_status": "Đào Minh Tâm đã xác nhận T-77 trong chat ngày 11/10/2026"
+    },
+    {
+      "case_id": "KT-20",
+      "title": "Múi giờ trạm khác UTC+7",
+      "source_status": "Ca bổ sung được người dùng yêu cầu để phủ AC; không phải đề bài refinement gốc",
+      "timezone": "America/Los_Angeles",
+      "started_at": "2026-10-10T23:00:00-07:00",
+      "ended_at": "2026-10-11T01:00:00-07:00",
+      "tariff_profile": "AB",
+      "samples": [
+        {
+          "at": "2026-10-10T23:00:00-07:00",
+          "cumulative_wh": 0
+        },
+        {
+          "at": "2026-10-11T01:00:00-07:00",
+          "cumulative_wh": 10000
+        }
+      ],
+      "idle_since": null,
+      "grace_minutes": 5,
+      "idle_duration_seconds": 0,
+      "expected": {
+        "segments": [
+          {
+            "local_date": "2026-10-10",
+            "started_at": "2026-10-10T23:00:00-07:00",
+            "ended_at": "2026-10-11T00:00:00-07:00",
+            "energy_wh": 5000,
+            "rate_vnd": 2000,
+            "band_label": "Dem muon",
+            "interpolated": true,
+            "amount_vnd": 10000
+          },
+          {
+            "local_date": "2026-10-11",
+            "started_at": "2026-10-11T00:00:00-07:00",
+            "ended_at": "2026-10-11T01:00:00-07:00",
+            "energy_wh": 5000,
+            "rate_vnd": 2500,
+            "band_label": "Dem som",
+            "interpolated": true,
+            "amount_vnd": 12500
+          }
+        ],
+        "energy_total_vnd": 22500,
+        "idle_billed_minutes": 0,
+        "idle_lines": [],
+        "idle_total_vnd": 0,
+        "total_vnd": 22500
+      },
+      "working": "Trạm America/Los_Angeles ngày này UTC−7: phiên 06:00–08:00 UTC ngày 11/10; nửa đêm trạm là 07:00 UTC. Mỗi đoạn 5000 Wh; 10000+12500=22500 đ. Cắt theo UTC hoặc UTC+7 sẽ sai ngày/giá.",
+      "prepared_by": "Codex (AI)",
+      "prepared_date": "2026-10-11",
+      "human_calculator": "Hoàng Hữu Đạt",
+      "human_calculation_date": "2026-10-11",
+      "human_reviewer": "Đào Minh Tâm",
+      "acceptance_status": "Đã xác nhận T-77",
+      "assigned_to": "Hoàng Hữu Đạt",
+      "assigned_reviewer": "Đào Minh Tâm",
+      "human_review_date": "2026-10-11",
+      "human_confirmation_status": "Đào Minh Tâm đã xác nhận T-77 trong chat ngày 11/10/2026"
+    },
+    {
+      "case_id": "KT-21",
+      "title": "Đoạn ranh 0 Wh được bỏ, phiên vẫn có Wh",
+      "source_status": "Ca bổ sung được người dùng yêu cầu để phủ AC; không phải đề bài refinement gốc",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "started_at": "2026-10-10T21:30:00+07:00",
+      "ended_at": "2026-10-10T22:30:00+07:00",
+      "tariff_profile": "A",
+      "samples": [
+        {
+          "at": "2026-10-10T21:30:00+07:00",
+          "cumulative_wh": 0
+        },
+        {
+          "at": "2026-10-10T21:59:00+07:00",
+          "cumulative_wh": 0
+        },
+        {
+          "at": "2026-10-10T22:30:00+07:00",
+          "cumulative_wh": 1
+        }
+      ],
+      "idle_since": null,
+      "grace_minutes": 5,
+      "idle_duration_seconds": 0,
+      "expected": {
+        "segments": [
+          {
+            "local_date": "2026-10-10",
+            "started_at": "2026-10-10T22:00:00+07:00",
+            "ended_at": "2026-10-10T22:30:00+07:00",
+            "energy_wh": 1,
+            "rate_vnd": 2000,
+            "band_label": "Dem muon",
+            "interpolated": true,
+            "amount_vnd": 2
+          }
+        ],
+        "energy_total_vnd": 2,
+        "idle_billed_minutes": 0,
+        "idle_lines": [],
+        "idle_total_vnd": 0,
+        "total_vnd": 2
+      },
+      "working": "Ranh 22:00: 0+(1-0)×1/31=1/31 Wh → 0 Wh. Đoạn trước ranh 0-0=0 Wh không sinh dòng; đoạn sau 1-0=1 Wh, tiền 2 đ; tổng Wh vẫn là 1.",
+      "prepared_by": "Codex (AI)",
+      "prepared_date": "2026-10-11",
+      "human_calculator": "Hoàng Hữu Đạt",
+      "human_calculation_date": "2026-10-11",
+      "human_reviewer": "Đào Minh Tâm",
+      "acceptance_status": "Đã xác nhận T-77",
+      "assigned_to": "Hoàng Hữu Đạt",
+      "assigned_reviewer": "Đào Minh Tâm",
+      "human_review_date": "2026-10-11",
+      "human_confirmation_status": "Đào Minh Tâm đã xác nhận T-77 trong chat ngày 11/10/2026"
+    },
+    {
+      "case_id": "KT-22",
+      "title": "Nhiều khoảng idle, chỉ thu khoảng cuối",
+      "source_status": "Ca bổ sung được người dùng yêu cầu để phủ AC; không phải đề bài refinement gốc",
+      "timezone": "Asia/Ho_Chi_Minh",
+      "started_at": "2026-10-10T10:00:00+07:00",
+      "ended_at": "2026-10-10T11:00:00+07:00",
+      "tariff_profile": "A",
+      "samples": [
+        {
+          "at": "2026-10-10T10:00:00+07:00",
+          "cumulative_wh": 0
+        },
+        {
+          "at": "2026-10-10T10:10:00+07:00",
+          "cumulative_wh": 400
+        },
+        {
+          "at": "2026-10-10T10:20:00+07:00",
+          "cumulative_wh": 400
+        },
+        {
+          "at": "2026-10-10T10:50:00+07:00",
+          "cumulative_wh": 1000
+        },
+        {
+          "at": "2026-10-10T11:00:00+07:00",
+          "cumulative_wh": 1000
+        }
+      ],
+      "idle_since": "2026-10-10T10:50:00+07:00",
+      "grace_minutes": 5,
+      "idle_duration_seconds": 600,
+      "expected": {
+        "segments": [
+          {
+            "local_date": "2026-10-10",
+            "started_at": "2026-10-10T10:00:00+07:00",
+            "ended_at": "2026-10-10T11:00:00+07:00",
+            "energy_wh": 1000,
+            "rate_vnd": 3000,
+            "band_label": "Ban ngay",
+            "interpolated": false,
+            "amount_vnd": 3000
+          }
+        ],
+        "energy_total_vnd": 3000,
+        "idle_billed_minutes": 5,
+        "idle_lines": [
+          {
+            "started_at": "2026-10-10T10:55:00+07:00",
+            "ended_at": "2026-10-10T11:00:00+07:00",
+            "billed_minutes": 5,
+            "rate_vnd_per_minute": 200,
+            "amount_vnd": 1000
+          }
+        ],
+        "idle_total_vnd": 1000,
+        "total_vnd": 4000
+      },
+      "working": "Idle cũ 10:10–10:20 kết thúc bằng Charging, không cộng vào phí cuối. Idle cuối 10:50–11:00: (600-300)/60=5 phút; 1000 đ. Điện 3000; tổng 4000 đ. Phạm vi chỉ khoảng cuối theo T-63/T-80, không nghiệm thu mọi khoảng idle của S-28.",
+      "prepared_by": "Codex (AI)",
+      "prepared_date": "2026-10-11",
+      "human_calculator": "Hoàng Hữu Đạt",
+      "human_calculation_date": "2026-10-11",
+      "human_reviewer": "Đào Minh Tâm",
+      "acceptance_status": "Đã xác nhận T-77",
+      "idle_history": [
+        {
+          "started_at": "2026-10-10T10:10:00+07:00",
+          "ended_at": "2026-10-10T10:20:00+07:00",
+          "end_status": "Charging"
+        },
+        {
+          "started_at": "2026-10-10T10:50:00+07:00",
+          "ended_at": "2026-10-10T11:00:00+07:00",
+          "end_status": "StopTransaction"
+        }
+      ],
+      "assigned_to": "Hoàng Hữu Đạt",
+      "assigned_reviewer": "Đào Minh Tâm",
+      "human_review_date": "2026-10-11",
+      "human_confirmation_status": "Đào Minh Tâm đã xác nhận T-77 trong chat ngày 11/10/2026"
+    }
+  ]
+}

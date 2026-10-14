@@ -18,8 +18,10 @@ sai lệch dữ liệu phiên sạc. Phụ thuộc S-21 đã được merge vào
 ## Thành phần
 
 `simulator-seed` chỉ tạo hoặc cập nhật dữ liệu có tiền tố simulator: user thử,
-trạm, trụ, connector và thẻ. Không thay đổi dữ liệu có mã khác tiền tố đã cấu
-hình.
+trạm, trụ, connector, thẻ và ví driver. Ví được nạp qua ledger đúng phần thiếu
+để đạt ngưỡng eligibility hiện hành; ví khóa hoặc cấu hình biểu giá không hợp lệ
+làm seed thất bại rõ ràng thay vì để toàn bộ đội trụ bị từ chối. Không thay đổi
+dữ liệu có mã khác tiền tố đã cấu hình.
 
 `simulator` kết nối tới `ws://app:8000`, dùng subprotocol `ocpp1.6` và chỉ ghi
 báo cáo không có id tag vào `.local/simulator-reports`. Service chờ seed hoàn

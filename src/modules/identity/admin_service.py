@@ -12,6 +12,7 @@ from src.modules.identity.admin_schemas import (
     AccountCreateRequest,
     AccountListQuery,
     AccountListResponse,
+    AccountPasswordRequest,
     AccountResponse,
     AccountStatus,
     AccountUpdateRequest,
@@ -25,6 +26,7 @@ from src.modules.identity.role_assignment import (
     validate_role_assignment,
 )
 from src.modules.identity.security import hash_password
+from src.platform.audit.service import ghi_nhat_ky
 
 ROLE_NAMES: dict[RoleCode, str] = {
     "admin": "Quản trị",
@@ -44,6 +46,65 @@ class AdminAccountService:
         return [
             RoleResponse(code=c, name=ROLE_NAMES[c]) for c in codes if c in ROLE_NAMES
         ]
+
+    async def reset_password(
+        self,
+        user_id: UUID,
+        payload: AccountPasswordRequest,
+        actor: CurrentActor,
+        authorization: AuthorizationEvidence,
+    ) -> AccountResponse:
+        password_hash = await asyncio.to_thread(
+            hash_password, payload.password.get_secret_value()
+        )
+        try:
+            admin = await self._lock_admin(actor)
+            user = await self.db.scalar(
+                select(User)
+                .where(User.id == user_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+            if user is None:
+                raise HTTPException(404, "Tài khoản không tồn tại")
+            if user.status not in {"active", "suspended"}:
+                raise HTTPException(409, "Không thể sửa tài khoản đã ngừng hoạt động")
+            if user.updated_at != payload.expected_updated_at:
+                raise HTTPException(
+                    409, "Tài khoản đã thay đổi. Hãy tải lại trước khi sửa"
+                )
+            before = await self.account(user)
+            now = datetime.now(UTC)
+            user.password_hash = password_hash
+            user.updated_at = now
+            revoked = list(
+                await self.db.scalars(
+                    update(Session)
+                    .where(Session.user_id == user_id, Session.revoked_at.is_(None))
+                    .values(revoked_at=now)
+                    .returning(Session.id)
+                )
+            )
+            await ghi_nhat_ky(
+                self.db,
+                actor_id=actor.user_id,
+                action="account.credentials_reset",
+                object_type="user",
+                object_id=str(user_id),
+                data={"revoked_sessions": len(revoked)},
+                permission=authorization.permission,
+                actor_roles=authorization.roles,
+            )
+            await self.db.flush()
+            result = await self.account(user)
+            self._audit(
+                admin, user, "account_password_reset", before, result, authorization
+            )
+            await self.db.commit()
+            return result
+        except Exception:
+            await self.db.rollback()
+            raise
 
     async def account(self, user: User) -> AccountResponse:
         codes = await self.db.scalars(

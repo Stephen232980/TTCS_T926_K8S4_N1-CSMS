@@ -31,9 +31,9 @@ export function StationMap({ stations = emptyStations, position, onPick, selecte
     const instance = L.map(container.current, { scrollWheelZoom: false }).setView([16.1, 106.2], 5)
     map.current = instance
     instance.createPane('driver-location').style.zIndex = '650'
-    const tiles = L.tileLayer(import.meta.env.VITE_MAP_TILE_URL || 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    const tiles = L.tileLayer(import.meta.env.VITE_MAP_TILE_URL || 'https://basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}{r}.png?key=cb1_474k_1_5a54119591e8059d70c828f2', {
       maxZoom: 19,
-      attribution: import.meta.env.VITE_MAP_ATTRIBUTION || '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      attribution: import.meta.env.VITE_MAP_ATTRIBUTION || '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
     }).addTo(instance)
     tiles.on('tileerror', () => setTileError(true))
     instance.on('click', (event: L.LeafletMouseEvent) => {

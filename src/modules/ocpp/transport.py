@@ -7,6 +7,7 @@ from time import perf_counter
 
 from sqlalchemy.exc import SQLAlchemyError
 
+from src.modules.billing.closure import schedule_closure
 from src.modules.ocpp.connection_registry import OcppConnection
 from src.modules.ocpp.dispatcher import dispatch_call
 from src.modules.ocpp.frames import FrameError, decode_frame, error_frame
@@ -121,3 +122,11 @@ async def _handle_message(
             frame.message_id, "InternalError", "Unable to process request"
         )
     await send_reply(connection, response, exchange)
+    # dispatch_call committed before returning; do not delay the OCPP reply for billing.
+    transaction_id = frame.payload.get("transactionId")
+    if (
+        frame.action == "StopTransaction"
+        and json.loads(response)[0] == 3
+        and type(transaction_id) is int
+    ):
+        schedule_closure(transaction_id)
