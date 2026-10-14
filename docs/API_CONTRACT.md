@@ -689,3 +689,10 @@ Chín endpoint cảnh báo cho operator/admin và owner owned, ngưỡng offline
 vòng đời incident, email outbox và mã lỗi: [S46_S63_ALERTS.md](S46_S63_ALERTS.md).
 Owner chỉ đọc; operator đóng sau phục hồi; admin force close cần lý do và audit.
 Dashboard sức khỏe giữ metrics/biểu đồ hiện có. SMTP mặc định tắt đến khi cấu hình server.
+
+## S-66 / S-47 — Hoạt động trạm và tìm đầu nối
+
+Owner `PATCH /api/v1/owner/stations/{id}/operation` đổi active/suspended với
+expected_version, reason, kiểm tra config/tariff/power và audit. Driver discovery
+thêm số đầu nối rảnh, thông số và giá hiện hành; polling15s, tải đủ tối đa500 trạm
+trước khi sắp khoảng cách. Chi tiết: [S66_S47_STATION_OPERATION_DISCOVERY.md](S66_S47_STATION_OPERATION_DISCOVERY.md).

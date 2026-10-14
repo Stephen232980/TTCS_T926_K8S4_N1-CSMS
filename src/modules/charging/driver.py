@@ -112,6 +112,16 @@ async def remote_start(
             .where(ChargePoint.id == registered.charge_point_id)
             .with_for_update()
         )
+        station = (
+            await session.scalar(
+                select(Station)
+                .where(Station.id == charger.station_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+            if charger
+            else None
+        )
         connector = await session.scalar(
             select(Connector)
             .where(Connector.id == connector_id)
@@ -128,7 +138,6 @@ async def remote_start(
         )
         if driver is None or driver.status != "active" or is_driver is None:
             raise HTTPException(403, "Tài khoản không có quyền bắt đầu sạc.")
-        station = await session.get(Station, charger.station_id) if charger else None
         if (
             charger is None
             or connector is None
@@ -303,8 +312,12 @@ async def reject_remote_start(
         request.lease_until = datetime.now(UTC)
 
 
-async def reject_power_start(
-    session: AsyncSession, connector: Connector, card: ChargingCard | None
+async def reject_unavailable_start(
+    session: AsyncSession,
+    connector: Connector,
+    card: ChargingCard | None,
+    *,
+    reason: str,
 ) -> None:
     if card is None:
         return
@@ -329,7 +342,7 @@ async def reject_power_start(
     )
     if request is not None:
         request.status = "Rejected"
-        request.rejection_reason = "power_unavailable"
+        request.rejection_reason = reason
         request.lease_until = datetime.now(UTC)
 
 

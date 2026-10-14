@@ -21,6 +21,7 @@ import { ChargerWizard } from './ChargerWizard'
 import { OwnerCharging } from './OwnerCharging'
 import { TariffHistoryPanel } from './TariffHistoryPanel'
 import { StationPowerPage } from './StationPowerPage'
+import { StationOperation } from './StationOperation'
 import { ChargerDrawing, ConnectionSymbol, ConnectorSymbol, StationPhoto } from './OwnerVisuals'
 import {
   clock,
@@ -853,6 +854,10 @@ export function OwnerWorkspace({
                     {connectionError}
                   </p>
                 )}
+                <StationOperation key={station.id} station={station} onChanged={(nextStatus, version) => {
+                  setStation({ ...station, status: nextStatus, statusVersion: version })
+                  setRevision(value => value + 1)
+                }} onReload={() => setRevision(value => value + 1)} />
                 {area === 'tariffs' ? <div className="owner-tariff-scroll owner-grow" role="region" aria-label="Biểu giá của trạm" tabIndex={0}>
                   <TariffHistoryPanel key={station.id} stationId={String(station.id)} />
                 </div> : <div className="owner-detail-grid owner-grow">

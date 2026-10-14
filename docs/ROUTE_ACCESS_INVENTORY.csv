@@ -109,6 +109,7 @@ PATCH,/api/v1/owner/stations/{station_id},user,owner.stations.update_station,own
 GET,/api/v1/owner/stations/{station_id}/allocations,user,owner.power.read,owned,station_owner,
 GET,/api/v1/owner/stations/{station_id}/charge-points,user,owner.stations.list_charge_points,owned,station_owner,
 POST,/api/v1/owner/stations/{station_id}/charge-points,user,owner.stations.create_charge_point,owned,station_owner,
+PATCH,/api/v1/owner/stations/{station_id}/operation,user,owner.stations.change_operation,owned,station_owner,
 DELETE,/api/v1/owner/stations/{station_id}/photo,user,owner.photos.delete_photo,owned,station_owner,
 GET,/api/v1/owner/stations/{station_id}/photo,user,owner.photos.get_photo,owned,station_owner,
 PUT,/api/v1/owner/stations/{station_id}/photo,user,owner.photos.put_photo,owned,station_owner,
