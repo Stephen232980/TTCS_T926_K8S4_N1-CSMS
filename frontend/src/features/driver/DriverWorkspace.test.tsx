@@ -7,7 +7,7 @@ vi.mock('../../components/maps/StationMap', () => ({ StationMap: () => <div aria
 afterEach(() => { vi.unstubAllGlobals(); window.location.hash = '' })
 
 it('preserves station search across connector navigation and only calls driver endpoints', async () => {
-  const fetchMock = vi.fn().mockImplementation(async (url: string) => ({ ok: true, json: async () => url.includes('/charging/current') ? { session: null, start_request: null } : url.includes('/connectors') ? { items: [{ id: 'connector', charge_point_code: 'TRU-01', connector_number: 1, status: 'Reserved' }] } : { items: [{ id: 'station', name: 'Trạm thật', address: 'Địa chỉ', latitude: 10.7, longitude: 106.7 }], page: 1, total: 1, total_pages: 1 } }))
+  const fetchMock = vi.fn().mockImplementation(async (url: string) => ({ ok: true, json: async () => url.includes('/charging/current') ? { session: null, start_request: null } : url.includes('/connectors') ? { items: [{ id: 'connector', charge_point_code: 'TRU-01', connector_number: 1, status: 'Reserved' }] } : { items: [{ id: 'station', name: 'Trạm thật', address: 'Địa chỉ', latitude: 10.7, longitude: 106.7, energy_rate_vnd_per_kwh: 2500 }], page: 1, total: 1, total_pages: 1 } }))
   vi.stubGlobal('fetch', fetchMock)
   const user = userEvent.setup()
   render(<DriverWorkspace currentUser={{ id: 'driver', email: 'driver@example.com', roles: ['driver'] }} onLogout={vi.fn()} />)

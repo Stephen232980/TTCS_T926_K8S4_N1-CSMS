@@ -56,7 +56,12 @@ async def authorize(
         )
     ).first()
     card = row[0] if row else None
-    station = await session.get(Station, charger.station_id, populate_existing=True)
+    station = await session.scalar(
+        select(Station)
+        .where(Station.id == charger.station_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
     result = "Invalid"
     if card is not None:
         is_driver = await session.scalar(
@@ -317,12 +322,23 @@ async def start_transaction(
     if connector is None:
         raise ValueError("Connector is not registered")
     result, card, wallet_failure = await authorize(session, charger, payload.idTag)
+    station = await session.get(Station, charger.station_id)
+    if station is None or station.archived_at is not None or station.status != "active":
+        from src.modules.charging.driver import reject_unavailable_start
+
+        await reject_unavailable_start(
+            session, connector, card, reason="station_unavailable"
+        )
+        pending(session, charger, frame, "station_unavailable")
+        return {"transactionId": 0, "idTagInfo": {"status": "Blocked"}}
     from src.modules.power.service import power_start_allowed
 
     if not await power_start_allowed(session, charger.station_id):
-        from src.modules.charging.driver import reject_power_start
+        from src.modules.charging.driver import reject_unavailable_start
 
-        await reject_power_start(session, connector, card)
+        await reject_unavailable_start(
+            session, connector, card, reason="power_unavailable"
+        )
         pending(session, charger, frame, "power_unavailable")
         return {"transactionId": 0, "idTagInfo": {"status": "Blocked"}}
     if wallet_failure is not None:

@@ -181,7 +181,8 @@ export function DriverCharging({ stationId, stationName, showSession = true, sho
   const failure = walletFailure && walletFailure.stationId === stationId && walletFailure.connectorId === selected ? walletFailure
     : status === 'Rejected' && request?.connector_id === selected && request.id !== dismissedRequest
       ? walletEligibilityFailure({ reason: request.rejection_reason, balance_vnd: request.balance_vnd, minimum_balance_vnd: request.minimum_balance_vnd }) : null
-  const startStatus = !live && !failure && status && messages[status] ? <p role="status" className="driver-start-status">{messages[status]}{status === 'Accepted' && request?.deadline && ` Còn khoảng ${Math.min(60, Math.max(0, Math.ceil((Date.parse(request.deadline) - clock) / 1000)))} giây.`}</p> : null
+  const startMessage = request?.rejection_reason === 'station_unavailable' ? 'Trạm đã tạm ngừng hoặc không còn khả dụng. Chọn trạm khác để bắt đầu sạc.' : status ? messages[status] : ''
+  const startStatus = !live && !failure && status && startMessage ? <p role="status" className="driver-start-status">{startMessage}{status === 'Accepted' && request?.deadline && ` Còn khoảng ${Math.min(60, Math.max(0, Math.ceil((Date.parse(request.deadline) - clock) / 1000)))} giây.`}</p> : null
   const walletFailureMessage = failure ? walletEligibilityMessages[failure.reason] : null
   function chooseConnector(id: string) { setSelected(id); setPlugged(false); setRequestKey(null); setWalletFailure(null); setDismissedRequest(request?.id ?? null) }
   const findStations = <a className="driver-primary-link" href="#driver-stations" onClick={event => { if (onFindStations) { event.preventDefault(); onFindStations() } }}>Tìm trạm để bắt đầu sạc</a>

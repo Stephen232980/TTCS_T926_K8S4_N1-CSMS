@@ -222,6 +222,12 @@ it('receives SSE energy without polling and advances elapsed time locally', asyn
   expect(screen.getByText('2,7')).toBeInTheDocument()
 })
 
+it('explains a late start blocked by station suspension', async () => {
+  mockApi({ ...empty, start_request: { id: 'suspend-refusal', status: 'Rejected', deadline: null, rejection_reason: 'station_unavailable' } })
+  render(<DriverCharging />)
+  expect(await screen.findByText(/Trạm đã tạm ngừng hoặc không còn khả dụng/)).toBeInTheDocument()
+})
+
 it('keeps a newer SSE snapshot when the initial HTTP response arrives late', async () => {
   vi.useFakeTimers()
   vi.stubGlobal('EventSource', FakeDriverStream)
