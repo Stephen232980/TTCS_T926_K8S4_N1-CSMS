@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.config import settings
+from src.modules.alerts.worker import alert_email_loop, alert_scan_loop
 from src.modules.charging.driver import driver_start_loop
 from src.modules.charging.recovery import flag_abnormal_sessions
 from src.modules.ocpp.admin_health_service import health_loop
@@ -49,6 +50,8 @@ async def ocpp_lifespan(app: FastAPI) -> AsyncIterator[None]:
         asyncio.create_task(driver_start_loop()),
         asyncio.create_task(health_loop()),
         asyncio.create_task(power_loop()),
+        asyncio.create_task(alert_scan_loop()),
+        asyncio.create_task(alert_email_loop()),
     ]
     try:
         yield

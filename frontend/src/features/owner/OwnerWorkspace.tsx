@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { AlertsPanel } from '../alerts/AlertsPanel'
 import type { AuthenticatedUser } from '../auth/model/auth'
 import type { StationApi } from '../stations/api/stationApi'
 import { HttpStationApi } from '../stations/api/httpStationApi'
@@ -669,6 +670,7 @@ export function OwnerWorkspace({
                 )}
               </div>
             </header>
+            {area === 'stations' && <AlertsPanel area="owner" />}
             {notice && (
               <div role="status" className="owner-notice">
                 {notice}

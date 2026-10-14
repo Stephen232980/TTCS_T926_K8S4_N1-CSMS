@@ -682,3 +682,10 @@ bất đồng bộ, phân bổ và commissioning: [S42_S43_S44_POWER.md](S42_S43
 Trạm chưa bật chia tải giữ luồng sạc hiện có; trạm đã bật chặn start khi chưa
 xác minh hoặc degraded (`power_unavailable`). Lưu hạn mức không phải bằng
 chứng trụ đã áp dụng. Kết quả có requested/confirmed/reserved riêng biệt.
+
+## S-46 / S-63 — Cảnh báo vận hành
+
+Chín endpoint cảnh báo cho operator/admin và owner owned, ngưỡng offline/lỗi,
+vòng đời incident, email outbox và mã lỗi: [S46_S63_ALERTS.md](S46_S63_ALERTS.md).
+Owner chỉ đọc; operator đóng sau phục hồi; admin force close cần lý do và audit.
+Dashboard sức khỏe giữ metrics/biểu đồ hiện có. SMTP mặc định tắt đến khi cấu hình server.
