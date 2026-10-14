@@ -59,7 +59,13 @@ sách chưa giải phóng, degraded, chặn start mới, lưu yêu cầu RemoteS
 phiên liên quan. ACK stop không giải phóng công suất. Offline vẫn giữ ngân sách.
 
 Khóa advisory theo trạm ngăn hai worker cùng lập kế hoạch; row lock/version
-ngăn ghi đè. Không giữ transaction DB trong khi chờ socket. Scan 1 giây,
+ngăn ghi đè. Mỗi pha chạy tối đa 5 trụ song song, các đầu nối trên cùng trụ
+vẫn gửi/xác minh tuần tự. Tất cả lệnh giảm và đối chiếu intent phải hoàn tất
+trước pha tăng; giảm thất bại thì không chạy pha tăng. Trong pha tăng, khóa
+cấu hình trạm bảo vệ kiểm tổng ngân sách và giữ chỗ W cùng transaction trước
+gửi lệnh. Worker đợi các lệnh cùng pha kết thúc cả khi một lệnh gặp lỗi,
+tránh nhả khóa trạm khi lệnh nền vẫn đang chạy.
+Không giữ transaction DB trong khi chờ socket. Scan 1 giây,
 debounce sự kiện 2 giây, khoảng cách kế hoạch tối thiểu 5 giây. Boot/Start/Stop/
 Status kích hoạt generation mới; MeterValues không chạy bộ chia tải. Generation
 cũ không tăng công suất sau sự kiện mới. Restart đối chiếu intents/budget đã
@@ -80,9 +86,17 @@ trước gỡ các profile CSMS; lỗi gỡ giữ gate an toàn để retry.
 
 Kiến trúc hiện tại dùng registry socket trong một backend process. Khóa DB
 không biến registry thành distributed registry; chưa hỗ trợ nhiều backend
-process điều khiển cùng đội trụ. Mục tiêu cập nhật trong 30 giây phụ thuộc số
-đầu nối và tốc độ phản hồi: lệnh được xác minh tuần tự, không hứa 30 giây cho
-đội trụ lớn/chậm. Timeout mặc định 5 giây/lệnh, có thể chỉnh tối đa 30 giây.
+process điều khiển cùng đội trụ. Phạm vi demo hiệu năng là 10 đầu nối;
+cấu hình đo mặc định dùng 10 trụ ảo, mỗi trụ một đầu nối. Test S-44 đo từ lúc
+ghi sự kiện SuspendedEV/StopTransaction tới khi trạng thái ready và tất cả mức mới đã được
+xác minh, gồm scan/debounce/khoảng cách kế hoạch. Mỗi phản hồi OCPP mô phỏng
+trễ 2 giây và test yêu cầu hoàn tất dưới 30 giây; đồng thời kiểm tổng W không
+vượt hạn mức, giảm được xác minh trước tăng và không gửi lại mức không đổi.
+Đây là worker thật với PostgreSQL và adapter phản hồi có độ trễ, không phải
+phép đo WebSocket/staging hay thiết bị vật lý. Nếu nhiều đầu nối dùng chung
+một trụ, hoặc phản hồi chậm hơn cấu hình đo, cần đo lại trước demo; không hứa
+30 giây cho mọi topology/đội trụ lớn. Timeout mặc định 5 giây/lệnh, có thể chỉnh
+tối đa 30 giây; không nới timeout hay ngưỡng 200 ms của MeterValues.
 Không công bố p95/worst-case hay nghiệm thu thiết bị từ unit test.
 
 Simulator điều khiển dùng Power.Active.Import và tích phân điện năng theo
@@ -113,3 +127,11 @@ kế hoạch sau các request khoảng 7.5 giây; kế hoạch sau stop khoảng
 trên máy test. Một ca này không chứng minh p95/worst-case toàn đội trụ.
 Đo hiệu năng lặp lại và commissioning thật cần evidence riêng trước nghiệm
 thu story Done hoặc bật trên thiết bị thật.
+
+Kiểm thử tối ưu demo 10 đầu nối ngày 14/10/2026 trên WSL/Linux + PostgreSQL 16:
+83 test power/simulator đạt. Với phản hồi adapter trễ 2 giây/lệnh, từ sự kiện
+đến ready mất 17.087 giây cho SuspendedEV và 17.029 giây cho StopTransaction,
+tối đa 5 lệnh đồng thời. Sau khi một xe nhường tải: 9 x 3.333 kW = 29.997 kW
+trong ngân sách 30 kW; kiểm tổng W tại mỗi lần áp profile, thứ tự giảm trước
+tăng và kế hoạch không đổi không gửi lại profile đều đạt. Đây là số đo local
+trong cấu hình kiểm thử trên, chưa phải số đo staging/hardware hay p95.

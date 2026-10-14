@@ -4,8 +4,10 @@ import asyncio
 import os
 import subprocess
 import sys
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from time import monotonic
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
@@ -27,7 +29,12 @@ from src.modules.power import worker
 from src.modules.power.allocation import allocate_watts
 from src.modules.power.models import ConnectorPower, PowerCommand, StationPower
 from src.modules.power.schemas import PowerSetting
-from src.modules.power.service import change_control, power_start_allowed, save_settings
+from src.modules.power.service import (
+    change_control,
+    note_power_event,
+    power_start_allowed,
+    save_settings,
+)
 from src.modules.stations.models import ChargePoint, Connector
 from tests.test_flat_tariff_api import api_db, committed_tariff_db  # noqa: F401
 from tests.test_tariff_schema import make_station
@@ -439,3 +446,270 @@ async def test_applying_zero_baseline_allows_start_but_disable_and_degraded_deny
         config.state = "applying"
         config.target_enabled = False
         assert not await power_start_allowed(db, station.id)
+
+
+@pytest.mark.parametrize("event", ["SuspendedEV", "StopTransaction"])
+async def test_ten_connectors_reallocate_with_slow_chargers_within_thirty_seconds(
+    fleet, monkeypatch, event
+):
+    factory, station, charger, ids, _, _ = fleet
+    chargers = [charger]
+    async with factory() as db, db.begin():
+        for index in range(1, 10):
+            point = ChargePoint(
+                station_id=station.id,
+                code=f"DEMO10-{uuid4().hex[:10]}",
+                status="online",
+                last_seen_at=charger.last_seen_at,
+                last_boot_at=charger.last_boot_at,
+                heartbeat_interval_seconds=600,
+            )
+            db.add(point)
+            await db.flush()
+            chargers.append(point)
+            if index < 3:
+                connector = await db.get(Connector, ids[index])
+                connector.charge_point_id = point.id
+                connector.connector_number = 1
+            else:
+                connector = Connector(
+                    charge_point_id=point.id,
+                    connector_number=1,
+                    status="Available",
+                    raw_ocpp_status="Available",
+                    max_power_kw=Decimal(22),
+                )
+                db.add(connector)
+                await db.flush()
+                ids.append(connector.id)
+    connections = {p.id: SimpleNamespace(boot_accepted=True, id=p.id) for p in chargers}
+    codes = {p.code.lower(): connections[p.id] for p in chargers}
+    watts = dict.fromkeys(connections, 0)
+    delay = 0.0
+    trace = []
+    active = 0
+    peak = 0
+
+    async def snapshot():
+        return connections
+
+    async def get(code):
+        return codes[code]
+
+    async def wire(connection, action, payload, request_id):
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        try:
+            await asyncio.sleep(delay)
+            trace.append((connection.id, action))
+            if action == "GetConfiguration":
+                return "Accepted", {
+                    "configurationKey": [
+                        {"key": "SupportedFeatureProfiles", "value": "SmartCharging"},
+                        {
+                            "key": "ChargingScheduleAllowedChargingRateUnit",
+                            "value": "Power",
+                        },
+                        {"key": "ChargeProfileMaxStackLevel", "value": "1"},
+                    ]
+                }
+            if action == "SetChargingProfile":
+                watts[connection.id] = payload["csChargingProfiles"][
+                    "chargingSchedule"
+                ]["chargingSchedulePeriod"][0]["limit"]
+                assert sum(watts.values()) <= 30000
+            if action == "GetCompositeSchedule":
+                return "Accepted", {
+                    "connectorId": 1,
+                    "chargingSchedule": {
+                        "chargingRateUnit": "W",
+                        "chargingSchedulePeriod": [
+                            {"startPeriod": 0, "limit": watts[connection.id]},
+                        ],
+                    },
+                }
+            return "Accepted", {}
+        finally:
+            active -= 1
+
+    monkeypatch.setattr(worker.ocpp_connections, "snapshot", snapshot)
+    monkeypatch.setattr(worker.ocpp_connections, "get", get)
+    monkeypatch.setattr(worker, "wire", wire)
+    await configure(fleet)
+    await run_plan(factory, station)
+    async with factory() as db, db.begin():
+        for point, connector_id in zip(chargers, ids, strict=True):
+            db.add(
+                ChargingSession(
+                    charge_point_id=point.id,
+                    connector_id=connector_id,
+                    driver_id=station.owner_id,
+                    tag_tail="DEMO",
+                    authorization_status="Accepted",
+                    meter_start_wh=1000,
+                    started_at=datetime.now(UTC),
+                )
+            )
+            (await db.get(Connector, connector_id)).raw_ocpp_status = "Charging"
+    await run_plan(factory, station)
+    assert list(watts.values()) == [3000] * 10
+    delay = 2.0  # Each successful device reply is slow, still below the 5 s timeout.
+    peak = 0
+    trace.clear()
+    started = monotonic()
+    async with factory() as db, db.begin():
+        connector = await db.get(Connector, ids[0])
+        connector.raw_ocpp_status = (
+            "SuspendedEV" if event == "SuspendedEV" else "Available"
+        )
+        if event == "StopTransaction":
+            session = await db.scalar(
+                select(ChargingSession).where(
+                    ChargingSession.connector_id == ids[0],
+                    ChargingSession.ended_at.is_(None),
+                )
+            )
+            session.ended_at = datetime.now(UTC)
+        await note_power_event(db, station.id)
+    async with asyncio.timeout(30):
+        while True:
+            await worker.reconcile_station(station.id)
+            if watts[charger.id] == 0 and list(watts.values())[1:] == [3333] * 9:
+                async with factory() as db:
+                    if (await db.get(StationPower, station.id)).state == "ready":
+                        break
+            await asyncio.sleep(0.1)
+    elapsed = monotonic() - started
+    assert elapsed < 30
+    assert 1 < peak <= 5
+    assert trace[:2] == [
+        (charger.id, "SetChargingProfile"),
+        (charger.id, "GetCompositeSchedule"),
+    ]
+    async with factory() as db:
+        assert (
+            await db.scalar(
+                select(func.sum(ConnectorPower.reserved_w)).where(
+                    ConnectorPower.station_id == station.id
+                )
+            )
+            == 29997
+        )
+    trace.clear()
+    await run_plan(factory, station)
+    assert not trace
+    print(
+        f"DEMO10 {event} including scheduler gates: {elapsed:.3f}s; peak calls={peak}"
+    )
+
+
+async def test_parallel_increases_reserve_budget_atomically(fleet, monkeypatch):
+    factory, station, charger, _, _, _ = fleet
+    device_wire(monkeypatch, charger)
+    await configure(fleet)
+    await run_plan(factory, station)
+    inputs = await worker.devices(station.id)
+    async with factory() as db:
+        generation = (await db.get(StationPower, station.id)).generation
+    results = await asyncio.gather(
+        *(
+            worker.set_limit(device, station.id, generation, 20000)
+            for device in inputs[:2]
+        )
+    )
+    assert sorted(results) == [False, True]
+    async with factory() as db:
+        assert (
+            await db.scalar(
+                select(func.sum(ConnectorPower.reserved_w)).where(
+                    ConnectorPower.station_id == station.id
+                )
+            )
+            == 20000
+        )
+
+
+def phase_device(index):
+    stamp = datetime.now(UTC)
+    return worker.Device(
+        UUID(int=index),
+        UUID(int=index),
+        str(index),
+        1,
+        stamp,
+        22000,
+        index,
+        0,
+        0,
+        stamp,
+        None,
+        index,
+        True,
+        True,
+    )
+
+
+async def test_phase_bounds_concurrency_and_serializes_each_charger(monkeypatch):
+    inputs = [phase_device(index) for index in range(1, 11)]
+    inputs.append(replace(inputs[0], connector_id=UUID(int=11), number=2))
+    active = set()
+    peak = 0
+
+    async def set_limit(device, *args):
+        nonlocal peak
+        assert device.charge_point_id not in active
+        active.add(device.charge_point_id)
+        peak = max(peak, len(active))
+        await asyncio.sleep(0.02)
+        active.remove(device.charge_point_id)
+        return True
+
+    monkeypatch.setattr(worker, "set_limit", set_limit)
+    assert await worker.apply_phase(
+        inputs, {d.connector_id: 1000 for d in inputs}, uuid4(), 1
+    )
+    assert peak == 5 and not active
+
+
+async def test_phase_failure_waits_for_siblings_and_does_not_start_increases(
+    monkeypatch,
+):
+    inputs = [phase_device(index) for index in range(1, 4)]
+    finished = []
+    degraded = []
+
+    async def set_limit(device, *args):
+        await asyncio.sleep(0.01 if device == inputs[0] else 0.05)
+        finished.append(device.connector_id)
+        return device != inputs[0]
+
+    async def degrade(station, generation, issue, device):
+        assert len(finished) == 3
+        degraded.append(device.connector_id)
+
+    monkeypatch.setattr(worker, "set_limit", set_limit)
+    monkeypatch.setattr(worker, "degrade", degrade)
+    assert not await worker.apply_phase(
+        inputs, {d.connector_id: 0 for d in inputs}, uuid4(), 1
+    )
+    assert degraded == [inputs[0].connector_id]
+
+
+async def test_phase_exception_drains_sibling_writes_before_releasing_lock(monkeypatch):
+    inputs = [phase_device(index) for index in range(1, 3)]
+    finished = []
+
+    async def set_limit(device, *args):
+        if device == inputs[0]:
+            raise OSError("disconnected")
+        await asyncio.sleep(0.05)
+        finished.append(device.connector_id)
+        return True
+
+    monkeypatch.setattr(worker, "set_limit", set_limit)
+    with pytest.raises(OSError, match="disconnected"):
+        await worker.apply_phase(
+            inputs, {d.connector_id: 0 for d in inputs}, uuid4(), 1
+        )
+    assert finished == [inputs[1].connector_id]

@@ -269,8 +269,18 @@ async def set_limit(
         )
         cap = await db.get(ConnectorPower, device.connector_id)
         assert config is not None and cap is not None
-        if watts > cap.reserved_w and config.generation != generation:
-            return False
+        if watts > cap.reserved_w:
+            if config.generation != generation:
+                return False
+            # Serialize admission, not socket I/O: concurrent charger increases
+            # must see the reservations already committed by their peers.
+            total = await db.scalar(
+                select(func.sum(ConnectorPower.reserved_w)).where(
+                    ConnectorPower.station_id == station_id
+                )
+            )
+            if int(total or 0) - cap.reserved_w + watts > config.limit_w:
+                return False
         if cap.pending_command_id:
             prior = await db.get(PowerCommand, cap.pending_command_id)
             if prior and prior.payload == payload:
@@ -334,6 +344,41 @@ async def degrade(
             {"transactionId": failed.transaction_id},
         )
     logger.warning("power_degraded station=%s reason=%s", station_id, issue)
+
+
+async def apply_phase(
+    changes: list[Device],
+    targets: dict[UUID, int],
+    station_id: UUID,
+    generation: int,
+) -> bool:
+    """Bound charger concurrency; finish all in-flight writes before returning."""
+    groups: dict[UUID, list[Device]] = {}
+    for device in changes:
+        groups.setdefault(device.charge_point_id, []).append(device)
+    slots = asyncio.Semaphore(5)
+
+    async def apply_charger(group: list[Device]) -> Device | None:
+        async with slots:
+            # Keep one request/readback sequence at a time on each OCPP socket.
+            for device in group:
+                if not await set_limit(
+                    device, station_id, generation, targets[device.connector_id]
+                ):
+                    return device
+        return None
+
+    results = await asyncio.gather(
+        *(apply_charger(group) for group in groups.values()), return_exceptions=True
+    )
+    # Do not release the station lock while sibling writes are still running.
+    for result in results:
+        if isinstance(result, BaseException):
+            raise result
+    failed = [result for result in results if isinstance(result, Device)]
+    for device in failed:
+        await degrade(station_id, generation, "power_profile_not_verified", device)
+    return not failed
 
 
 async def reconcile_station(station_id: UUID) -> None:
@@ -463,31 +508,17 @@ async def _reconcile(station_id: UUID) -> None:
             assert config is not None
             config.state = "applying"
         # Reductions and reconciliation of uncertain intents precede EVERY increase.
-        for device in sorted(
-            changes, key=lambda d: targets[d.connector_id] > d.reserved_w
-        ):
-            target = targets[device.connector_id]
-            async with SessionFactory() as db:
-                config = await db.get(StationPower, station_id)
-                assert config is not None
-                if target > device.reserved_w and config.generation != generation:
-                    return
-                total = await db.scalar(
-                    select(func.sum(ConnectorPower.reserved_w)).where(
-                        ConnectorPower.station_id == station_id
-                    )
-                )
-                if (
-                    target > device.reserved_w
-                    and int(total or 0) - device.reserved_w + target > limit
-                ):
-                    await degrade(station_id, generation, "power_budget_conflict")
-                    return
-            if not await set_limit(device, station_id, generation, target):
-                await degrade(
-                    station_id, generation, "power_profile_not_verified", device
-                )
+        reductions = [d for d in changes if targets[d.connector_id] <= d.reserved_w]
+        increases = [d for d in changes if targets[d.connector_id] > d.reserved_w]
+        if not await apply_phase(reductions, targets, station_id, generation):
+            return
+        async with SessionFactory() as db:
+            config = await db.get(StationPower, station_id)
+            assert config is not None
+            if config.generation != generation:
                 return
+        if not await apply_phase(increases, targets, station_id, generation):
+            return
     async with SessionFactory() as db, db.begin():
         config = await db.scalar(
             select(StationPower)
