@@ -24,6 +24,7 @@ from src.modules.payments.fake_router import router as fake_payment_router
 from src.modules.payments.reconciliation_router import router as reconciliation_router
 from src.modules.payments.vnpay_router import router as vnpay_router
 from src.modules.payments.webhook_router import router as payment_webhook_router
+from src.modules.power.router import router as power_router
 from src.modules.pricing.router import router as tariff_router
 from src.modules.stations.charge_points_router import router as charge_points_router
 from src.modules.stations.discovery_router import router as discovery_router
@@ -53,6 +54,7 @@ app.include_router(admin_accounts_router)
 app.include_router(admin_audit_router)
 app.include_router(stations_router)
 app.include_router(tariff_router)
+app.include_router(power_router)
 app.include_router(station_photo_router)
 app.include_router(charge_points_router)
 # S-06: serve the OCPP WebSocket endpoint from the existing ASGI application.

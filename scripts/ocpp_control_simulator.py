@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from decimal import ROUND_CEILING
 from pathlib import Path
 from time import monotonic
-from uuid import uuid4
+from uuid import NAMESPACE_URL, uuid4, uuid5
 
 from websockets.asyncio.client import connect
 
@@ -23,6 +23,18 @@ class ConnectorState:
     sample_count: int = 0
     fractional_wh: float = 0
     last_meter_at: float | None = None
+    default_limit_w: int | None = None
+    transaction_limit_w: int | None = None
+    default_profile_id: int | None = None
+    transaction_profile_id: int | None = None
+
+    @property
+    def offered_watts(self) -> int | None:
+        return (
+            self.transaction_limit_w
+            if self.transaction_id is not None and self.transaction_limit_w is not None
+            else self.default_limit_w
+        )
 
     def reserve_start(self) -> bool:
         if (
@@ -40,6 +52,8 @@ def meter_samples(
 ) -> list[dict[str, str]]:
     """Simulated telemetry, with energy integrated from the reported power."""
     watts = 7200 + (state.sample_count % 5) * 180
+    if state.offered_watts is not None:
+        watts = min(watts, state.offered_watts)
     energy = state.fractional_wh + watts * elapsed_seconds / 3600
     whole_wh = int(energy)
     state.meter_wh += whole_wh
@@ -145,8 +159,37 @@ async def run(
     connectors: dict[int, ConnectorState] | None = None,
     tag_connector: int = 1,
     stop_event: asyncio.Event | None = None,
+    profile_store: Path | None = None,
 ) -> None:
     states = connectors if connectors is not None else {1: ConnectorState()}
+    if profile_store is not None and profile_store.exists():
+        stored_profiles = json.loads(profile_store.read_text(encoding="utf-8"))
+        for number, state in states.items():
+            prior = stored_profiles.get(str(number), {})
+            state.default_limit_w = prior.get("default_limit_w")
+            state.default_profile_id = prior.get("default_profile_id")
+            if prior.get("transaction_id") == state.transaction_id:
+                state.transaction_limit_w = prior.get("transaction_limit_w")
+                state.transaction_profile_id = prior.get("transaction_profile_id")
+
+    def persist_profiles() -> None:
+        if profile_store is None:
+            return
+        profile_store.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            str(number): {
+                "default_limit_w": state.default_limit_w,
+                "default_profile_id": state.default_profile_id,
+                "transaction_id": state.transaction_id,
+                "transaction_limit_w": state.transaction_limit_w,
+                "transaction_profile_id": state.transaction_profile_id,
+            }
+            for number, state in states.items()
+        }
+        pending_file = profile_store.with_suffix(".tmp")
+        pending_file.write_text(json.dumps(payload), encoding="utf-8")
+        pending_file.replace(profile_store)
+
     if existing_transaction_id is not None:
         if connectors is None:
             states[tag_connector].transaction_id = existing_transaction_id
@@ -203,6 +246,9 @@ async def run(
                     },
                 )
                 state.transaction_id = None
+                state.transaction_limit_w = None
+                state.transaction_profile_id = None
+                persist_profiles()
                 state.status = "Available"
                 await report(number)
                 print(
@@ -227,6 +273,11 @@ async def run(
                     value = result.get("transactionId")
                     if not isinstance(value, int):
                         raise TypeError("StartTransaction returned no transaction ID")
+                    if value <= 0:
+                        state.transaction_id = None
+                        state.status = "Available"
+                        await report(number)
+                        return
                     state.transaction_id = value
                     authorized = result.get("idTagInfo", {}).get("status") == "Accepted"
                     if authorized:
@@ -270,6 +321,142 @@ async def run(
                     if outcome == "Timeout":
                         continue
                     number = payload.get("connectorId")
+                    if action == "GetConfiguration":
+                        values = {
+                            "SupportedFeatureProfiles": "Core,SmartCharging",
+                            "ChargingScheduleAllowedChargingRateUnit": "Power",
+                            "ChargeProfileMaxStackLevel": "1",
+                        }
+                        await socket.send(
+                            json.dumps(
+                                [
+                                    3,
+                                    frame[1],
+                                    {
+                                        "configurationKey": [
+                                            {
+                                                "key": key,
+                                                "readonly": True,
+                                                "value": value,
+                                            }
+                                            for key, value in values.items()
+                                        ]
+                                    },
+                                ]
+                            )
+                        )
+                        continue
+                    if action == "SetChargingProfile":
+                        accepted = False
+                        details = payload.get("csChargingProfiles", {})
+                        if (
+                            outcome == "Accepted"
+                            and type(number) is int
+                            and number in states
+                            and isinstance(details, dict)
+                        ):
+                            charge_schedule = details.get("chargingSchedule", {})
+                            periods = (
+                                charge_schedule.get("chargingSchedulePeriod", [])
+                                if isinstance(charge_schedule, dict)
+                                else []
+                            )
+                            if (
+                                charge_schedule.get("chargingRateUnit") == "W"
+                                and len(periods) == 1
+                                and periods[0].get("startPeriod") == 0
+                                and type(periods[0].get("limit")) is int
+                                and periods[0]["limit"] >= 0
+                            ):
+                                state = states[number]
+                                if (
+                                    state.transaction_id is not None
+                                    and state.status == "Charging"
+                                    and state.last_meter_at is not None
+                                ):
+                                    tick = monotonic()
+                                    meter_samples(state, tick - state.last_meter_at)
+                                    state.last_meter_at = tick
+                                purpose = details.get("chargingProfilePurpose")
+                                if purpose == "TxDefaultProfile":
+                                    state.default_limit_w = periods[0]["limit"]
+                                    state.default_profile_id = details[
+                                        "chargingProfileId"
+                                    ]
+                                    accepted = True
+                                elif (
+                                    purpose == "TxProfile"
+                                    and details.get("transactionId")
+                                    == state.transaction_id
+                                    and state.transaction_id is not None
+                                ):
+                                    state.transaction_limit_w = periods[0]["limit"]
+                                    state.transaction_profile_id = details[
+                                        "chargingProfileId"
+                                    ]
+                                    accepted = True
+                        if accepted:
+                            persist_profiles()
+                        await socket.send(
+                            json.dumps(
+                                [
+                                    3,
+                                    frame[1],
+                                    {
+                                        "status": "Accepted"
+                                        if accepted and outcome == "Accepted"
+                                        else "Rejected"
+                                    },
+                                ]
+                            )
+                        )
+                        continue
+                    if action == "GetCompositeSchedule":
+                        if type(number) is int and number in states:
+                            state = states[number]
+                            response = {
+                                "status": "Accepted",
+                                "connectorId": number,
+                                "scheduleStart": datetime.now(UTC).isoformat(),
+                                "chargingSchedule": {
+                                    "duration": 60,
+                                    "chargingRateUnit": "W",
+                                    "chargingSchedulePeriod": [
+                                        {
+                                            "startPeriod": 0,
+                                            "limit": state.offered_watts
+                                            if state.offered_watts is not None
+                                            else 7200,
+                                        }
+                                    ],
+                                },
+                            }
+                        else:
+                            response = {"status": "Rejected"}
+                        await socket.send(json.dumps([3, frame[1], response]))
+                        continue
+                    if action == "ClearChargingProfile":
+                        cleared = False
+                        for state in states.values():
+                            if payload.get("id") == state.default_profile_id:
+                                state.default_profile_id = None
+                                state.default_limit_w = None
+                                cleared = True
+                            if payload.get("id") == state.transaction_profile_id:
+                                state.transaction_profile_id = None
+                                state.transaction_limit_w = None
+                                cleared = True
+                        await socket.send(
+                            json.dumps(
+                                [
+                                    3,
+                                    frame[1],
+                                    {"status": "Accepted" if cleared else "Unknown"},
+                                ]
+                            )
+                        )
+                        persist_profiles()
+                        continue
                     stop_number = next(
                         (
                             n
@@ -402,6 +589,10 @@ async def main(args: argparse.Namespace) -> None:
         args.start_delay,
         connectors,
         args.connector,
+        profile_store=Path(args.profile_store)
+        if args.profile_store
+        else Path(".local")
+        / f"control-power-{uuid5(NAMESPACE_URL, args.code).hex}.json",
     )
 
 
@@ -409,6 +600,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--url", default="ws://127.0.0.1:8001")
     parser.add_argument("--code", required=True)
+    parser.add_argument(
+        "--profile-store",
+        help="Durable profile state file (default: a distinct .local file per charger code)",
+    )
     parser.add_argument(
         "--connector",
         type=int,

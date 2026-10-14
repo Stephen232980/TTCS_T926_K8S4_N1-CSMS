@@ -19,6 +19,7 @@ import { StationWizard } from './StationWizard'
 import { ChargerWizard } from './ChargerWizard'
 import { OwnerCharging } from './OwnerCharging'
 import { TariffHistoryPanel } from './TariffHistoryPanel'
+import { StationPowerPage } from './StationPowerPage'
 import { ChargerDrawing, ConnectionSymbol, ConnectorSymbol, StationPhoto } from './OwnerVisuals'
 import {
   clock,
@@ -559,6 +560,8 @@ export function OwnerWorkspace({
         </header>
         {area === 'charging' ? (
           <OwnerCharging initialSessionId={sessionToOpen} onInitialSessionOpened={initialSessionOpened} />
+        ) : area === 'power' ? (
+          <StationPowerPage />
         ) : area !== 'stations' && area !== 'tariffs' ? (
           <section className="owner-page">
             <header className="owner-heading">
@@ -568,16 +571,12 @@ export function OwnerWorkspace({
               </div>
             </header>
             <div className="owner-panel owner-placeholder owner-grow">
-              <Icon name={area === 'power' ? 'bolt' : 'report'} />
+              <Icon name="report" />
               <h2>
-                {area === 'power'
-                  ? 'Chưa có chức năng cấu hình công suất'
-                  : 'Chưa có báo cáo doanh thu'}
+                Chưa có báo cáo doanh thu
               </h2>
               <p>
-                {area === 'power'
-                  ? 'Thông số công suất danh định và số đo hiện có xem trong chi tiết đầu nối.'
-                  : 'Chức năng này sẽ khả dụng khi nghiệp vụ tương ứng được triển khai.'}
+                Chức năng này sẽ khả dụng khi nghiệp vụ tương ứng được triển khai.
               </p>
               <button
                 className="secondary-button"

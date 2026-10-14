@@ -140,6 +140,10 @@ async def remote_start(
         ):
             raise HTTPException(409, "Trạm hoặc đầu nối hiện không khả dụng.")
         await expire_start_requests(session, now)
+        from src.modules.power.service import power_start_allowed
+
+        if not await power_start_allowed(session, charger.station_id):
+            raise HTTPException(409, {"reason": "power_unavailable"})
         lease = await session.scalar(
             select(DriverStartRequest.id).where(
                 DriverStartRequest.status.in_(["Pending", "Accepted"]),
@@ -296,6 +300,36 @@ async def reject_remote_start(
         request.rejection_reason = eligibility.reason
         request.balance_vnd = eligibility.balance_vnd
         request.minimum_balance_vnd = eligibility.minimum_balance_vnd
+        request.lease_until = datetime.now(UTC)
+
+
+async def reject_power_start(
+    session: AsyncSession, connector: Connector, card: ChargingCard | None
+) -> None:
+    if card is None:
+        return
+    tag = await session.scalar(
+        select(DriverVirtualTag).where(DriverVirtualTag.card_id == card.id)
+    )
+    if tag is None:
+        return
+    request = await session.scalar(
+        select(DriverStartRequest)
+        .where(
+            DriverStartRequest.driver_id == card.driver_id,
+            DriverStartRequest.connector_id == connector.id,
+            DriverStartRequest.session_id.is_(None),
+            DriverStartRequest.status.in_(
+                ["Pending", "Accepted", "StartNotConfirmed", "Timeout", "Disconnected"]
+            ),
+        )
+        .order_by(DriverStartRequest.created_at.desc())
+        .limit(1)
+        .with_for_update()
+    )
+    if request is not None:
+        request.status = "Rejected"
+        request.rejection_reason = "power_unavailable"
         request.lease_until = datetime.now(UTC)
 
 

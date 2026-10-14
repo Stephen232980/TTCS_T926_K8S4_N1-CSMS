@@ -15,6 +15,7 @@ from src.modules.ocpp.admin_health_service import health_loop
 from src.modules.ocpp.control import control_loop
 from src.modules.ocpp.dispatcher import prune_replies
 from src.modules.ocpp.monitoring import expire_chargers
+from src.modules.power.worker import power_loop
 from src.platform.database.session import SessionFactory
 
 
@@ -47,6 +48,7 @@ async def ocpp_lifespan(app: FastAPI) -> AsyncIterator[None]:
         asyncio.create_task(control_loop()),
         asyncio.create_task(driver_start_loop()),
         asyncio.create_task(health_loop()),
+        asyncio.create_task(power_loop()),
     ]
     try:
         yield

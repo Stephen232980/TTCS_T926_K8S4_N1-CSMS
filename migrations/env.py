@@ -18,6 +18,7 @@ from src.modules.ocpp import (
     control_models,  # noqa: F401
 )
 from src.modules.ocpp import models as ocpp_models  # noqa: F401
+from src.modules.power import models as power_models  # noqa: F401
 from src.modules.pricing import models as pricing_models  # noqa: F401
 from src.modules.stations import models as stations_models  # noqa: F401
 from src.modules.wallet import models as wallet_models  # noqa: F401
