@@ -13,6 +13,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    reservation_command_timeout_seconds: float = Field(default=5, gt=0, le=30)
     alert_offline_grace_seconds: int = Field(default=300, ge=60, le=86400)
     alert_error_window_seconds: int = Field(default=600, ge=60, le=86400)
     alert_error_threshold: int = Field(default=3, ge=2, le=1000)

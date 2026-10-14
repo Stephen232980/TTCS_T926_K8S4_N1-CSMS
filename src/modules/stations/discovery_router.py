@@ -54,6 +54,7 @@ class DiscoveryConnector(BaseModel):
     current_type: str | None
     max_power_kw: Decimal | None
     available: bool
+    reservation_supported: bool = False
 
 
 class DiscoveryResponse(BaseModel):

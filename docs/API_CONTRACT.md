@@ -696,3 +696,7 @@ Owner `PATCH /api/v1/owner/stations/{id}/operation` đổi active/suspended vớ
 expected_version, reason, kiểm tra config/tariff/power và audit. Driver discovery
 thêm số đầu nối rảnh, thông số và giá hiện hành; polling15s, tải đủ tối đa500 trạm
 trước khi sắp khoảng cách. Chi tiết: [S66_S47_STATION_OPERATION_DISCOVERY.md](S66_S47_STATION_OPERATION_DISCOVERY.md).
+
+## S-48 / S-49 / S-51 — Đặt và hủy chỗ
+
+Driver own scope: capability, booking intent, list/detail và cancel intent. 202 không phải ACK từ trụ; trạng thái uncertain vẫn giữ đầu nối. Hợp đồng và ngưỡng: [S48_S49_S51_RESERVATIONS.md](S48_S49_S51_RESERVATIONS.md).

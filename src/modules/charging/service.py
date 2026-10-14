@@ -46,7 +46,11 @@ def review(transaction: ChargingSession, reason: str) -> None:
 
 
 async def authorize(
-    session: AsyncSession, charger: ChargePoint, tag: str
+    session: AsyncSession,
+    charger: ChargePoint,
+    tag: str,
+    *,
+    reservation_context: bool = False,
 ) -> tuple[str, ChargingCard | None, ChargingEligibility | None]:
     row = (
         await session.execute(
@@ -83,6 +87,14 @@ async def authorize(
     if station is None or station.archived_at is not None or station.status != "active":
         result = "Blocked"
     wallet_failure = None
+    if result == "Accepted":
+        from src.modules.reservations.service import authorize_allowed
+
+        if not reservation_context and (
+            card is None
+            or not await authorize_allowed(session, charger.id, card, datetime.now(UTC))
+        ):
+            result = "Blocked"
     if result == "Accepted":
         from src.modules.power.service import power_start_allowed
 
@@ -321,7 +333,30 @@ async def start_transaction(
     )
     if connector is None:
         raise ValueError("Connector is not registered")
-    result, card, wallet_failure = await authorize(session, charger, payload.idTag)
+    result, card, wallet_failure = await authorize(
+        session, charger, payload.idTag, reservation_context=True
+    )
+    from src.modules.ocpp.monitoring import database_time
+    from src.modules.reservations.service import validate_start
+
+    reservation_allowed, reservation = await validate_start(
+        session,
+        connector,
+        card,
+        payload.reservationId,
+        payload.timestamp,
+        await database_time(session),
+    )
+    if not reservation_allowed or (
+        reservation is not None and result != "Accepted" and wallet_failure is None
+    ):
+        from src.modules.charging.driver import reject_unavailable_start
+
+        await reject_unavailable_start(
+            session, connector, card, reason="reservation_unavailable"
+        )
+        pending(session, charger, frame, "reservation_unavailable")
+        return {"transactionId": 0, "idTagInfo": {"status": "Blocked"}}
     station = await session.get(Station, charger.station_id)
     if station is None or station.archived_at is not None or station.status != "active":
         from src.modules.charging.driver import reject_unavailable_start
@@ -393,10 +428,12 @@ async def start_transaction(
         review(transaction, "negative_start_meter")
     if old is not None:
         review(transaction, "replaced_open_session")
-    if payload.reservationId is not None:
-        review(transaction, "reservation_not_verified")
     session.add(transaction)
     await session.flush()
+    if reservation is not None:
+        from src.modules.reservations.service import consume
+
+        consume(session, reservation, transaction, datetime.now(UTC))
     await StationRepository(session).lock_charge_point_code_for_charging(
         charger.id, locked_at=datetime.now(UTC)
     )

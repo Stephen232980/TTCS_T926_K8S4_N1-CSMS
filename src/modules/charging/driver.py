@@ -128,6 +128,15 @@ async def remote_start(
             .with_for_update()
             .execution_options(populate_existing=True)
         )
+        from src.modules.reservations.service import admissible, connector_hold
+
+        reservation = await connector_hold(session, connector_id, lock=True)
+        observed_at = await database_time(session)
+        if reservation is not None and not (
+            reservation.status == "active"
+            and admissible(reservation, driver_id, observed_at)
+        ):
+            raise HTTPException(409, {"reason": "connector_reserved"})
         driver = await session.scalar(
             select(User).where(User.id == driver_id).with_for_update()
         )
@@ -180,7 +189,9 @@ async def remote_start(
                 409,
                 "Đầu nối đang bận hoặc bạn đã có phiên/yêu cầu đang chờ. Vui lòng kiểm tra phiên của bạn.",
             )
-        if connector.status not in ("Available", "Preparing"):
+        if connector.status not in ("Available", "Preparing") and not (
+            connector.status == "Reserved" and reservation is not None
+        ):
             raise HTTPException(
                 409,
                 "Đầu nối đang bận, được đặt chỗ hoặc chưa sẵn sàng. Vui lòng chọn đầu nối khác.",
@@ -200,7 +211,6 @@ async def remote_start(
                 },
             )
         connection = await ocpp_connections.get(charger.code.strip().lower())
-        observed_at = await database_time(session)
         online = (
             connection is not None
             and connection.boot_accepted

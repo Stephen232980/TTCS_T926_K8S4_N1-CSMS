@@ -4,6 +4,7 @@ import type { MapStation } from '../../components/maps/StationMap'
 import type { AuthenticatedUser } from '../auth/model/auth'
 import { DriverCharging } from './DriverCharging'
 import { DriverMapPage } from './DriverMapPage'
+import { DriverReservations } from '../reservations/DriverReservations'
 import { DriverInvoicePage } from './DriverInvoicePage'
 import { DriverWalletPage } from './DriverWalletPage'
 import { WalletTopUpPage } from './WalletTopUpPage'
@@ -196,8 +197,9 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
       </div>
       {area !== 'wallet' && (
         <>
+          <DriverReservations ownerId={currentUser.id} />
           <div className="driver-return" hidden={!showStart || area !== 'stations'}><button className="secondary-button" onClick={() => setShowStart(false)}><Icon name="chevronLeft" />Quay lại bản đồ và danh sách</button></div>
-          <DriverCharging stationId={station?.id} stationName={station?.name} showSession={area === 'session'} showConnectors={area === 'stations' && showStart} onFindStations={showStations} onSessionStarted={sessionStarted} />
+          <DriverCharging ownerId={currentUser.id} stationId={station?.id} stationName={station?.name} showSession={area === 'session'} showConnectors={area === 'stations' && showStart} onFindStations={showStations} onSessionStarted={sessionStarted} />
           {mapOpened && <div className="driver-map-container" hidden={area !== 'stations' || showStart}><DriverMapPage selectedStationId={station?.id} onOpenStation={selected => { setStation(selected); setShowStart(true) }} /></div>}
         </>
       )}
