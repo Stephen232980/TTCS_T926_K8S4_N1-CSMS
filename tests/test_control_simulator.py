@@ -3,6 +3,7 @@
 import asyncio
 import json
 from contextlib import suppress
+from datetime import datetime
 from uuid import uuid4
 
 from websockets.asyncio.server import serve
@@ -265,6 +266,9 @@ async def test_control_simulator_routes_sessions_and_rejects_unready_connectors(
             if action == "BootNotification":
                 response = {"status": "Accepted", "interval": 60}
             elif action == "StatusNotification":
+                assert (
+                    datetime.fromisoformat(payload["timestamp"]).utcoffset() is not None
+                )
                 status_reports.add(payload["connectorId"])
                 if len(status_reports) == 4:
                     ready.set()
