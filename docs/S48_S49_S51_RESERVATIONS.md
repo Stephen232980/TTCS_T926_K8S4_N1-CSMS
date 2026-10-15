@@ -1,5 +1,39 @@
 # S-48 / S-49 / S-51 — G5 đặt và hủy chỗ
 
+## Cập nhật S-48: giao diện và simulator demo
+
+Ở màn đầu nối của tài xế, nút Quay lại bản đồ và danh sách đứng trước mục
+Đặt chỗ của bạn. Mục này khi đóng cao 44px. Dưới nút Bắt đầu sạc là nút
+Đặt trước đầu nối có chiều rộng bằng nút bắt đầu sạc; khi bấm mở popup chọn giờ/phí,
+có nút Xác nhận đặt chỗ và Hủy. Popup giữ focus, hỗ trợ Escape, trả focus về nút
+khi đóng; hủy trước khi gửi không tạo booking. Nếu kết quả gửi trước đó chưa rõ,
+đóng popup vẫn giữ UUID để thử lại an toàn. Chưa xác minh capability
+thì nút này tự gửi yêu cầu kiểm tra. Nếu sau 20 giây chưa có kết quả, UI báo
+chưa nhận phản hồi và cho thử lại; không báo đã đặt thành công hoặc tự bỏ hold.
+Retry capability có thể kiểm lại kết quả unsupported/lỗi trên cùng boot,
+nhưng không chiếm lease của một probe đang chạy.
+
+Thông báo popup chỉ gồm ba gạch đầu dòng: Phí không đến (giá trị từ policy hoặc
+snapshot đã gửi), Không thu phí đặt trước, Có hiệu lực trong 15 phút. Checkbox
+ghi Tôi đồng ý. Giữ kiểm tra đồng ý phí, ngày đến và idempotency hiện có.
+
+`scripts/ocpp_control_simulator.py` hỗ trợ Core,SmartCharging,Reservation:
+ReserveNow giữ đúng đầu nối/thẻ/hạn; CancelReservation và hết hạn phát
+StatusNotification tương ứng; RemoteStart chỉ dùng đúng thẻ giữ chỗ và
+StartTransaction gửi reservationId để backend consume. State giữ chỗ được lưu
+cùng file profile để phục hồi khi restart; file chứa thẻ riêng, cần giữ trong
+thư mục riêng của tài khoản chạy simulator, không đưa vào Git hay log.
+
+Sau khi cập nhật code, phải restart các tiến trình simulator demo đang kết nối
+để chúng dùng bản mới, rồi kiểm tra lại hỗ trợ ở giao diện. Chỉ triển khai backend/
+frontend không tự cập nhật script đã được nạp vào tiến trình simulator cũ.
+Không bật capability Reservation giả trên trụ không hỗ trợ.
+
+`tests/test_s48_demo_reservations.py` chạy chính script simulator qua TCP tới
+CSMS và kiểm API probe → đặt → hủy → đặt lại → RemoteStart → reservation consumed.
+Đây là bằng chứng local; vẫn cần nghiệm thu trên staging sau triển khai và restart
+simulator. Các kiểm thử unique/recovery/fee hiện có của G5/G6 được giữ nguyên.
+
 G5 bổ sung giữ ngay một đầu nối cụ thể. Driver chọn đến ngay hoặc trong hai giờ tới; hạn giữ là giờ đến + 15 phút. Mỗi driver và mỗi đầu nối chỉ có một hold chưa được giải phóng. Không thu phí đặt trước; phí no-show S-50 thuộc G6.
 
 ## API và quyền
