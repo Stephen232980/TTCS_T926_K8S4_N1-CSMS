@@ -267,8 +267,9 @@ async def test_restart_lease_retry_and_permanent_failure_keep_one_email(
         assert (await db.scalar(select(OperationalAlert))).status == "open"
 
 
+@pytest.mark.parametrize("shared_profile", [False, True])
 async def test_smtp_actual_delivery_has_stable_message_id_without_driver_data(
-    alert_fleet, monkeypatch
+    alert_fleet, monkeypatch, shared_profile
 ):
     factory, station, _, _, now = alert_fleet
     received = []
@@ -298,6 +299,12 @@ async def test_smtp_actual_delivery_has_stable_message_id_without_driver_data(
         thread.start()
         monkeypatch.setattr(settings, "alert_smtp_security", "plain")
         monkeypatch.setattr(settings, "alert_smtp_port", server.server_address[1])
+        if shared_profile:
+            monkeypatch.setattr(settings, "smtp_enabled", True)
+            monkeypatch.setattr(settings, "smtp_host", "127.0.0.1")
+            monkeypatch.setattr(settings, "smtp_from", "csms@example.com")
+            monkeypatch.setattr(settings, "smtp_security", "plain")
+            monkeypatch.setattr(settings, "smtp_port", server.server_address[1])
         try:
             await scan(factory, now)
             delivery = (await worker.claim_emails())[0]
