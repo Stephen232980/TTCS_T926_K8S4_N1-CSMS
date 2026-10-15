@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { AlertsPanel } from '../alerts/AlertsPanel'
 import type { AuthenticatedUser } from '../auth/model/auth'
 import type { StationApi } from '../stations/api/stationApi'
 import { HttpStationApi } from '../stations/api/httpStationApi'
@@ -19,6 +20,9 @@ import { StationWizard } from './StationWizard'
 import { ChargerWizard } from './ChargerWizard'
 import { OwnerCharging } from './OwnerCharging'
 import { TariffHistoryPanel } from './TariffHistoryPanel'
+import { StationPowerPage } from './StationPowerPage'
+import { StationOperation } from './StationOperation'
+import { ReservationPolicy } from './ReservationPolicy'
 import { ChargerDrawing, ConnectionSymbol, ConnectorSymbol, StationPhoto } from './OwnerVisuals'
 import {
   clock,
@@ -559,6 +563,8 @@ export function OwnerWorkspace({
         </header>
         {area === 'charging' ? (
           <OwnerCharging initialSessionId={sessionToOpen} onInitialSessionOpened={initialSessionOpened} />
+        ) : area === 'power' ? (
+          <StationPowerPage />
         ) : area !== 'stations' && area !== 'tariffs' ? (
           <section className="owner-page">
             <header className="owner-heading">
@@ -568,16 +574,12 @@ export function OwnerWorkspace({
               </div>
             </header>
             <div className="owner-panel owner-placeholder owner-grow">
-              <Icon name={area === 'power' ? 'bolt' : 'report'} />
+              <Icon name="report" />
               <h2>
-                {area === 'power'
-                  ? 'Chưa có chức năng cấu hình công suất'
-                  : 'Chưa có báo cáo doanh thu'}
+                Chưa có báo cáo doanh thu
               </h2>
               <p>
-                {area === 'power'
-                  ? 'Thông số công suất danh định và số đo hiện có xem trong chi tiết đầu nối.'
-                  : 'Chức năng này sẽ khả dụng khi nghiệp vụ tương ứng được triển khai.'}
+                Chức năng này sẽ khả dụng khi nghiệp vụ tương ứng được triển khai.
               </p>
               <button
                 className="secondary-button"
@@ -670,6 +672,7 @@ export function OwnerWorkspace({
                 )}
               </div>
             </header>
+            {area === 'stations' && <AlertsPanel area="owner" />}
             {notice && (
               <div role="status" className="owner-notice">
                 {notice}
@@ -852,6 +855,11 @@ export function OwnerWorkspace({
                     {connectionError}
                   </p>
                 )}
+                <StationOperation key={station.id} station={station} onChanged={(nextStatus, version) => {
+                  setStation({ ...station, status: nextStatus, statusVersion: version })
+                  setRevision(value => value + 1)
+                }} onReload={() => setRevision(value => value + 1)} />
+                <details><summary>Chính sách phí không đến</summary><ReservationPolicy key={station.id} stationId={String(station.id)} /></details>
                 {area === 'tariffs' ? <div className="owner-tariff-scroll owner-grow" role="region" aria-label="Biểu giá của trạm" tabIndex={0}>
                   <TariffHistoryPanel key={station.id} stationId={String(station.id)} />
                 </div> : <div className="owner-detail-grid owner-grow">

@@ -1,0 +1,9 @@
+.owner-operation { flex-shrink: 0; color: #193d4b; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 0; }
+.owner-operation > p { flex: 1 1 280px; margin: 0; font-size: 13px; color: #526e7b; }
+.owner-operation form { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; width: 100%; }
+.owner-operation label { display: flex; flex-direction: column; gap: 6px; flex: 1 1 240px; font-size: 13px; }
+.owner-operation input { font: inherit; color: #193d4b; background: #fff; border: 1px solid #b9cdd6; border-radius: 9px; padding: 9px 12px; min-height: 42px; width: 100%; box-sizing: border-box; }
+.owner-operation input:focus-visible { outline: 3px solid #2688c1; outline-offset: 3px; }
+.owner-operation [role="alert"] { color: #a3382c; width: 100%; }
+.owner-operation [role="status"] { width: 100%; flex-basis: 100%; }
+@media (max-width: 800px) { .owner-operation button { min-height: 44px; } }

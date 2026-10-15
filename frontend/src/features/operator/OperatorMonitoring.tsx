@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { AlertsPanel } from "../alerts/AlertsPanel";
 import { notifySessionUnauthorized } from "../auth/sessionEvents";
 import { ControlAction } from "../ocpp/ControlAction";
 import {
@@ -395,6 +396,7 @@ export function OperatorMonitoring({
           Cập nhật ngay
         </button>
       </header>
+      <AlertsPanel area="ops" />
       <p className="operator-stream" role="status">
         {streamState}
         {updatedAt && ` · ${clock(updatedAt)}`}

@@ -77,6 +77,9 @@ class Station(Base):
         server_default=DEFAULT_STATION_TIMEZONE,
         nullable=False,
     )
+    status_version: Mapped[int] = mapped_column(
+        Integer, default=1, server_default="1", nullable=False
+    )
     archived_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,

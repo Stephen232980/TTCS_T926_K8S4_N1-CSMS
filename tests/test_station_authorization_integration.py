@@ -20,7 +20,7 @@ from src.platform.database.session import get_db_session
 
 
 @pytest.mark.asyncio
-async def test_driver_map_http_contract_without_database() -> None:
+async def test_driver_map_http_contract_without_database(monkeypatch) -> None:
     station = Station(
         id=uuid4(),
         owner_id=uuid4(),
@@ -33,6 +33,15 @@ async def test_driver_map_http_contract_without_database() -> None:
     session = AsyncMock(spec=AsyncSession)
     session.scalar.return_value = 1
     session.scalars.return_value = [station]
+    now = datetime.now(UTC)
+    monkeypatch.setattr(
+        "src.modules.stations.discovery_router.database_time",
+        AsyncMock(return_value=now),
+    )
+    monkeypatch.setattr(
+        "src.modules.stations.discovery_router.summaries",
+        AsyncMock(return_value={station.id: {}}),
+    )
     actor = CurrentActor(user_id=uuid4(), roles=frozenset({"driver"}))
     async with station_api_client(cast(AsyncSession, session), actor) as client:
         response = await client.get("/api/v1/driver/stations")
@@ -47,11 +56,20 @@ async def test_driver_map_http_contract_without_database() -> None:
                 "address": "Địa chỉ",
                 "latitude": 10.7,
                 "longitude": 106.7,
+                "available_connectors": 0,
+                "total_connectors": 0,
+                "connectors": [],
+                "energy_rate_vnd_per_kwh": None,
+                "idle_rate_vnd_per_minute": None,
+                "grace_minutes": None,
             }
         ],
         "page": 1,
         "total": 1,
         "total_pages": 1,
+        "generated_at": now.isoformat().replace("+00:00", "Z"),
+        "refresh_after_seconds": 15,
+        "search_too_broad": False,
     }
     assert management.status_code == 403
     assert invalid.status_code == 422
@@ -107,6 +125,12 @@ async def test_driver_map_excludes_non_active_and_archived_stations(
         "address",
         "latitude",
         "longitude",
+        "available_connectors",
+        "total_connectors",
+        "connectors",
+        "energy_rate_vnd_per_kwh",
+        "idle_rate_vnd_per_minute",
+        "grace_minutes",
     }
     assert management.status_code == 403
     assert invalid_page.status_code == 422

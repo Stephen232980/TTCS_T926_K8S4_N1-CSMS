@@ -1,13 +1,54 @@
 from functools import lru_cache
 from typing import Literal, Self
 
-from pydantic import Field, HttpUrl, SecretStr, field_validator, model_validator
+from pydantic import (
+    EmailStr,
+    Field,
+    HttpUrl,
+    SecretStr,
+    field_validator,
+    model_validator,
+)
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    reservation_command_timeout_seconds: float = Field(default=5, gt=0, le=30)
+    alert_offline_grace_seconds: int = Field(default=300, ge=60, le=86400)
+    alert_error_window_seconds: int = Field(default=600, ge=60, le=86400)
+    alert_error_threshold: int = Field(default=3, ge=2, le=1000)
+    alert_scan_interval_seconds: int = Field(default=15, ge=1, le=15)
+    alert_smtp_enabled: bool = False
+    alert_smtp_host: str = ""
+    alert_smtp_port: int = Field(default=587, ge=1, le=65535)
+    alert_smtp_security: Literal["starttls", "ssl", "plain"] = "starttls"
+    alert_smtp_from: EmailStr | None = None
+    alert_email_recipients: list[EmailStr] = Field(default_factory=list)
+    alert_smtp_username: str = ""
+    alert_smtp_password: SecretStr | None = Field(default=None, repr=False)
+    alert_smtp_timeout_seconds: float = Field(default=5, gt=0, le=15)
+    alert_email_max_attempts: int = Field(default=6, ge=1, le=20)
+
+    @field_validator("alert_smtp_from", "alert_smtp_password", mode="before")
+    @classmethod
+    def empty_alert_smtp_values(cls, value: object) -> object:
+        return None if isinstance(value, str) and not value.strip() else value
+
+    @model_validator(mode="after")
+    def validate_alert_smtp(self) -> Self:
+        if self.alert_smtp_enabled and not (
+            self.alert_smtp_host
+            and self.alert_smtp_from
+            and self.alert_email_recipients
+        ):
+            raise ValueError("Enabled alert SMTP requires host, sender and recipients")
+        if bool(self.alert_smtp_username) != bool(self.alert_smtp_password):
+            raise ValueError("SMTP username and password must be configured together")
+        return self
+
     database_url: str = ""
     database_pool_size: int = Field(default=20, ge=1, le=100)
+    power_command_timeout_seconds: float = Field(default=5, gt=0, le=30)
     wallet_manual_topup_max_vnd: int = Field(default=10_000_000, gt=0, le=2**63 - 1)
     wallet_topup_min_vnd: int = Field(default=10_000, gt=0, le=2**63 - 1)
     wallet_topup_max_vnd: int = Field(default=5_000_000, gt=0, le=2**63 - 1)

@@ -5,8 +5,10 @@ import logging
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
+from functools import lru_cache
+from typing import Any
 
-from sqlalchemy import case, literal, select, true
+from sqlalchemy import Select, bindparam, case, insert, literal, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
@@ -46,7 +48,11 @@ def review(transaction: ChargingSession, reason: str) -> None:
 
 
 async def authorize(
-    session: AsyncSession, charger: ChargePoint, tag: str
+    session: AsyncSession,
+    charger: ChargePoint,
+    tag: str,
+    *,
+    reservation_context: bool = False,
 ) -> tuple[str, ChargingCard | None, ChargingEligibility | None]:
     row = (
         await session.execute(
@@ -56,7 +62,12 @@ async def authorize(
         )
     ).first()
     card = row[0] if row else None
-    station = await session.get(Station, charger.station_id, populate_existing=True)
+    station = await session.scalar(
+        select(Station)
+        .where(Station.id == charger.station_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
     result = "Invalid"
     if card is not None:
         is_driver = await session.scalar(
@@ -78,6 +89,19 @@ async def authorize(
     if station is None or station.archived_at is not None or station.status != "active":
         result = "Blocked"
     wallet_failure = None
+    if result == "Accepted":
+        from src.modules.reservations.service import authorize_allowed
+
+        if not reservation_context and (
+            card is None
+            or not await authorize_allowed(session, charger.id, card, datetime.now(UTC))
+        ):
+            result = "Blocked"
+    if result == "Accepted":
+        from src.modules.power.service import power_start_allowed
+
+        if not await power_start_allowed(session, charger.station_id):
+            result = "Blocked"
     if result == "Accepted":
         if card is None:
             raise RuntimeError("Accepted authorization has no matching card")
@@ -134,9 +158,12 @@ async def store_samples(
     backfill: bool = False,
     latest: dict[tuple[str, str, str], tuple[datetime, Decimal]] | None = None,
     history: dict[tuple[str, str, str], dict[datetime, Decimal]] | None = None,
+    deferred_rows: list[dict[str, object]] | None = None,
 ) -> None:
     if backfill:
-        await store_recovery_samples(session, transaction, blocks, history=history)
+        await store_recovery_samples(
+            session, transaction, blocks, history=history, deferred_rows=deferred_rows
+        )
         return
     if latest is None:
         previous = (
@@ -158,6 +185,7 @@ async def store_samples(
             (item.measurand, item.phase, item.location): (item.timestamp, item.value)
             for item in previous
         }
+    rows: list[dict[str, object]] = []
     for block in blocks:
         for sample in block.sampledValue:
             numeric = numeric_sample(sample)
@@ -199,18 +227,34 @@ async def store_samples(
             if block.timestamp < transaction.started_at:
                 logger.warning("ocpp_meter_before_start transaction=%s", transaction.id)
                 continue
-            session.add(
-                MeterSample(
-                    session_id=transaction.id,
-                    timestamp=block.timestamp,
-                    measurand=sample.measurand,
-                    phase=sample.phase,
-                    location=sample.location,
-                    value=value,
-                    unit=unit,
-                )
+            rows.append(
+                {
+                    "session_id": transaction.id,
+                    "timestamp": block.timestamp,
+                    "measurand": sample.measurand,
+                    "phase": sample.phase,
+                    "location": sample.location,
+                    "value": value,
+                    "unit": unit,
+                }
             )
             latest[key] = (block.timestamp, value)
+    if rows:
+        # Samples need no generated IDs. One multi-row INSERT avoids per-sample
+        # ORM state/RETURNING work; the dispatcher's transaction still commits
+        # samples and the durable reply together before sending the ACK.
+        if deferred_rows is None:
+            await insert_meter_rows(session, rows)
+        else:
+            deferred_rows.extend(rows)
+
+
+async def insert_meter_rows(
+    session: AsyncSession, rows: list[dict[str, object]]
+) -> None:
+    # Bound parameter count and statement size for buffered, multi-block reports.
+    for offset in range(0, len(rows), 1024):
+        await session.execute(insert(MeterSample).values(rows[offset : offset + 1024]))
 
 
 async def store_recovery_samples(
@@ -219,6 +263,7 @@ async def store_recovery_samples(
     blocks: Sequence[MeterBlock],
     *,
     history: dict[tuple[str, str, str], dict[datetime, Decimal]] | None = None,
+    deferred_rows: list[dict[str, object]] | None = None,
 ) -> None:
     """Late buffered samples retain their timestamps, including gaps before newest data."""
     if history is None:
@@ -233,6 +278,7 @@ async def store_recovery_samples(
                 item.timestamp
             ] = item.value
     series = history
+    rows: list[dict[str, object]] = []
     for block in sorted(blocks, key=lambda item: item.timestamp):
         if block.timestamp < transaction.started_at or (
             transaction.ended_at is not None and block.timestamp > transaction.ended_at
@@ -264,18 +310,22 @@ async def store_recovery_samples(
                     following is not None and value > following
                 ):
                     review(transaction, "meter_regression")
-            session.add(
-                MeterSample(
-                    session_id=transaction.id,
-                    timestamp=block.timestamp,
-                    measurand=sample.measurand,
-                    phase=sample.phase,
-                    location=sample.location,
-                    value=value,
-                    unit=unit,
-                )
+            rows.append(
+                {
+                    "session_id": transaction.id,
+                    "timestamp": block.timestamp,
+                    "measurand": sample.measurand,
+                    "phase": sample.phase,
+                    "location": sample.location,
+                    "value": value,
+                    "unit": unit,
+                }
             )
             points[block.timestamp] = value
+    if deferred_rows is None:
+        await insert_meter_rows(session, rows)
+    else:
+        deferred_rows.extend(rows)
 
 
 async def start_transaction(
@@ -311,7 +361,50 @@ async def start_transaction(
     )
     if connector is None:
         raise ValueError("Connector is not registered")
-    result, card, wallet_failure = await authorize(session, charger, payload.idTag)
+    result, card, wallet_failure = await authorize(
+        session, charger, payload.idTag, reservation_context=True
+    )
+    from src.modules.ocpp.monitoring import database_time
+    from src.modules.reservations.service import validate_start
+
+    reservation_allowed, reservation = await validate_start(
+        session,
+        connector,
+        card,
+        payload.reservationId,
+        payload.timestamp,
+        await database_time(session),
+        frame.message_id,
+    )
+    if not reservation_allowed or (
+        reservation is not None and result != "Accepted" and wallet_failure is None
+    ):
+        from src.modules.charging.driver import reject_unavailable_start
+
+        await reject_unavailable_start(
+            session, connector, card, reason="reservation_unavailable"
+        )
+        pending(session, charger, frame, "reservation_unavailable")
+        return {"transactionId": 0, "idTagInfo": {"status": "Blocked"}}
+    station = await session.get(Station, charger.station_id)
+    if station is None or station.archived_at is not None or station.status != "active":
+        from src.modules.charging.driver import reject_unavailable_start
+
+        await reject_unavailable_start(
+            session, connector, card, reason="station_unavailable"
+        )
+        pending(session, charger, frame, "station_unavailable")
+        return {"transactionId": 0, "idTagInfo": {"status": "Blocked"}}
+    from src.modules.power.service import power_start_allowed
+
+    if not await power_start_allowed(session, charger.station_id):
+        from src.modules.charging.driver import reject_unavailable_start
+
+        await reject_unavailable_start(
+            session, connector, card, reason="power_unavailable"
+        )
+        pending(session, charger, frame, "power_unavailable")
+        return {"transactionId": 0, "idTagInfo": {"status": "Blocked"}}
     if wallet_failure is not None:
         from src.modules.charging.driver import reject_remote_start
 
@@ -364,10 +457,12 @@ async def start_transaction(
         review(transaction, "negative_start_meter")
     if old is not None:
         review(transaction, "replaced_open_session")
-    if payload.reservationId is not None:
-        review(transaction, "reservation_not_verified")
     session.add(transaction)
     await session.flush()
+    if reservation is not None:
+        from src.modules.reservations.service import consume
+
+        await consume(session, reservation, transaction, datetime.now(UTC))
     await StationRepository(session).lock_charge_point_code_for_charging(
         charger.id, locked_at=datetime.now(UTC)
     )
@@ -377,14 +472,13 @@ async def start_transaction(
     return {"transactionId": transaction.id, "idTagInfo": {"status": result}}
 
 
-async def meter_values(
-    session: AsyncSession, charger: ChargePoint, frame: Frame, payload: MeterPayload
-) -> dict[str, object]:
+@lru_cache(maxsize=2)
+def meter_query(has_transaction_id: bool) -> Select[Any]:
     # Recovery needs every timestamp to validate buffered gaps; ordinary reports
     # need only the newest point per series. Fetch either in the same locked read.
     recovery_timestamp = (
         case((ChargingSession.recovery_at.is_not(None), MeterSample.timestamp))
-        if payload.transactionId is not None
+        if has_transaction_id
         else case((literal(False), MeterSample.timestamp))
     )
     latest_sample = (
@@ -416,15 +510,38 @@ async def meter_values(
         .join(Connector, Connector.id == ChargingSession.connector_id)
         .outerjoin(latest_sample, true())
         .where(
-            ChargingSession.charge_point_id == charger.id,
-            Connector.connector_number == payload.connectorId,
+            ChargingSession.charge_point_id == bindparam("meter_charger_id"),
+            Connector.connector_number == bindparam("meter_connector_number"),
         )
     )
-    if payload.transactionId is not None:
-        statement = statement.where(ChargingSession.id == payload.transactionId)
+    if has_transaction_id:
+        statement = statement.where(
+            ChargingSession.id == bindparam("meter_transaction_id")
+        )
     else:
         statement = statement.where(ChargingSession.ended_at.is_(None))
-    rows = (await session.execute(statement.with_for_update(of=ChargingSession))).all()
+    return statement.with_for_update(of=ChargingSession)
+
+
+async def meter_values(
+    session: AsyncSession,
+    charger: ChargePoint,
+    frame: Frame,
+    payload: MeterPayload,
+    *,
+    deferred_rows: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
+    parameters: dict[str, object] = {
+        "meter_charger_id": charger.id,
+        "meter_connector_number": payload.connectorId,
+    }
+    if payload.transactionId is not None:
+        parameters["meter_transaction_id"] = payload.transactionId
+    rows = (
+        await session.execute(
+            meter_query(payload.transactionId is not None), parameters
+        )
+    ).all()
     transaction = rows[0][0] if rows else None
     latest: dict[tuple[str, str, str], tuple[datetime, Decimal]] = {}
     history: dict[tuple[str, str, str], dict[datetime, Decimal]] = {}
@@ -449,6 +566,7 @@ async def meter_values(
             history=history,
             backfill=payload.transactionId is not None
             and transaction.recovery_at is not None,
+            deferred_rows=deferred_rows,
         )
     return {}
 
@@ -541,7 +659,11 @@ async def stop_transaction(
 
 
 async def charging_call(
-    session: AsyncSession, charger: ChargePoint, frame: Frame
+    session: AsyncSession,
+    charger: ChargePoint,
+    frame: Frame,
+    *,
+    deferred_meter_rows: list[dict[str, object]] | None = None,
 ) -> dict[str, object]:
     if any(value is None for value in frame.payload.values()):
         raise ValueError("Null OCPP property")
@@ -558,7 +680,11 @@ async def charging_call(
         )
     if frame.action == "MeterValues":
         return await meter_values(
-            session, charger, frame, MeterPayload.model_validate_json(raw)
+            session,
+            charger,
+            frame,
+            MeterPayload.model_validate_json(raw),
+            deferred_rows=deferred_meter_rows,
         )
     return await stop_transaction(
         session, charger, frame, StopPayload.model_validate_json(raw)
