@@ -140,8 +140,12 @@ Expanded lists use a viewport-aware height of 18vh, bounded between 100px and
 
 Opening alerts or history now reveals a non-modal floating panel anchored below the
 summary, aligned to its right edge. It overlays content without changing layout
-height. The panel is at most 640px wide and min(50vh, 440px) tall with internal
+height. The panel is at most 400px wide and min(50vh, 440px) tall with internal
 scrolling, and sits above the bottom edge with 12px side margins on mobile. It has an explicit close button,
 Escape dismissal with focus returned to the trigger, and outside-click dismissal.
 The charging workspace remains interactive; no backdrop or focus trap is used.
 This supersedes the previous expanded in-flow list and its height bounds.
+
+On desktop the owner popover fits within the right detail column (31%, minimum
+280px, capped at 400px); operator uses its existing 320px detail column. The
+equipment grid stays unobscured. Mobile retains the viewport-bounded overlay.
