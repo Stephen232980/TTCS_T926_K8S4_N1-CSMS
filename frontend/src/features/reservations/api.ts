@@ -6,9 +6,10 @@ export interface Reservation {
   charge_point_code: string; connector_number: number; status: ReservationStatus
   created_at: string; arrival_at: string; expires_at: string; updated_at: string
   can_cancel: boolean; no_show_exempt: boolean; outcome: string | null; session_id: number | null
+  no_show_fee_vnd?: string; fee_decision?: string; fee_reason?: string; fee_ledger_id?: number | null
 }
 export interface ReservationPage { items: Reservation[]; page: number; total_pages: number; total: number; generated_at: string }
-export interface BookingBody { request_id: string; connector_id: string; arrival_at: string | null }
+export interface BookingBody { request_id: string; connector_id: string; arrival_at: string | null; accepted_fee_vnd?: number; accepted_policy_version?: number }
 export const labels: Record<ReservationStatus, string> = {
   pending: 'Đang gửi yêu cầu đến trụ', active: 'Đã xác nhận giữ chỗ', uncertain: 'Chưa xác minh được giữ chỗ',
   cancel_pending: 'Đang chờ xác nhận hủy', expiry_release_pending: 'Đã quá hạn, đang xác minh giải phóng',
@@ -23,6 +24,7 @@ const messages: Record<string, string> = {
   station_or_charger_unavailable: 'Trạm hoặc trụ đang không khả dụng. Tải lại để kiểm tra.',
   reservation_arrival_out_of_range: 'Giờ đến phải từ bây giờ đến hai giờ tới.',
   reservation_request_conflict: 'Mã yêu cầu đã được dùng cho thao tác khác. Tải lại đặt chỗ của bạn.',
+  reservation_policy_changed: 'Phí không đến đã thay đổi. Kiểm tra và xác nhận mức phí mới trước khi đặt.',
   reservation_expired: 'Đặt chỗ đã quá hạn. Không thể hủy ngược thời gian.',
   reservation_consumed: 'Đặt chỗ đã được dùng để sạc nên không thể hủy.',
   reservation_not_cancellable: 'Đặt chỗ chưa thể hủy ở trạng thái hiện tại. Tải lại để kiểm tra.',

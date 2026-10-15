@@ -2,6 +2,7 @@ from datetime import datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -39,6 +40,21 @@ class ReservationCapability(Base):
     outcome: Mapped[str] = mapped_column(String(40), default="unverified")
 
 
+class ReservationPolicy(Base):
+    __tablename__ = "reservation_policies"
+    __table_args__ = (
+        CheckConstraint(
+            "fee_vnd >= 0 AND fee_vnd <= 1000000", name="ck_reservation_policy_fee"
+        ),
+        CheckConstraint("version > 0", name="ck_reservation_policy_version"),
+    )
+    station_id: Mapped[UUID] = mapped_column(
+        ForeignKey("stations.id", ondelete="RESTRICT"), primary_key=True
+    )
+    fee_vnd: Mapped[int] = mapped_column(BigInteger, default=0)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+
 class Reservation(Base):
     __tablename__ = "reservations"
     __table_args__ = (
@@ -47,6 +63,13 @@ class Reservation(Base):
             name="ck_reservation_status",
         ),
         CheckConstraint("ocpp_id > 0", name="ck_reservation_ocpp_id"),
+        CheckConstraint(
+            "fee_vnd >= 0 AND fee_vnd <= 1000000", name="ck_reservation_fee_amount"
+        ),
+        CheckConstraint(
+            "fee_decision IN ('pending','legacy_exempt','waived','charged','review')",
+            name="ck_reservation_fee_decision",
+        ),
         CheckConstraint(
             "expires_at > arrival_at AND arrival_at >= created_at",
             name="ck_reservation_times",
@@ -65,6 +88,7 @@ class Reservation(Base):
         ),
         Index("ix_reservation_driver_created", "driver_id", "created_at"),
         Index("ix_reservation_expiry", "status", "expires_at"),
+        Index("ix_reservation_fee_due", "fee_decision", "expires_at"),
     )
     id: Mapped[UUID] = mapped_column(primary_key=True)
     ocpp_id: Mapped[int] = mapped_column(
@@ -99,6 +123,20 @@ class Reservation(Base):
     session_id: Mapped[int | None] = mapped_column(
         ForeignKey("charging_sessions.id", ondelete="RESTRICT"), unique=True
     )
+    fee_vnd: Mapped[int] = mapped_column(BigInteger, default=0, server_default="0")
+    fee_policy_version: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0"
+    )
+    fee_decision: Mapped[str] = mapped_column(
+        String(24), default="pending", server_default="pending"
+    )
+    fee_reason: Mapped[str | None] = mapped_column(String(60))
+    fee_decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    fee_ledger_id: Mapped[int | None] = mapped_column(
+        ForeignKey("wallet_ledger.id", ondelete="RESTRICT"), unique=True
+    )
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expiry_fee_eligible: Mapped[bool | None] = mapped_column(Boolean)
 
 
 class ReservationCommand(Base):

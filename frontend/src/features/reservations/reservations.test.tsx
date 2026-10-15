@@ -23,30 +23,50 @@ it('checks capability without claiming a confirmed booking', async () => {
 })
 
 it.each(['network', 'server'] as const)('retries the identical persisted request after an ambiguous %s failure', async (failure) => {
-  const fetch = vi.fn()
-  if (failure === 'network') fetch.mockRejectedValueOnce(new TypeError('network'))
-  else fetch.mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({detail: 'internal_error'}) })
-  fetch.mockResolvedValue(response({ ...item, status: 'pending' }))
+  let posted = 0
+  const fetch = vi.fn().mockImplementation(async (_url: string, options?: RequestInit) => {
+    if (options?.method !== 'POST') return response({fee_vnd:0,version:0})
+    if (++posted === 1) {
+      if (failure === 'network') throw new TypeError('network')
+      return {ok:false,status:500,json:async()=>({detail:'internal_error'})}
+    }
+    return response({ ...item, status: 'pending' })
+  })
   vi.stubGlobal('fetch', fetch)
   const props = { connectorId: 'connector', capability: 'supported', available: true, ownerId: 'owner', onChanged: vi.fn() }
   const first = render(<ReservationForm {...props} />)
   await userEvent.click(screen.getByRole('button', { name: 'Chọn giờ đến và đặt chỗ' }))
   await userEvent.click(screen.getByRole('button', { name: 'Gửi yêu cầu đặt chỗ' }))
   expect(await screen.findByRole('alert')).toHaveTextContent('Kết quả gửi chưa rõ')
-  const original = fetch.mock.calls[0][1].body
+  const original = fetch.mock.calls.find(([, options]) => options?.method === 'POST')![1].body
   first.unmount()
   render(<ReservationForm {...props} available={false} />)
   expect(screen.getByLabelText('Giờ đến')).toBeDisabled()
   await userEvent.click(screen.getByRole('button', { name: 'Thử lại cùng yêu cầu đặt chỗ' }))
-  expect(fetch.mock.calls[1][1].body).toBe(original)
+  expect(fetch.mock.calls.filter(([, options]) => options?.method === 'POST')[1][1].body).toBe(original)
   expect(await screen.findByRole('status')).toHaveTextContent('Theo dõi xác nhận')
   expect(sessionStorage.getItem('csms:reservation:owner:connector')).toBeNull()
 })
 
 it('ignores a malformed persisted date instead of crashing the charging view', () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response({fee_vnd:0,version:0})))
   sessionStorage.setItem('csms:reservation:owner:connector', JSON.stringify({ request_id: 'key', connector_id: 'connector', arrival_at: 'invalid' }))
   render(<ReservationForm connectorId="connector" capability="supported" available ownerId="owner" onChanged={() => {}} />)
   expect(screen.getByRole('button', { name: 'Chọn giờ đến và đặt chỗ' })).toBeEnabled()
+})
+
+it('requires explicit acceptance of the quoted fee and sends its exact version', async () => {
+  const fetch = vi.fn().mockImplementation(async (_url: string, options?: RequestInit) => response(options?.method === 'POST' ? {...item,status:'pending'} : {fee_vnd:10000,version:3}))
+  vi.stubGlobal('fetch', fetch)
+  render(<ReservationForm connectorId="connector" capability="supported" available ownerId="owner" onChanged={() => {}} />)
+  await screen.findByText(/Phí không đến: 10.000đ/)
+  await userEvent.click(screen.getByRole('button', {name:'Chọn giờ đến và đặt chỗ'}))
+  expect(screen.getByRole('button', {name:'Gửi yêu cầu đặt chỗ'})).toBeDisabled()
+  await userEvent.click(screen.getByRole('checkbox'))
+  await userEvent.click(screen.getByRole('button', {name:'Gửi yêu cầu đặt chỗ'}))
+  const body = JSON.parse(fetch.mock.calls.find(([, options]) => options?.method === 'POST')![1].body)
+  expect(body.accepted_fee_vnd).toBe(10000)
+  expect(body.accepted_policy_version).toBe(3)
 })
 
 it('retains the cancellation key across timeout and presents cancel_pending as unconfirmed', async () => {

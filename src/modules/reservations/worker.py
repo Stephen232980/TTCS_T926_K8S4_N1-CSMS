@@ -274,6 +274,8 @@ async def deliver(delivery: Delivery) -> None:
                 reservation.status = "rejected"
             elif reservation.cancel_requested_at is None:
                 reservation.status = "active" if outcome == "Accepted" else "uncertain"
+            if outcome == "Accepted" and reservation.activated_at is None:
+                reservation.activated_at = now
             reservation.outcome, reservation.updated_at = outcome, now
             event(db, reservation, "reserve_outcome", now, outcome=outcome)
         elif outcome == "Accepted":
@@ -309,6 +311,9 @@ async def reconcile(reservation_id: UUID) -> None:
         if reservation.status not in HOLDS:
             return
         now = await database_time(db)
+        from src.modules.reservations.fees import observe_expiry
+
+        await observe_expiry(db, reservation, point, station, now)
         commands = list(
             await db.scalars(
                 select(ReservationCommand)
