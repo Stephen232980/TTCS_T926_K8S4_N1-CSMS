@@ -24,6 +24,7 @@ from src.modules.identity.dependencies import get_current_actor
 from src.modules.identity.models import Role, User, UserRole
 from src.modules.ocpp.connection_registry import OcppConnection, ocpp_connections
 from src.modules.ocpp.frames import Frame
+from src.modules.ocpp.monitoring import database_time
 from src.modules.reservations import worker
 from src.modules.reservations.models import (
     Reservation,
@@ -33,6 +34,7 @@ from src.modules.reservations.models import (
 from src.modules.reservations.service import cancel_reservation, create_reservation
 from src.modules.stations.models import ChargePoint, Connector, Station
 from src.modules.wallet.models import Wallet
+from tests import test_g4_station_operation_discovery as operation_tests
 from tests.test_charging_sessions import call
 from tests.test_flat_tariff_api import api_db, committed_tariff_db  # noqa: F401
 from tests.test_g4_station_operation_discovery import fleet as g4_fleet
@@ -206,6 +208,33 @@ async def reservation_fleet(fleet, monkeypatch):
     app.dependency_overrides.pop(get_current_actor, None)
 
 
+@pytest.fixture(params=[-600, 600], ids=["host-behind-10m", "host-ahead-10m"])
+def skewed_host_clock(monkeypatch, request):
+    class HostDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime.now(tz) + timedelta(seconds=request.param)
+
+    monkeypatch.setattr(operation_tests, "datetime", HostDateTime)
+
+
+@pytest.fixture
+def skewed_reservation_fleet(skewed_host_clock, reservation_fleet):
+    return reservation_fleet
+
+
+async def test_reservation_admission_uses_db_clock_when_host_is_skewed(
+    skewed_reservation_fleet,
+):
+    factory, _, _, _, _, _, conn, _ = skewed_reservation_fleet
+    result = await book(skewed_reservation_fleet)
+    reply(conn)
+    await worker.cycle()
+    async with factory() as db:
+        assert (await db.get(Reservation, result.id)).status == "active"
+    assert conn.call.await_count == 1
+
+
 async def request(method, path="", body=None):
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -345,9 +374,10 @@ async def test_cancel_before_deadline_ack_after_deadline_is_exempt_idempotent(
     # Simulate expiry while ACK is in flight, preserving arrival/created constraints.
     async with factory() as db, db.begin():
         stored = await db.get(Reservation, result.id)
-        stored.created_at = datetime.now(UTC) - timedelta(minutes=20)
-        stored.arrival_at = datetime.now(UTC) - timedelta(minutes=16)
-        stored.expires_at = datetime.now(UTC) - timedelta(minutes=1)
+        now = await database_time(db)
+        stored.created_at = now - timedelta(minutes=20)
+        stored.arrival_at = now - timedelta(minutes=16)
+        stored.expires_at = now - timedelta(minutes=1)
     await worker.cycle()
     async with factory() as db:
         stored = await db.get(Reservation, result.id)
@@ -381,7 +411,7 @@ async def test_cancel_timeout_rejected_never_manufactures_available(reservation_
                 ReservationCommand.action == "CancelReservation"
             )
         )
-        command.next_attempt_at = datetime.now(UTC) - timedelta(seconds=1)
+        command.next_attempt_at = await database_time(db) - timedelta(seconds=1)
     await worker.cycle()
     async with factory() as db:
         assert (await db.get(Reservation, result.id)).status == "cancel_pending"
@@ -395,9 +425,9 @@ async def test_restart_lease_expires_to_uncertain_without_new_reserve(
     claimed = await worker.claim(result.id)
     assert claimed is not None
     async with factory() as db, db.begin():
-        (await db.get(ReservationCommand, result.id)).locked_until = datetime.now(
-            UTC
-        ) - timedelta(seconds=1)
+        (await db.get(ReservationCommand, result.id)).locked_until = (
+            await database_time(db) - timedelta(seconds=1)
+        )
     await worker.reconcile(result.id)
     reply(conn)
     await worker.cycle()
@@ -487,7 +517,7 @@ async def test_capability_probe_uses_trusted_response_and_invalidates_on_reboot(
     async with factory() as db, db.begin():
         cap = await db.get(ReservationCapability, point.id)
         assert cap.supported and cap.checked_at is not None
-        (await db.get(ChargePoint, point.id)).last_boot_at = datetime.now(UTC)
+        (await db.get(ChargePoint, point.id)).last_boot_at = await database_time(db)
     with pytest.raises(HTTPException) as error:
         await book(reservation_fleet)
     assert error.value.detail == "reservation_capability_unverified"
@@ -519,7 +549,11 @@ def race_process(url, connector_id, driver_ids, barrier, queue):
         queue.put(results)
         await engine.dispose()
 
-    asyncio.run(run())
+    if sys.platform == "win32":
+        # Spawned processes do not inherit pytest's selector-loop fixture.
+        asyncio.run(run(), loop_factory=asyncio.SelectorEventLoop)
+    else:
+        asyncio.run(run())
 
 
 async def test_twenty_requests_two_processes_one_hold_outbox_and_wire(
@@ -589,7 +623,7 @@ async def test_migration_roundtrip_and_positive_sequence(reservation_fleet):
                 charge_point_id=point.id,
                 boot_at=point.last_boot_at,
                 supported=True,
-                checked_at=datetime.now(UTC),
+                checked_at=await database_time(db),
                 outcome="supported",
             )
         )
@@ -605,8 +639,8 @@ async def test_expiry_requires_fresh_source_available_and_rejects_late_cancel(
     result = await book(reservation_fleet)
     reply(conn)
     await worker.cycle()
-    now = datetime.now(UTC)
     async with factory() as db, db.begin():
+        now = await database_time(db)
         row = await db.get(Reservation, result.id)
         row.created_at = row.arrival_at = now - timedelta(minutes=20)
         row.expires_at = now - timedelta(seconds=40)
@@ -706,7 +740,7 @@ async def test_real_tcp_reserve_raw_status_consume_and_cancel(
             async with factory() as db, db.begin():
                 cap = await db.get(ReservationCapability, point.id)
                 cap.checked_at = None
-                cap.next_attempt_at = datetime.now(UTC)
+                cap.next_attempt_at = await database_time(db)
             cycle = asyncio.create_task(worker.cycle())
             probe = json.loads(await asyncio.wait_for(ws.recv(), 5))
             assert probe[2] == "GetConfiguration"
