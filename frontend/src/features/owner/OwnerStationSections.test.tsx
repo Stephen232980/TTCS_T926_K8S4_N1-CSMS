@@ -31,25 +31,30 @@ it('gives equipment and tariffs separate space while keeping the selected statio
   expect(screen.getByRole('heading', { name: 'Lịch sử biểu giá station-test' })).toBeInTheDocument()
   expect(screen.queryByRole('heading', { name: 'Khu sạc' })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Thêm trụ' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('region', { name: 'Hoạt động của trạm' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /Tạm ngừng trạm|Bật trạm/ })).not.toBeInTheDocument()
   await user.click(within(sections).getByRole('button', { name: 'Khu sạc' }))
   expect(screen.getByRole('heading', { name: 'Trạm thử' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Thêm trụ' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Tạm ngừng trạm' })).toBeInTheDocument()
   await user.click(screen.getByRole('link', { name: 'Biểu giá' }))
   expect(screen.getByRole('heading', { name: 'Lịch sử biểu giá station-test' })).toBeInTheDocument()
 })
 
-it('restores a station tariff link and follows browser history changes', async () => {
+it.each(['active', 'suspended'] as const)('hides station operation on a direct tariff link for %s stations and restores it in equipment', async status => {
   window.history.replaceState(null, '', '/#tariffs?station=station-test')
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ items: [], total_pages: 1 }))))
   render(<OwnerWorkspace
     currentUser={{ id: 'owner', email: 'owner@example.com', roles: ['station_owner'] }}
     onLogout={vi.fn()}
-    stationApi={new MockStationApi([{ id: 'station-test', name: 'Trạm thử', address: 'Địa chỉ', latitude: 10, longitude: 106, status: 'active', createdAt: '', updatedAt: '' }], 0)}
+    stationApi={new MockStationApi([{ id: 'station-test', name: 'Trạm thử', address: 'Địa chỉ', latitude: 10, longitude: 106, status, createdAt: '', updatedAt: '' }], 0)}
     chargePointApi={new MockChargePointApi([], 0)}
   />)
   expect(await screen.findByRole('heading', { name: 'Lịch sử biểu giá station-test' })).toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: /Tạm ngừng trạm|Bật trạm/ })).not.toBeInTheDocument()
   window.location.hash = '#stations?station=station-test'
   expect(await screen.findByRole('heading', { name: 'Khu sạc' })).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: status === 'active' ? 'Tạm ngừng trạm' : 'Bật trạm' })).toBeInTheDocument()
   expect(screen.getByRole('heading', { name: 'Trạm thử' })).toBeInTheDocument()
 })
 

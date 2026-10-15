@@ -643,10 +643,10 @@ export function OwnerWorkspace({
               <div className="owner-heading-actions">
                 {station ? (
                   <>
-                    <StationOperation key={station.id} station={station} onChanged={(nextStatus, version) => {
+                    {area === 'stations' && <StationOperation key={station.id} station={station} onChanged={(nextStatus, version) => {
                       setStation({ ...station, status: nextStatus, statusVersion: version })
                       setRevision(value => value + 1)
-                    }} onReload={() => setRevision(value => value + 1)} />
+                    }} onReload={() => setRevision(value => value + 1)} />}
                     <button
                       className="secondary-button"
                       onClick={() => setForm('edit-station')}
