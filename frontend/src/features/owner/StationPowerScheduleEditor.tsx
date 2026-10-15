@@ -9,7 +9,6 @@ import {
   fetchPowerSchedule,
   savePowerSchedule,
   type CurrentPowerLimitResponse,
-  type PowerScheduleResponse,
 } from './powerScheduleApi'
 
 export function StationPowerScheduleEditor({
@@ -32,12 +31,13 @@ export function StationPowerScheduleEditor({
 
   useEffect(() => {
     let active = true
-    setLoading(true)
-    Promise.all([
-      fetchPowerSchedule(stationId, effectiveFrom),
-      fetchCurrentPowerLimit(stationId),
-    ])
-      .then(([schedule, current]) => {
+    const loadSchedule = async () => {
+      setLoading(true)
+      try {
+        const [schedule, current] = await Promise.all([
+          fetchPowerSchedule(stationId, effectiveFrom),
+          fetchCurrentPowerLimit(stationId),
+        ])
         if (!active) return
         setCurrentLimit(current)
         if (schedule && schedule.bands.length > 0) {
@@ -49,13 +49,13 @@ export function StationPowerScheduleEditor({
             })),
           )
         }
-      })
-      .catch((err) => {
+      } catch (err: unknown) {
         if (active) console.error('Error loading power schedule:', err)
-      })
-      .finally(() => {
+      } finally {
         if (active) setLoading(false)
-      })
+      }
+    }
+    void loadSchedule()
 
     return () => {
       active = false
@@ -82,8 +82,9 @@ export function StationPowerScheduleEditor({
       setMessage({ text: 'Lưu lịch công suất thành công!', type: 'success' })
       const updatedLimit = await fetchCurrentPowerLimit(stationId)
       setCurrentLimit(updatedLimit)
-    } catch (err: any) {
-      setMessage({ text: err.message || 'Lỗi lưu lịch công suất', type: 'error' })
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'Lỗi lưu lịch công suất'
+      setMessage({ text: errorMsg, type: 'error' })
     } finally {
       setSaving(false)
     }

@@ -400,4 +400,3 @@ class StationPowerScheduleBand(Base):
         "StationPowerSchedule",
         back_populates="bands",
     )
-

@@ -77,9 +77,7 @@ def phan_bo_cong_suat(
 
     while active and sum(s.min_w for s in active) > limit_w:
         # Pick the newest session from active to preempt
-        candidate_to_drop = max(
-            active, key=lambda s: (s.started_at, s.session_id)
-        )
+        candidate_to_drop = max(active, key=lambda s: (s.started_at, s.session_id))
         active.remove(candidate_to_drop)
         preempted.append(candidate_to_drop.session_id)
 

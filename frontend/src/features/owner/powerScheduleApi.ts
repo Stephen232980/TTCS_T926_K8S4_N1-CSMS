@@ -71,12 +71,14 @@ export async function savePowerSchedule(
   })
 
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}))
+    const errorData = (await res.json().catch(() => ({}))) as {
+      detail?: string | Array<{ message?: string }>
+    }
     throw new Error(
       errorData.detail
-        ? (Array.isArray(errorData.detail)
-            ? errorData.detail.map((d: any) => d.message).join('; ')
-            : errorData.detail)
+        ? Array.isArray(errorData.detail)
+          ? errorData.detail.map((d) => d.message ?? 'Unknown error').join('; ')
+          : errorData.detail
         : 'Lưu lịch công suất thất bại',
     )
   }
