@@ -1,5 +1,10 @@
 # S-46 / S-63 — Cảnh báo vận hành và sức khỏe hệ thống
 
+Nền SMTP dùng chung và cách S-59 tích hợp được mô tả tại
+[SHARED_SMTP.md](SHARED_SMTP.md). Có thể dùng profile `SMTP_*` mới độc lập
+với công tắc/người nhận cảnh báo vận hành; profile `ALERT_SMTP_*` cũ vẫn được
+hỗ trợ khi `SMTP_ENABLED` rỗng hoặc chưa khai báo.
+
 G3 bổ sung cảnh báo trụ vào monitoring operator, danh sách trạm owner và trang sức khỏe admin. S-63 tiếp tục dùng metrics, biểu đồ 24 giờ và chu kỳ 30 giây của dashboard hiện có; danh sách cảnh báo cập nhật mỗi 10 giây khi trang đang hiển thị.
 
 ## Ngưỡng mặc định
