@@ -199,8 +199,8 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
       </div>
       {area !== 'wallet' && (
         <>
-          <DriverReservations key={reservationFocus ?? 'list'} ownerId={currentUser.id} focusedId={reservationFocus} />
           <div className="driver-return" hidden={!showStart || area !== 'stations'}><button className="navigation-link secondary-button" onClick={() => setShowStart(false)}><Icon name="chevronLeft" />Quay lại bản đồ và danh sách</button></div>
+          <DriverReservations key={reservationFocus ?? 'list'} ownerId={currentUser.id} focusedId={reservationFocus} />
           <DriverCharging ownerId={currentUser.id} stationId={station?.id} stationName={station?.name} showSession={area === 'session'} showConnectors={area === 'stations' && showStart} onFindStations={showStations} onSessionStarted={sessionStarted} />
           {mapOpened && <div className="driver-map-container" hidden={area !== 'stations' || showStart}><DriverMapPage selectedStationId={station?.id} onOpenStation={selected => { setStation(selected); setShowStart(true) }} /></div>}
         </>
