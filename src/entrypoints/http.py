@@ -6,9 +6,6 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.entrypoints.lifecycle import application_lifespan
-from src.modules.alerts.router import admin_router as admin_alert_router
-from src.modules.alerts.router import ops_router as ops_alert_router
-from src.modules.alerts.router import owner_router as owner_alert_router
 from src.modules.billing.accounting_router import router as accounting_finance_router
 from src.modules.billing.driver_router import router as driver_invoice_router
 from src.modules.charging.driver_router import router as driver_charging_router
@@ -27,18 +24,10 @@ from src.modules.payments.fake_router import router as fake_payment_router
 from src.modules.payments.reconciliation_router import router as reconciliation_router
 from src.modules.payments.vnpay_router import router as vnpay_router
 from src.modules.payments.webhook_router import router as payment_webhook_router
-from src.modules.power.router import router as power_router
 from src.modules.pricing.router import router as tariff_router
-from src.modules.reporting.router import router as reporting_router
-from src.modules.reservations.policy import router as reservation_policy_router
-from src.modules.reservations.router import router as reservation_router
 from src.modules.stations.charge_points_router import router as charge_points_router
 from src.modules.stations.discovery_router import router as discovery_router
-from src.modules.stations.operation_router import router as operation_router
 from src.modules.stations.photo_router import router as station_photo_router
-from src.modules.stations.power_schedule_router import (
-    router as power_schedule_router,
-)
 from src.modules.stations.router import router as stations_router
 from src.modules.wallet.admin_router import router as admin_wallet_router
 from src.modules.wallet.administration_router import (
@@ -60,16 +49,10 @@ for documentation_route in app.routes:
     )
 app.include_router(identity_router)
 app.include_router(accounting_finance_router)
-app.include_router(reporting_router)
 app.include_router(admin_accounts_router)
 app.include_router(admin_audit_router)
 app.include_router(stations_router)
-app.include_router(operation_router)
-app.include_router(reservation_router)
-app.include_router(reservation_policy_router)
 app.include_router(tariff_router)
-app.include_router(power_schedule_router)
-app.include_router(power_router)
 app.include_router(station_photo_router)
 app.include_router(charge_points_router)
 # S-06: serve the OCPP WebSocket endpoint from the existing ASGI application.
@@ -85,9 +68,6 @@ app.include_router(admin_wallet_router)
 app.include_router(wallet_administration_router)
 app.include_router(control_router)
 app.include_router(health_router)
-app.include_router(admin_alert_router)
-app.include_router(ops_alert_router)
-app.include_router(owner_alert_router)
 app.include_router(payment_webhook_router)
 app.include_router(vnpay_router)
 app.include_router(reconciliation_router)

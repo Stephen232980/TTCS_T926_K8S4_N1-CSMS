@@ -9,7 +9,6 @@ export interface Station {
   latitude: number
   longitude: number
   status: StationStatus
-  statusVersion?: number
   createdAt: string
   updatedAt: string
 }

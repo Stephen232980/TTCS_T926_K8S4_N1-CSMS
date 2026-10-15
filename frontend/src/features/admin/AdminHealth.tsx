@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { AlertsPanel } from '../alerts/AlertsPanel'
 import {
   adminRequest,
   dateTime,
@@ -157,7 +156,7 @@ export function AdminHealth() {
       <header className="admin-heading">
         <div>
           <h1>Sức khỏe hệ thống</h1>
-          <p>24 giờ gần nhất</p>
+          <p>Theo dõi vận hành và dữ liệu OCPP trong 24 giờ gần nhất.</p>
         </div>
         <div className="admin-actions">
           <button
@@ -178,7 +177,6 @@ export function AdminHealth() {
           </button>
         </div>
       </header>
-      <AlertsPanel area="admin" />
       <ErrorNotice error={error} onRetry={() => setVersion((v) => v + 1)} />
       <div className="admin-health-toolbar">
         <span

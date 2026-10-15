@@ -23,9 +23,7 @@ from src.modules.wallet.models import Wallet, WalletAudit, WalletLedger
 from src.modules.wallet.provisioning import ensure_driver_wallet
 from src.platform.audit.service import ghi_nhat_ky
 
-EntryType = Literal[
-    "gateway_topup", "manual_topup", "charging_debit", "adjustment", "reservation_fee"
-]
+EntryType = Literal["gateway_topup", "manual_topup", "charging_debit", "adjustment"]
 MIN_VND = -(2**63)
 MAX_VND = 2**63 - 1
 
@@ -89,14 +87,13 @@ async def ghi_so_cai(
         "gateway_topup",
         "manual_topup",
         "charging_debit",
-        "reservation_fee",
         "adjustment",
     }:
         raise ValueError("Unknown ledger type")
     if (
         amount_vnd == 0
         or (entry_type in {"gateway_topup", "manual_topup"} and amount_vnd < 0)
-        or (entry_type in {"charging_debit", "reservation_fee"} and amount_vnd > 0)
+        or (entry_type == "charging_debit" and amount_vnd > 0)
     ):
         raise WalletAmountError(
             "Amount sign does not match ledger type; zero invoices must skip the ledger"

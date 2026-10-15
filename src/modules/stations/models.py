@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
-    BigInteger,
     CheckConstraint,
-    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -76,9 +74,6 @@ class Station(Base):
         default=DEFAULT_STATION_TIMEZONE,
         server_default=DEFAULT_STATION_TIMEZONE,
         nullable=False,
-    )
-    status_version: Mapped[int] = mapped_column(
-        Integer, default=1, server_default="1", nullable=False
     )
     archived_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
@@ -333,70 +328,4 @@ class ConnectorError(Base):
     connector: Mapped[Connector] = relationship(
         "Connector",
         back_populates="errors",
-    )
-
-
-class StationPowerSchedule(Base):
-    __tablename__ = "station_power_schedules"
-    __table_args__ = (
-        UniqueConstraint(
-            "station_id",
-            "effective_from",
-            name="uq_station_power_schedules_station_effective_from",
-        ),
-        Index("ix_station_power_schedules_station_id", "station_id"),
-    )
-
-    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    station_id: Mapped[UUID] = mapped_column(
-        ForeignKey("stations.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
-    effective_from: Mapped[date] = mapped_column(Date, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        nullable=False,
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-        nullable=False,
-    )
-
-    bands: Mapped[list[StationPowerScheduleBand]] = relationship(
-        "StationPowerScheduleBand",
-        back_populates="schedule",
-        cascade="all, delete-orphan",
-        order_by="StationPowerScheduleBand.start_min",
-    )
-
-
-class StationPowerScheduleBand(Base):
-    __tablename__ = "station_power_schedule_bands"
-    __table_args__ = (
-        CheckConstraint(
-            "start_min >= 0 AND start_min < end_min AND end_min <= 1440",
-            name="ck_station_power_schedule_bands_minute_range",
-        ),
-        CheckConstraint(
-            "power_limit_w > 0",
-            name="ck_station_power_schedule_bands_power_positive",
-        ),
-        Index("ix_station_power_schedule_bands_schedule_id", "schedule_id"),
-    )
-
-    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    schedule_id: Mapped[UUID] = mapped_column(
-        ForeignKey("station_power_schedules.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    start_min: Mapped[int] = mapped_column(Integer, nullable=False)
-    end_min: Mapped[int] = mapped_column(Integer, nullable=False)
-    power_limit_w: Mapped[int] = mapped_column(BigInteger, nullable=False)
-
-    schedule: Mapped[StationPowerSchedule] = relationship(
-        "StationPowerSchedule",
-        back_populates="bands",
     )

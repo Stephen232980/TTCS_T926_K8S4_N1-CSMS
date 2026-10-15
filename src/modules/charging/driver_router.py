@@ -262,71 +262,10 @@ async def start(
 
 @router.get("/stations/{station_id}/connectors")
 @user_policy("driver.connectors", "own", "driver")
-async def connectors(
-    station_id: UUID, actor: CurrentActorDependency, session: Database
-) -> dict[str, object]:
+async def connectors(station_id: UUID, session: Database) -> dict[str, object]:
     station = await session.get(Station, station_id)
     if station is None or station.status != "active" or station.archived_at is not None:
         raise HTTPException(404, "Trạm hiện không khả dụng.")
-    from src.modules.ocpp.monitoring import database_time
-    from src.modules.reservations.models import (
-        HOLDS,
-        Reservation,
-        ReservationCapability,
-    )
-    from src.modules.reservations.service import admissible, capability_status
-    from src.modules.stations.discovery import summaries
-
-    now = await database_time(session)
-    projection = (await summaries(session, [station], now))[station.id]
-    details = projection["connectors"]
-    assert isinstance(details, list)
-    availability = {item["id"]: item["available"] for item in details}
-    capabilities = {
-        row.charge_point_id: row
-        for row in await session.scalars(
-            select(ReservationCapability)
-            .join(ChargePoint)
-            .where(ChargePoint.station_id == station_id)
-        )
-    }
-    holds = {
-        row.connector_id: row
-        for row in await session.scalars(
-            select(Reservation).where(
-                Reservation.station_id == station_id, Reservation.status.in_(HOLDS)
-            )
-        )
-    }
-    from sqlalchemy import or_
-
-    from src.modules.reservations.service import live
-
-    occupied_ids = set(
-        await session.scalars(
-            select(ChargingSession.connector_id)
-            .join(ChargePoint)
-            .where(
-                ChargePoint.station_id == station_id,
-                or_(
-                    ChargingSession.ended_at.is_(None),
-                    (ChargingSession.billing_lifecycle_version == 1)
-                    & ChargingSession.connector_released_at.is_(None),
-                ),
-            )
-        )
-    )
-    pending_ids = set(
-        await session.scalars(
-            select(DriverStartRequest.connector_id)
-            .join(ChargePoint)
-            .where(
-                ChargePoint.station_id == station_id,
-                DriverStartRequest.status.in_(("Pending", "Accepted")),
-                DriverStartRequest.lease_until > now,
-            )
-        )
-    )
     rows = await session.execute(
         select(Connector, ChargePoint)
         .join(ChargePoint, Connector.charge_point_id == ChargePoint.id)
@@ -345,32 +284,6 @@ async def connectors(
                 "connector_number": row[0].connector_number,
                 "status": row[0].status,
                 "status_group": connector_status_group(row[0].status),
-                "available": availability.get(row[0].id, False),
-                "can_start": bool(
-                    live(row[1], now)
-                    and row[0].id not in occupied_ids
-                    and row[0].id not in pending_ids
-                    and row[1].raw_ocpp_status != "Faulted"
-                    and row[1].error_code in {None, "NoError"}
-                    and (
-                        availability.get(row[0].id, False)
-                        or (row[0].status == "Preparing" and row[0].id not in holds)
-                        or (
-                            row[0].status in {"Reserved", "Available", "Preparing"}
-                            and row[0].id in holds
-                            and holds[row[0].id].status == "active"
-                            and admissible(holds[row[0].id], actor.user_id, now)
-                        )
-                    )
-                ),
-                "reservation_capability": capability_status(
-                    capabilities.get(row[1].id), row[1]
-                ),
-                "own_reservation": bool(
-                    row[0].id in holds
-                    and holds[row[0].id].status == "active"
-                    and admissible(holds[row[0].id], actor.user_id, now)
-                ),
             }
             for row in rows
         ]

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { AlertsPanel } from '../alerts/AlertsPanel'
 import type { AuthenticatedUser } from '../auth/model/auth'
 import type { StationApi } from '../stations/api/stationApi'
 import { HttpStationApi } from '../stations/api/httpStationApi'
@@ -20,10 +19,6 @@ import { StationWizard } from './StationWizard'
 import { ChargerWizard } from './ChargerWizard'
 import { OwnerCharging } from './OwnerCharging'
 import { TariffHistoryPanel } from './TariffHistoryPanel'
-import { StationPowerPage } from './StationPowerPage'
-import { OwnerRevenueReport } from './OwnerRevenueReport'
-import { StationOperation } from './StationOperation'
-import { ReservationPolicy } from './ReservationPolicy'
 import { ChargerDrawing, ConnectionSymbol, ConnectorSymbol, StationPhoto } from './OwnerVisuals'
 import {
   clock,
@@ -379,7 +374,7 @@ export function OwnerWorkspace({
     const timeout = window.setTimeout(() => {
       void stationApi
         .listStations(
-          { page, pageSize: 20, search, ...(area === 'stations' && status ? { status } : {}) },
+          { page, pageSize: 20, search, ...(status ? { status } : {}) },
           controller.signal,
         )
         .then((value) => {
@@ -404,9 +399,9 @@ export function OwnerWorkspace({
       controller.abort()
       window.clearTimeout(timeout)
     }
-  }, [stationApi, page, search, status, revision, area])
+  }, [stationApi, page, search, status, revision])
   useEffect(() => {
-    if (!stationId || area !== 'stations') return
+    if (!stationId) return
     const controller = new AbortController()
     let running = false
     async function load() {
@@ -475,7 +470,7 @@ export function OwnerWorkspace({
       window.clearTimeout(searchTimer)
       window.clearInterval(timer)
     }
-  }, [stationId, stationApi, chargePointApi, chargerPage, chargerSearch, revision, form, area])
+  }, [stationId, stationApi, chargePointApi, chargerPage, chargerSearch, revision, form])
   function open(record: Station) {
     window.location.assign(ownerHash(area, record.id))
     setStation(record)
@@ -564,21 +559,6 @@ export function OwnerWorkspace({
         </header>
         {area === 'charging' ? (
           <OwnerCharging initialSessionId={sessionToOpen} onInitialSessionOpened={initialSessionOpened} />
-        ) : area === 'power' ? (
-          <StationPowerPage />
-        ) : area === 'revenue' ? (
-          <section className="owner-page">
-            <header className="owner-heading">
-              <div>
-                <h1>Báo cáo doanh thu & sản lượng</h1>
-                <p>Theo dõi doanh thu hóa đơn, đối soát tiền ví và sản lượng kWh theo từng trụ.</p>
-              </div>
-            </header>
-            <OwnerRevenueReport
-              stations={stations?.items ?? []}
-              selectedStationId={station?.id}
-            />
-          </section>
         ) : area !== 'stations' && area !== 'tariffs' ? (
           <section className="owner-page">
             <header className="owner-heading">
@@ -588,9 +568,17 @@ export function OwnerWorkspace({
               </div>
             </header>
             <div className="owner-panel owner-placeholder owner-grow">
-              <Icon name="report" />
-              <h2>Chưa có báo cáo</h2>
-              <p>Chức năng này sẽ khả dụng khi nghiệp vụ tương ứng được triển khai.</p>
+              <Icon name={area === 'power' ? 'bolt' : 'report'} />
+              <h2>
+                {area === 'power'
+                  ? 'Chưa có chức năng cấu hình công suất'
+                  : 'Chưa có báo cáo doanh thu'}
+              </h2>
+              <p>
+                {area === 'power'
+                  ? 'Thông số công suất danh định và số đo hiện có xem trong chi tiết đầu nối.'
+                  : 'Chức năng này sẽ khả dụng khi nghiệp vụ tương ứng được triển khai.'}
+              </p>
               <button
                 className="secondary-button"
                 onClick={() => setArea('stations')}
@@ -633,7 +621,7 @@ export function OwnerWorkspace({
               <div>
                 {station && (
                   <button
-                    className="navigation-link text-button"
+                    className="text-button"
                     onClick={() => {
                       window.location.hash = ownerHash(area)
                       setStation(null)
@@ -644,25 +632,22 @@ export function OwnerWorkspace({
                     Quay lại danh sách trạm
                   </button>
                 )}
-                <h1>{area === 'tariffs' ? 'Biểu giá' : station?.name ?? 'Trạm của tôi'}</h1>
+                <h1>{station?.name ?? (area === 'tariffs' ? 'Biểu giá' : 'Trạm của tôi')}</h1>
                 <p>
-                  {area === 'tariffs' ? station?.name ?? 'Chọn trạm' : station?.address ?? ''}
+                  {station?.address ??
+                    (area === 'tariffs' ? 'Chọn trạm để xem lịch sử và khai báo biểu giá.' : 'Nhận diện và quản lý từng trạm của bạn.')}
                 </p>
               </div>
               <div className="owner-heading-actions">
                 {station ? (
                   <>
-                    {area === 'stations' && <StationOperation key={station.id} station={station} onChanged={(nextStatus, version) => {
-                      setStation({ ...station, status: nextStatus, statusVersion: version })
-                      setRevision(value => value + 1)
-                    }} onReload={() => setRevision(value => value + 1)} />}
-                    {area === 'stations' && <button
+                    <button
                       className="secondary-button"
                       onClick={() => setForm('edit-station')}
                     >
                       <Icon name="edit" />
                       Thông tin trạm
-                    </button>}
+                    </button>
                     {area === 'stations' && <button
                       className="primary-button"
                       onClick={() => {
@@ -674,7 +659,7 @@ export function OwnerWorkspace({
                       Thêm trụ
                     </button>}
                   </>
-                ) : area === 'stations' ? (
+                ) : (
                   <button
                     className="primary-button"
                     onClick={() => setForm('create-station')}
@@ -682,10 +667,9 @@ export function OwnerWorkspace({
                     <Icon name="plus" />
                     Tạo trạm
                   </button>
-                ) : null}
+                )}
               </div>
             </header>
-            {area === 'stations' && <AlertsPanel area="owner" />}
             {notice && (
               <div role="status" className="owner-notice">
                 {notice}
@@ -723,7 +707,7 @@ export function OwnerWorkspace({
                       }}
                     />
                   </label>
-                  {area === 'stations' && <label>
+                  <label>
                     Trạng thái{' '}
                     <select
                       value={status}
@@ -742,7 +726,7 @@ export function OwnerWorkspace({
                         </option>
                       ))}
                     </select>
-                  </label>}
+                  </label>
                   <button
                     className="secondary-button"
                     onClick={() => setRevision((value) => value + 1)}
@@ -779,19 +763,19 @@ export function OwnerWorkspace({
                               name={record.name}
                             />
                             <div>
-                              {area === 'stations' && <span
+                              <span
                                 className={`owner-station-status status-${record.status}`}
                               >
                                 {statusLabel[record.status]}
-                              </span>}
+                              </span>
                               <h2>{record.name}</h2>
                               <p>{record.address}</p>
                               <button
                                 className="secondary-button"
-                                aria-label={`${area === 'tariffs' ? 'Xem biểu giá' : 'Xem chi tiết'} ${record.name}`}
+                                aria-label={`Xem chi tiết ${record.name}`}
                                 onClick={() => open(record)}
                               >
-                                {area === 'tariffs' ? 'Xem biểu giá' : 'Xem trạm'}
+                                Xem trạm
                                 <Icon name="chevronRight" />
                               </button>
                             </div>
@@ -841,7 +825,11 @@ export function OwnerWorkspace({
               </>
             ) : (
               <>
-                {area === 'stations' && <div className="owner-toolbar owner-statusbar">
+                <nav className="owner-station-sections" aria-label="Nội dung trạm">
+                  <button type="button" aria-pressed={area === 'stations'} onClick={() => setArea('stations')}>Khu sạc</button>
+                  <button type="button" aria-pressed={area === 'tariffs'} onClick={() => setArea('tariffs')}>Biểu giá</button>
+                </nav>
+                <div className="owner-toolbar owner-statusbar">
                   <strong
                     className={`owner-station-status status-${station.status}`}
                   >
@@ -858,7 +846,7 @@ export function OwnerWorkspace({
                       ),
                     )}
                   </div>}
-                </div>}
+                </div>
                 {area === 'stations' && connectionError && (
                   <p className="owner-subtle" role="status">
                     {connectionError}
@@ -866,7 +854,6 @@ export function OwnerWorkspace({
                 )}
                 {area === 'tariffs' ? <div className="owner-tariff-scroll owner-grow" role="region" aria-label="Biểu giá của trạm" tabIndex={0}>
                   <TariffHistoryPanel key={station.id} stationId={String(station.id)} />
-                  <details className="owner-reservation-policy"><summary>Chính sách phí không đến</summary><ReservationPolicy key={station.id} stationId={String(station.id)} /></details>
                 </div> : <div className="owner-detail-grid owner-grow">
                   <section className="owner-chargers">
                     <header>
@@ -1043,7 +1030,7 @@ export function OwnerWorkspace({
                       <div className="owner-placeholder">
                         <Icon name="charger" />
                         <h2>Chọn một đầu nối</h2>
-
+                        <p>Xem số đo phiên sạc và thông số thiết bị tại đây.</p>
                       </div>
                     )}
                   </aside>

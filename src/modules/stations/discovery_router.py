@@ -1,7 +1,5 @@
 """Driver-facing station locations; excludes management and owner data."""
 
-from datetime import datetime
-from decimal import Decimal
 from typing import Annotated
 from uuid import UUID
 
@@ -13,8 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.identity.authorization import user_policy
 from src.modules.identity.dependencies import authorize_request
 from src.modules.identity.policy_routing import PolicyRoute
-from src.modules.ocpp.monitoring import database_time
-from src.modules.stations.discovery import summaries
 from src.modules.stations.models import Station
 from src.platform.database.session import get_db_session
 
@@ -40,21 +36,6 @@ class DiscoveryStation(BaseModel):
     address: str
     latitude: float
     longitude: float
-    available_connectors: int = 0
-    total_connectors: int = 0
-    connectors: list["DiscoveryConnector"] = Field(default_factory=list)
-    energy_rate_vnd_per_kwh: int | None = None
-    idle_rate_vnd_per_minute: int | None = None
-    grace_minutes: int | None = None
-
-
-class DiscoveryConnector(BaseModel):
-    id: UUID
-    connector_type: str | None
-    current_type: str | None
-    max_power_kw: Decimal | None
-    available: bool
-    reservation_supported: bool = False
 
 
 class DiscoveryResponse(BaseModel):
@@ -62,9 +43,6 @@ class DiscoveryResponse(BaseModel):
     page: int
     total: int
     total_pages: int
-    generated_at: datetime
-    refresh_after_seconds: int = 15
-    search_too_broad: bool = False
 
 
 @router.get("", response_model=DiscoveryResponse)
@@ -89,40 +67,14 @@ async def discover_stations(
         await session.scalar(select(func.count()).select_from(statement.subquery()))
         or 0
     )
-    now = await database_time(session)
-    if total > 500:
-        return DiscoveryResponse(
-            items=[],
-            page=query.page,
-            total=total,
-            total_pages=(total + query.page_size - 1) // query.page_size,
-            generated_at=now,
-            search_too_broad=True,
-        )
-    stations = list(
-        await session.scalars(
-            statement.order_by(Station.name, Station.id)
-            .offset((query.page - 1) * query.page_size)
-            .limit(query.page_size)
-        )
+    stations = await session.scalars(
+        statement.order_by(Station.name, Station.id)
+        .offset((query.page - 1) * query.page_size)
+        .limit(query.page_size)
     )
-    projection = await summaries(session, stations, now)
     return DiscoveryResponse(
-        items=[
-            DiscoveryStation.model_validate(
-                {
-                    "id": s.id,
-                    "name": s.name,
-                    "address": s.address,
-                    "latitude": s.latitude,
-                    "longitude": s.longitude,
-                    **projection[s.id],
-                }
-            )
-            for s in stations
-        ],
+        items=[DiscoveryStation.model_validate(s) for s in stations],
         page=query.page,
         total=total,
         total_pages=(total + query.page_size - 1) // query.page_size,
-        generated_at=now,
     )

@@ -37,7 +37,7 @@ function Filters({ area, params, stations }: {area:FinanceArea; params:URLSearch
 function Detail({ item, back, onBack }: {item:FinancialDetail; back:string; onBack:()=>void}) {
   const reasons = item.review_reasons.map(reason=>reviewLabels[reason] ?? (reason==='settlement_ledger_mismatch' ? 'Hóa đơn và sổ cái chưa khớp' : 'Dữ liệu cần kiểm tra'))
   return <>
-    <div className="finance-detail-heading"><a className="finance-button navigation-link" href={back} onClick={event=>{if(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;event.preventDefault();onBack()}}>← Quay lại danh sách</a><Status item={item}/></div>
+    <div className="finance-detail-heading"><a className="finance-button" href={back} onClick={event=>{if(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;event.preventDefault();onBack()}}>← Quay lại danh sách</a><Status item={item}/></div>
     <section className="finance-panel finance-session-detail">
       <div className="finance-section-heading"><div><h2>Phiên #{item.session_id}</h2><p>{item.station_name} · {item.charge_point_code} · Đầu nối {item.connector_number}</p></div><strong>{money(item.invoice_total_vnd)}</strong></div>
       <p className={`finance-explanation${item.status==='needs_review' ? ' is-warning' : ''}`}>{financeHints[item.status]}</p>

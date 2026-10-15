@@ -110,7 +110,6 @@ class StationResponse(BaseModel):
     longitude: float
     status: str
     timezone: str
-    status_version: int
     created_at: datetime
     updated_at: datetime
 

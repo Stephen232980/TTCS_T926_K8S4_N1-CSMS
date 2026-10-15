@@ -283,7 +283,7 @@ export function ChargerWizard({
         <div>
           {step > 0 && (
             <button
-              className="navigation-link secondary-button"
+              className="secondary-button"
               disabled={saving}
               onClick={() => setStep(step - 1)}
             >
