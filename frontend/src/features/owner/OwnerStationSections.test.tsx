@@ -1,4 +1,4 @@
-import { render, screen, within, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, expect, it, vi } from 'vitest'
 import { OwnerWorkspace } from './OwnerWorkspace'
@@ -24,16 +24,18 @@ it('gives equipment and tariffs separate space while keeping the selected statio
     chargePointApi={new MockChargePointApi([], 0)}
   />)
   await user.click(await screen.findByRole('button', { name: 'Xem chi tiết Trạm thử' }))
-  const sections = screen.getByRole('navigation', { name: 'Nội dung trạm' })
+  expect(screen.queryByRole('navigation', { name: 'Nội dung trạm' })).not.toBeInTheDocument()
   expect(screen.getByRole('heading', { name: 'Khu sạc' })).toBeInTheDocument()
   expect(screen.queryByRole('region', { name: 'Biểu giá của trạm' })).not.toBeInTheDocument()
-  await user.click(within(sections).getByRole('button', { name: 'Biểu giá' }))
+  await user.click(screen.getByRole('link', { name: 'Biểu giá' }))
   expect(screen.getByRole('heading', { name: 'Lịch sử biểu giá station-test' })).toBeInTheDocument()
+  expect(screen.queryByText('Đang hoạt động')).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Khu sạc' })).not.toBeInTheDocument()
   expect(screen.queryByRole('heading', { name: 'Khu sạc' })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Thêm trụ' })).not.toBeInTheDocument()
   expect(screen.queryByRole('region', { name: 'Hoạt động của trạm' })).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: /Tạm ngừng trạm|Bật trạm/ })).not.toBeInTheDocument()
-  await user.click(within(sections).getByRole('button', { name: 'Khu sạc' }))
+  await user.click(screen.getByRole('link', { name: 'Trạm của tôi' }))
   expect(screen.getByRole('heading', { name: 'Trạm thử' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Thêm trụ' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Tạm ngừng trạm' })).toBeInTheDocument()

@@ -378,7 +378,7 @@ export function OwnerWorkspace({
     const timeout = window.setTimeout(() => {
       void stationApi
         .listStations(
-          { page, pageSize: 20, search, ...(status ? { status } : {}) },
+          { page, pageSize: 20, search, ...(area === 'stations' && status ? { status } : {}) },
           controller.signal,
         )
         .then((value) => {
@@ -403,9 +403,9 @@ export function OwnerWorkspace({
       controller.abort()
       window.clearTimeout(timeout)
     }
-  }, [stationApi, page, search, status, revision])
+  }, [stationApi, page, search, status, revision, area])
   useEffect(() => {
-    if (!stationId) return
+    if (!stationId || area !== 'stations') return
     const controller = new AbortController()
     let running = false
     async function load() {
@@ -474,7 +474,7 @@ export function OwnerWorkspace({
       window.clearTimeout(searchTimer)
       window.clearInterval(timer)
     }
-  }, [stationId, stationApi, chargePointApi, chargerPage, chargerSearch, revision, form])
+  }, [stationId, stationApi, chargePointApi, chargerPage, chargerSearch, revision, form, area])
   function open(record: Station) {
     window.location.assign(ownerHash(area, record.id))
     setStation(record)
@@ -634,10 +634,9 @@ export function OwnerWorkspace({
                     Quay lại danh sách trạm
                   </button>
                 )}
-                <h1>{station?.name ?? (area === 'tariffs' ? 'Biểu giá' : 'Trạm của tôi')}</h1>
+                <h1>{area === 'tariffs' ? 'Biểu giá' : station?.name ?? 'Trạm của tôi'}</h1>
                 <p>
-                  {station?.address ??
-                    (area === 'tariffs' ? 'Chọn trạm' : '')}
+                  {area === 'tariffs' ? station?.name ?? 'Chọn trạm' : station?.address ?? ''}
                 </p>
               </div>
               <div className="owner-heading-actions">
@@ -647,13 +646,13 @@ export function OwnerWorkspace({
                       setStation({ ...station, status: nextStatus, statusVersion: version })
                       setRevision(value => value + 1)
                     }} onReload={() => setRevision(value => value + 1)} />}
-                    <button
+                    {area === 'stations' && <button
                       className="secondary-button"
                       onClick={() => setForm('edit-station')}
                     >
                       <Icon name="edit" />
                       Thông tin trạm
-                    </button>
+                    </button>}
                     {area === 'stations' && <button
                       className="primary-button"
                       onClick={() => {
@@ -665,7 +664,7 @@ export function OwnerWorkspace({
                       Thêm trụ
                     </button>}
                   </>
-                ) : (
+                ) : area === 'stations' ? (
                   <button
                     className="primary-button"
                     onClick={() => setForm('create-station')}
@@ -673,7 +672,7 @@ export function OwnerWorkspace({
                     <Icon name="plus" />
                     Tạo trạm
                   </button>
-                )}
+                ) : null}
               </div>
             </header>
             {area === 'stations' && <AlertsPanel area="owner" />}
@@ -714,7 +713,7 @@ export function OwnerWorkspace({
                       }}
                     />
                   </label>
-                  <label>
+                  {area === 'stations' && <label>
                     Trạng thái{' '}
                     <select
                       value={status}
@@ -733,7 +732,7 @@ export function OwnerWorkspace({
                         </option>
                       ))}
                     </select>
-                  </label>
+                  </label>}
                   <button
                     className="secondary-button"
                     onClick={() => setRevision((value) => value + 1)}
@@ -770,19 +769,19 @@ export function OwnerWorkspace({
                               name={record.name}
                             />
                             <div>
-                              <span
+                              {area === 'stations' && <span
                                 className={`owner-station-status status-${record.status}`}
                               >
                                 {statusLabel[record.status]}
-                              </span>
+                              </span>}
                               <h2>{record.name}</h2>
                               <p>{record.address}</p>
                               <button
                                 className="secondary-button"
-                                aria-label={`Xem chi tiết ${record.name}`}
+                                aria-label={`${area === 'tariffs' ? 'Xem biểu giá' : 'Xem chi tiết'} ${record.name}`}
                                 onClick={() => open(record)}
                               >
-                                Xem trạm
+                                {area === 'tariffs' ? 'Xem biểu giá' : 'Xem trạm'}
                                 <Icon name="chevronRight" />
                               </button>
                             </div>
@@ -832,11 +831,7 @@ export function OwnerWorkspace({
               </>
             ) : (
               <>
-                <nav className="owner-station-sections" aria-label="Nội dung trạm">
-                  <button type="button" aria-pressed={area === 'stations'} onClick={() => setArea('stations')}>Khu sạc</button>
-                  <button type="button" aria-pressed={area === 'tariffs'} onClick={() => setArea('tariffs')}>Biểu giá</button>
-                </nav>
-                <div className="owner-toolbar owner-statusbar">
+                {area === 'stations' && <div className="owner-toolbar owner-statusbar">
                   <strong
                     className={`owner-station-status status-${station.status}`}
                   >
@@ -853,15 +848,15 @@ export function OwnerWorkspace({
                       ),
                     )}
                   </div>}
-                </div>
+                </div>}
                 {area === 'stations' && connectionError && (
                   <p className="owner-subtle" role="status">
                     {connectionError}
                   </p>
                 )}
                 {area === 'tariffs' ? <div className="owner-tariff-scroll owner-grow" role="region" aria-label="Biểu giá của trạm" tabIndex={0}>
-                  <details><summary>Chính sách phí không đến</summary><ReservationPolicy key={station.id} stationId={String(station.id)} /></details>
                   <TariffHistoryPanel key={station.id} stationId={String(station.id)} />
+                  <details className="owner-reservation-policy"><summary>Chính sách phí không đến</summary><ReservationPolicy key={station.id} stationId={String(station.id)} /></details>
                 </div> : <div className="owner-detail-grid owner-grow">
                   <section className="owner-chargers">
                     <header>
