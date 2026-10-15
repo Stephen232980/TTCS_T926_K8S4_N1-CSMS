@@ -1,0 +1,297 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-14T14:27:06.0210180Z",
+  "title": "Design System: CSMS G6 reservation fees",
+  "extensions": {
+    "colorMeta": {
+      "ink": {
+        "tonalRamp": [
+          "oklch(15% 0.03 220)",
+          "oklch(25% 0.03 220)",
+          "oklch(35% 0.03 220)",
+          "oklch(45% 0.03 220)",
+          "oklch(60% 0.03 220)",
+          "oklch(75% 0.03 220)",
+          "oklch(85% 0.03 220)",
+          "oklch(95% 0.03 220)"
+        ],
+        "canonical": "#193d4b",
+        "displayName": "ink",
+        "role": "neutral"
+      },
+      "muted": {
+        "tonalRamp": [
+          "oklch(15% 0.03 220)",
+          "oklch(25% 0.03 220)",
+          "oklch(35% 0.03 220)",
+          "oklch(45% 0.03 220)",
+          "oklch(60% 0.03 220)",
+          "oklch(75% 0.03 220)",
+          "oklch(85% 0.03 220)",
+          "oklch(95% 0.03 220)"
+        ],
+        "canonical": "#526e7b",
+        "displayName": "muted",
+        "role": "neutral"
+      },
+      "canvas": {
+        "tonalRamp": [
+          "oklch(15% 0.008 220)",
+          "oklch(25% 0.008 220)",
+          "oklch(35% 0.008 220)",
+          "oklch(45% 0.008 220)",
+          "oklch(60% 0.008 220)",
+          "oklch(75% 0.008 220)",
+          "oklch(85% 0.008 220)",
+          "oklch(95% 0.008 220)"
+        ],
+        "canonical": "#f2f6f7",
+        "displayName": "canvas",
+        "role": "neutral"
+      },
+      "surface": {
+        "tonalRamp": [
+          "oklch(15% 0.008 220)",
+          "oklch(25% 0.008 220)",
+          "oklch(35% 0.008 220)",
+          "oklch(45% 0.008 220)",
+          "oklch(60% 0.008 220)",
+          "oklch(75% 0.008 220)",
+          "oklch(85% 0.008 220)",
+          "oklch(95% 0.008 220)"
+        ],
+        "canonical": "#fff",
+        "displayName": "surface",
+        "role": "neutral"
+      },
+      "accent": {
+        "tonalRamp": [
+          "oklch(15% 0.1 160)",
+          "oklch(25% 0.1 160)",
+          "oklch(35% 0.1 160)",
+          "oklch(45% 0.1 160)",
+          "oklch(60% 0.1 160)",
+          "oklch(75% 0.1 160)",
+          "oklch(85% 0.1 160)",
+          "oklch(95% 0.1 160)"
+        ],
+        "canonical": "#14795e",
+        "displayName": "accent",
+        "role": "primary"
+      },
+      "accent-hover": {
+        "tonalRamp": [
+          "oklch(15% 0.1 160)",
+          "oklch(25% 0.1 160)",
+          "oklch(35% 0.1 160)",
+          "oklch(45% 0.1 160)",
+          "oklch(60% 0.1 160)",
+          "oklch(75% 0.1 160)",
+          "oklch(85% 0.1 160)",
+          "oklch(95% 0.1 160)"
+        ],
+        "canonical": "#0d624b",
+        "displayName": "accent-hover",
+        "role": "primary"
+      },
+      "secondary-surface": {
+        "tonalRamp": [
+          "oklch(15% 0.008 220)",
+          "oklch(25% 0.008 220)",
+          "oklch(35% 0.008 220)",
+          "oklch(45% 0.008 220)",
+          "oklch(60% 0.008 220)",
+          "oklch(75% 0.008 220)",
+          "oklch(85% 0.008 220)",
+          "oklch(95% 0.008 220)"
+        ],
+        "canonical": "#eaf2f5",
+        "displayName": "secondary-surface",
+        "role": "neutral"
+      },
+      "secondary-ink": {
+        "tonalRamp": [
+          "oklch(15% 0.03 220)",
+          "oklch(25% 0.03 220)",
+          "oklch(35% 0.03 220)",
+          "oklch(45% 0.03 220)",
+          "oklch(60% 0.03 220)",
+          "oklch(75% 0.03 220)",
+          "oklch(85% 0.03 220)",
+          "oklch(95% 0.03 220)"
+        ],
+        "canonical": "#244e60",
+        "displayName": "secondary-ink",
+        "role": "neutral"
+      },
+      "field-border": {
+        "tonalRamp": [
+          "oklch(15% 0.008 220)",
+          "oklch(25% 0.008 220)",
+          "oklch(35% 0.008 220)",
+          "oklch(45% 0.008 220)",
+          "oklch(60% 0.008 220)",
+          "oklch(75% 0.008 220)",
+          "oklch(85% 0.008 220)",
+          "oklch(95% 0.008 220)"
+        ],
+        "canonical": "#b9cdd6",
+        "displayName": "field-border",
+        "role": "neutral"
+      },
+      "line": {
+        "tonalRamp": [
+          "oklch(15% 0.008 220)",
+          "oklch(25% 0.008 220)",
+          "oklch(35% 0.008 220)",
+          "oklch(45% 0.008 220)",
+          "oklch(60% 0.008 220)",
+          "oklch(75% 0.008 220)",
+          "oklch(85% 0.008 220)",
+          "oklch(95% 0.008 220)"
+        ],
+        "canonical": "#e4edf0",
+        "displayName": "line",
+        "role": "neutral"
+      },
+      "focus": {
+        "tonalRamp": [
+          "oklch(15% 0.1 220)",
+          "oklch(25% 0.1 220)",
+          "oklch(35% 0.1 220)",
+          "oklch(45% 0.1 220)",
+          "oklch(60% 0.1 220)",
+          "oklch(75% 0.1 220)",
+          "oklch(85% 0.1 220)",
+          "oklch(95% 0.1 220)"
+        ],
+        "canonical": "#2688c1",
+        "displayName": "focus",
+        "role": "neutral"
+      },
+      "error": {
+        "tonalRamp": [
+          "oklch(15% 0.1 30)",
+          "oklch(25% 0.1 30)",
+          "oklch(35% 0.1 30)",
+          "oklch(45% 0.1 30)",
+          "oklch(60% 0.1 30)",
+          "oklch(75% 0.1 30)",
+          "oklch(85% 0.1 30)",
+          "oklch(95% 0.1 30)"
+        ],
+        "canonical": "#a3382c",
+        "displayName": "error",
+        "role": "neutral"
+      }
+    },
+    "breakpoints": [
+      {
+        "name": "fee-stack",
+        "value": "480px"
+      }
+    ],
+    "typographyMeta": {
+      "section-title": {
+        "displayName": "Section title",
+        "purpose": "Reservation headings."
+      },
+      "body": {
+        "displayName": "Reservation copy",
+        "purpose": "Explanations and labels."
+      },
+      "transaction": {
+        "displayName": "Transaction",
+        "purpose": "Wallet descriptions and amounts."
+      }
+    },
+    "scope": "Local G6 Operate extension; inherited owner and driver design documents remain authoritative.",
+    "tonalRampNote": "Synthetic OKLCH panel previews, not application tokens.",
+    "shadows": [
+      {
+        "name": "inherited-history-panel",
+        "purpose": "Existing wallet history panel.",
+        "value": "0 10px 28px rgba(25,61,75,.045)"
+      }
+    ],
+    "motion": [
+      {
+        "name": "inherited-row-hover",
+        "purpose": "Existing wallet row hover.",
+        "value": "background .15s ease"
+      }
+    ]
+  },
+  "components": [
+    {
+      "kind": "button",
+      "refersTo": "button-primary",
+      "css": ".ds-primary{background:#14795e;color:#fff;border:0;border-radius:10px;padding:10px 16px;min-height:44px;font:720 14px Segoe UI,sans-serif}.ds-primary:hover{background:#0d624b}.ds-primary:focus-visible{outline:3px solid #2688c1;outline-offset:3px}",
+      "description": "Inherited driver primary action.",
+      "name": "Primary action",
+      "html": "<button class=\"ds-primary\">Gửi yêu cầu đặt chỗ</button>"
+    },
+    {
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "css": ".ds-secondary{background:#eaf2f5;color:#244e60;border:0;border-radius:10px;padding:10px 16px;min-height:44px;font:680 14px Segoe UI,sans-serif}.ds-secondary:hover{background:#dce9ee}.ds-secondary:focus-visible{outline:3px solid #2688c1;outline-offset:3px}",
+      "description": "Reload or cancel a local operation.",
+      "name": "Secondary action",
+      "html": "<button class=\"ds-secondary\">Tải lại đặt chỗ</button>"
+    },
+    {
+      "kind": "input",
+      "refersTo": "input",
+      "css": ".ds-label{display:flex;flex-direction:column;gap:6px;font:13px Segoe UI,sans-serif;color:#193d4b}.ds-input{background:#fff;color:#193d4b;border:1px solid #b9cdd6;border-radius:9px;padding:9px 12px;min-height:42px;font:inherit}.ds-input:focus-visible{outline:3px solid #2688c1;outline-offset:3px}",
+      "description": "Native owner policy fee field.",
+      "name": "Fee input",
+      "html": "<label class=\"ds-label\">Phí không đến (đ)<input class=\"ds-input\" type=\"number\" min=\"0\" max=\"1000000\" step=\"1\" value=\"10000\"></label>"
+    },
+    {
+      "kind": "card",
+      "refersTo": "reservation-card",
+      "css": ".ds-reservation{background:#fff;color:#193d4b;border-radius:14px;padding:14px 16px;font:13px/1.5 Segoe UI,sans-serif}.ds-reservation summary{cursor:pointer;min-height:44px;align-content:center;font-weight:600}.ds-reservation summary:focus-visible{outline:3px solid #2688c1;outline-offset:3px}.ds-reservation h3{font-size:16px}.ds-reservation p{color:#526e7b}",
+      "description": "Native disclosure with accepted fee and outcome.",
+      "name": "Reservation disclosure",
+      "html": "<details class=\"ds-reservation\" open><summary>Đặt chỗ của bạn</summary><h3>Trạm sạc</h3><p>Phí không đến đã chấp nhận: 10.000đ · Đã thu phí</p></details>"
+    },
+    {
+      "name": "Reservation fee row",
+      "html": "<article class=\"ds-fee\"><svg viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path d=\"M21 7V5a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h15a2 2 0 0 0 2-2v-2M16 12h5v4h-5a2 2 0 0 1 0-4Z\"/></svg><div class=\"ds-fee-info\"><div class=\"ds-fee-title\"><strong>Phí không đến</strong><span>-10.000 ₫</span></div><a href=\"#reservation\">Xem đặt chỗ</a><details><summary>Mã giao dịch</summary><p>Mã tham chiếu: UUID đặt chỗ</p></details></div></article>",
+      "kind": "custom",
+      "description": "Authored wallet SVG and whole debit amount; narrow screens stack the title and amount.",
+      "css": ".ds-fee{display:flex;gap:14px;padding:14px 12px;border-radius:12px;background:#f2f6f7;color:#193d4b;font:14px Segoe UI,sans-serif;transition:background .15s ease}.ds-fee:hover{background:#e6eef1}.ds-fee svg{width:20px;height:20px;flex-shrink:0;fill:none;stroke:currentColor;stroke-width:1.8}.ds-fee-info{flex:1;min-width:0}.ds-fee-title{display:flex;justify-content:space-between;gap:8px}.ds-fee-title strong{min-width:0;overflow-wrap:anywhere}.ds-fee-title span{white-space:nowrap;flex-shrink:0;overflow-wrap:normal;font-weight:700;color:#dc2626}.ds-fee a{color:#116443}.ds-fee summary{cursor:pointer;min-height:44px;align-content:center}.ds-fee a:focus-visible{outline:3px solid #2688c1;outline-offset:3px}.ds-fee summary:focus-visible{outline:3px solid #2688c1;outline-offset:3px}@media(max-width:480px){.ds-fee-title{flex-direction:column;gap:4px}}"
+    }
+  ],
+  "narrative": {
+    "rules": [
+      {
+        "name": "The Whole Amount Rule",
+        "section": "layout",
+        "body": "Keep the fee debit and its currency unit together; stack the fee row on narrow screens rather than splitting the amount."
+      },
+      {
+        "name": "The Explicit Outcome Rule",
+        "section": "components",
+        "body": "Show the accepted fee and named decision; never infer a charged, waived or refunded outcome from reservation state alone."
+      }
+    ],
+    "keyCharacteristics": [
+      "Inherited teal ink, pale canvas, white containers and green actions.",
+      "Native forms and disclosures with visible loading, error and outcome copy.",
+      "Explicit fee amounts, consent and links between reservations and wallet entries."
+    ],
+    "dos": [
+      "Do preserve the inherited workspace palettes, native controls and keyboard focus.",
+      "Do keep fee amounts whole and use the authored wallet SVG for reservation fee entries.",
+      "Do retain fee consent, named outcomes and reservation/wallet reference links."
+    ],
+    "donts": [
+      "Don't treat local demo screenshots as staging, hardware or release acceptance.",
+      "Don't turn existing glyph icons elsewhere in the wallet into a new G6 icon convention.",
+      "Don't infer a refund or settled fee from reservation state alone."
+    ],
+    "northStar": "Inherited owner and driver operating workspaces",
+    "overview": "This records the implemented G6 local Operate extension: owner `ReservationPolicy`, driver `ReservationForm` fee acceptance, `DriverReservations` fee outcome, and the reservation fee/reference row in `DriverWalletPage`. Root `PRODUCT.md`, root `DESIGN.md`, and `frontend/src/features/driver/DESIGN.md` retain authority over their existing scopes. There is no new direction contract or approved composition; this record adds no redesign or product-wide identity."
+  }
+}

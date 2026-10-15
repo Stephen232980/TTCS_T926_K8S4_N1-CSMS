@@ -63,6 +63,8 @@ def _build_entry_description(entry: WalletLedger) -> str:
         return f"Thanh toán phiên sạc ({entry.reference_id})"
     if entry.entry_type == "adjustment":
         return "Điều chỉnh số dư quản trị"
+    if entry.entry_type == "reservation_fee":
+        return f"Phí không đến của đặt chỗ ({entry.reference_id})"
     return f"Giao dịch {entry.entry_type}"
 
 

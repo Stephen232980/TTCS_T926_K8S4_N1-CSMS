@@ -674,3 +674,36 @@ Phần frontend được triển khai riêng, backend không tạo/in chứng t�
 ## Tài xế dừng sạc và demo rút súng
 
 Hợp đồng endpoint, trạng thái, quyền sở hữu, retry và chế độ demo: [DRIVER_STOP_DEMO_UNPLUG.md](DRIVER_STOP_DEMO_UNPLUG.md). Dừng/checkbox không chốt tiền; backend chờ bằng chứng từ trụ. Giá trị demo mặc định tắt; chỉ phiên mới capture cấu hình xác nhận Available.
+
+## S-42 / S-43 / S-44 — Công suất trạm
+
+Năm endpoint owner owned, kW Decimal/W nguyên, optimistic version, enable/disable
+bất đồng bộ, phân bổ và commissioning: [S42_S43_S44_POWER.md](S42_S43_S44_POWER.md).
+Trạm chưa bật chia tải giữ luồng sạc hiện có; trạm đã bật chặn start khi chưa
+xác minh hoặc degraded (`power_unavailable`). Lưu hạn mức không phải bằng
+chứng trụ đã áp dụng. Kết quả có requested/confirmed/reserved riêng biệt.
+
+## S-46 / S-63 — Cảnh báo vận hành
+
+Chín endpoint cảnh báo cho operator/admin và owner owned, ngưỡng offline/lỗi,
+vòng đời incident, email outbox và mã lỗi: [S46_S63_ALERTS.md](S46_S63_ALERTS.md).
+Owner chỉ đọc; operator đóng sau phục hồi; admin force close cần lý do và audit.
+Dashboard sức khỏe giữ metrics/biểu đồ hiện có. SMTP mặc định tắt đến khi cấu hình server.
+
+Transport SMTP dùng chung, cấu hình tương thích cũ và contract cho domain
+outbox (bao gồm S-59): [SHARED_SMTP.md](SHARED_SMTP.md).
+
+## S-66 / S-47 — Hoạt động trạm và tìm đầu nối
+
+Owner `PATCH /api/v1/owner/stations/{id}/operation` đổi active/suspended với
+expected_version, reason, kiểm tra config/tariff/power và audit. Driver discovery
+thêm số đầu nối rảnh, thông số và giá hiện hành; polling15s, tải đủ tối đa500 trạm
+trước khi sắp khoảng cách. Chi tiết: [S66_S47_STATION_OPERATION_DISCOVERY.md](S66_S47_STATION_OPERATION_DISCOVERY.md).
+
+## S-48 / S-49 / S-51 — Đặt và hủy chỗ
+
+Driver own scope: capability, booking intent, list/detail và cancel intent. 202 không phải ACK từ trụ; trạng thái uncertain vẫn giữ đầu nối. Hợp đồng và ngưỡng: [S48_S49_S51_RESERVATIONS.md](S48_S49_S51_RESERVATIONS.md).
+
+## S-50 — Quá hạn đặt chỗ và phí không đến
+
+Owner policy GET/PUT theo trạm sở hữu; driver đọc quote theo connector và xác nhận phí/version khi đặt. Phí snapshot, miễn đặt chỗ cũ, worker idempotent, ledger `reservation_fee` và xử lý thông điệp đến chậm: [S50_RESERVATION_FEES.md](S50_RESERVATION_FEES.md).
