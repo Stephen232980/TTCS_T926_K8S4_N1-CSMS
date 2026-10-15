@@ -131,3 +131,6 @@ counts display an ellipsis rather than zero. History opens the list; collapse on
 hides its contents. Refresh uses a labelled icon button with a mobile touch target.
 The update time remains inside the expanded list; polling explanations are omitted.
 Read-only owner permissions and operator/admin incident actions remain unchanged.
+
+Expanded lists use a viewport-aware height of 18vh, bounded between 100px and
+160px, and scroll internally so the charging area retains space on short screens.

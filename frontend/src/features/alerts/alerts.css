@@ -10,14 +10,14 @@
 .csms-alerts button:hover { background: #dce9ee; }
 .csms-alerts button:disabled { opacity: .55; cursor: not-allowed; }
 .csms-alerts :focus-visible { outline: 3px solid #2688c1; outline-offset: 3px; }
-.csms-alerts-list { list-style: none; margin: 12px 0 0; padding: 0 5px 0 0; max-height: 240px; overflow-y: auto; scrollbar-color: #b9cdd6 #f2f6f7; }
+.csms-alerts-list { list-style: none; margin: 12px 0 0; padding: 0 5px 0 0; max-height: clamp(100px, 18vh, 160px); overflow-y: auto; scrollbar-color: #b9cdd6 #f2f6f7; }
 .csms-alerts-list li { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid #dce9ee; }
 .csms-alerts-details { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 160px; overflow-wrap: anywhere; }
 .csms-alerts-details span { font-size: 13px; color: #526e7b; }
 .csms-alerts-close { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; width: 100%; }
 .csms-alerts-close label { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 150px; font-size: 13px; }
 .csms-alerts input { font: inherit; color: #193d4b; border: 1px solid #b9cdd6; border-radius: 9px; padding: 9px 12px; min-height: 42px; width: 100%; box-sizing: border-box; }
-@media (max-width: 800px) { .csms-alerts { padding: 12px; } .csms-alerts button { min-height: 44px; } .csms-alerts-list { max-height: 220px; } }
+@media (max-width: 800px) { .csms-alerts { padding: 12px; } .csms-alerts button { min-height: 44px; } }
 
 .csms-alerts-count { font-size: 13px; margin-right: auto; }
 .csms-alerts [hidden] { display: none; }
