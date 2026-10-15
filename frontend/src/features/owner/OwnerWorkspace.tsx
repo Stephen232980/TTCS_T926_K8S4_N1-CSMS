@@ -21,6 +21,7 @@ import { ChargerWizard } from './ChargerWizard'
 import { OwnerCharging } from './OwnerCharging'
 import { TariffHistoryPanel } from './TariffHistoryPanel'
 import { StationPowerPage } from './StationPowerPage'
+import { OwnerRevenueReport } from './OwnerRevenueReport'
 import { StationOperation } from './StationOperation'
 import { ReservationPolicy } from './ReservationPolicy'
 import { ChargerDrawing, ConnectionSymbol, ConnectorSymbol, StationPhoto } from './OwnerVisuals'
@@ -565,6 +566,19 @@ export function OwnerWorkspace({
           <OwnerCharging initialSessionId={sessionToOpen} onInitialSessionOpened={initialSessionOpened} />
         ) : area === 'power' ? (
           <StationPowerPage />
+        ) : area === 'revenue' ? (
+          <section className="owner-page">
+            <header className="owner-heading">
+              <div>
+                <h1>Báo cáo doanh thu & sản lượng</h1>
+                <p>Theo dõi doanh thu hóa đơn, đối soát tiền ví và sản lượng kWh theo từng trụ.</p>
+              </div>
+            </header>
+            <OwnerRevenueReport
+              stations={stations?.items ?? []}
+              selectedStationId={station?.id}
+            />
+          </section>
         ) : area !== 'stations' && area !== 'tariffs' ? (
           <section className="owner-page">
             <header className="owner-heading">
@@ -575,12 +589,8 @@ export function OwnerWorkspace({
             </header>
             <div className="owner-panel owner-placeholder owner-grow">
               <Icon name="report" />
-              <h2>
-                Chưa có báo cáo doanh thu
-              </h2>
-              <p>
-                Chức năng này sẽ khả dụng khi nghiệp vụ tương ứng được triển khai.
-              </p>
+              <h2>Chưa có báo cáo</h2>
+              <p>Chức năng này sẽ khả dụng khi nghiệp vụ tương ứng được triển khai.</p>
               <button
                 className="secondary-button"
                 onClick={() => setArea('stations')}
