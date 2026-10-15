@@ -515,7 +515,7 @@ export function OperatorMonitoring({
           {selected ? (
             <>
               <button
-                className="text-button operator-detail-back"
+                className="navigation-link text-button operator-detail-back"
                 onClick={() => setSelection(null)}
               >
                 Quay lại trụ

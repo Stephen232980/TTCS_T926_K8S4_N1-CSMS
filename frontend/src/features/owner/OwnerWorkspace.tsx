@@ -623,7 +623,7 @@ export function OwnerWorkspace({
               <div>
                 {station && (
                   <button
-                    className="text-button"
+                    className="navigation-link text-button"
                     onClick={() => {
                       window.location.hash = ownerHash(area)
                       setStation(null)
