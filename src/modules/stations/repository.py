@@ -471,7 +471,9 @@ class StationRepository:
     ) -> Station | None:
         if timezone is not None:
             timezone = validate_station_timezone(timezone)
-        station = await self.get_station_by_id(station_id, scope, for_update=True)
+        station = await self.get_station_by_id(
+            station_id, scope, for_update=timezone is not None
+        )
         if station is None:
             return None
 
@@ -496,8 +498,6 @@ class StationRepository:
             station.latitude = latitude
         if longitude is not None:
             station.longitude = longitude
-
-        station.status_version += 1
 
         await self._db_session.flush()
         await self._db_session.refresh(station)

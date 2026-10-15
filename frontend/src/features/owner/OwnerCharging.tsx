@@ -308,7 +308,7 @@ export function OwnerCharging({ initialSessionId, onInitialSessionOpened, onSess
         </div>
         {selected ? (
           <button
-            className="navigation-link secondary-button"
+            className="secondary-button"
             onClick={() => {
               setSelected(null)
               onSessionSelection?.()
@@ -448,7 +448,7 @@ export function OwnerCharging({ initialSessionId, onInitialSessionOpened, onSess
             <div>
               {step > 0 && (
                 <button
-                  className="navigation-link secondary-button"
+                  className="secondary-button"
                   disabled={saving}
                   onClick={() => setStep(0)}
                 >

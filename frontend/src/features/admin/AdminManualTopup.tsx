@@ -253,7 +253,7 @@ export function AdminManualTopup({ adminId = 'admin' }: { adminId?: string }) {
             <label className="admin-topup-received"><input type="checkbox" checked={paymentReceived} disabled={busy || locked} onChange={event => setPaymentReceived(event.target.checked)} /><span>Tôi đã kiểm tra và xác nhận đã thu tiền bên ngoài cho khoản nạp này.</span></label>
             <p className="admin-inline-warning">Không nạp thủ công lại khoản VNPAY đã được cộng vào ví.</p>
             <div className="admin-actions">
-              <button className="navigation-link" disabled={busy || locked} onClick={() => { setConfirmation(null); setPaymentReceived(false) }}>
+              <button disabled={busy || locked} onClick={() => { setConfirmation(null); setPaymentReceived(false) }}>
                 Quay lại chỉnh sửa
               </button>
               <button

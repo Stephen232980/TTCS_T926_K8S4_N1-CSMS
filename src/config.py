@@ -1,92 +1,13 @@
 from functools import lru_cache
 from typing import Literal, Self
 
-from pydantic import (
-    EmailStr,
-    Field,
-    HttpUrl,
-    SecretStr,
-    field_validator,
-    model_validator,
-)
+from pydantic import Field, HttpUrl, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    # None selects the legacy ALERT_SMTP_* connection as a complete profile.
-    smtp_enabled: bool | None = None
-    smtp_host: str = ""
-    smtp_port: int = Field(default=587, ge=1, le=65535)
-    smtp_security: Literal["starttls", "ssl", "plain"] = "starttls"
-    smtp_from: EmailStr | None = None
-    smtp_username: str = ""
-    smtp_password: SecretStr | None = Field(default=None, repr=False)
-    smtp_timeout_seconds: float = Field(default=5, gt=0, le=15)
-
-    @field_validator("smtp_enabled", mode="before")
-    @classmethod
-    def empty_smtp_enabled(cls, value: object) -> object:
-        return None if value == "" else value
-
-    reservation_command_timeout_seconds: float = Field(default=5, gt=0, le=30)
-    alert_offline_grace_seconds: int = Field(default=300, ge=60, le=86400)
-    alert_error_window_seconds: int = Field(default=600, ge=60, le=86400)
-    alert_error_threshold: int = Field(default=3, ge=2, le=1000)
-    alert_scan_interval_seconds: int = Field(default=15, ge=1, le=15)
-    alert_smtp_enabled: bool = False
-    alert_smtp_host: str = ""
-    alert_smtp_port: int = Field(default=587, ge=1, le=65535)
-    alert_smtp_security: Literal["starttls", "ssl", "plain"] = "starttls"
-    alert_smtp_from: EmailStr | None = None
-    alert_email_recipients: list[EmailStr] = Field(default_factory=list)
-    alert_smtp_username: str = ""
-    alert_smtp_password: SecretStr | None = Field(default=None, repr=False)
-    alert_smtp_timeout_seconds: float = Field(default=5, gt=0, le=15)
-    alert_email_max_attempts: int = Field(default=6, ge=1, le=20)
-
-    @field_validator(
-        "alert_smtp_from",
-        "alert_smtp_password",
-        "smtp_from",
-        "smtp_password",
-        mode="before",
-    )
-    @classmethod
-    def empty_alert_smtp_values(cls, value: object) -> object:
-        return None if isinstance(value, str) and not value.strip() else value
-
-    @model_validator(mode="after")
-    def validate_alert_smtp(self) -> Self:
-        if self.smtp_enabled is not None:
-            if self.smtp_enabled and not (self.smtp_host and self.smtp_from):
-                raise ValueError("Enabled SMTP requires host and sender")
-            if bool(self.smtp_username) != bool(self.smtp_password):
-                raise ValueError(
-                    "SMTP username and password must be configured together"
-                )
-        if self.alert_smtp_enabled:
-            enabled = self.smtp_enabled if self.smtp_enabled is not None else True
-            host = (
-                self.smtp_host
-                if self.smtp_enabled is not None
-                else self.alert_smtp_host
-            )
-            sender = (
-                self.smtp_from
-                if self.smtp_enabled is not None
-                else self.alert_smtp_from
-            )
-            if not self.alert_email_recipients or (enabled and not (host and sender)):
-                raise ValueError("Enabled alert SMTP requires transport and recipients")
-        if self.smtp_enabled is None and bool(self.alert_smtp_username) != bool(
-            self.alert_smtp_password
-        ):
-            raise ValueError("SMTP username and password must be configured together")
-        return self
-
     database_url: str = ""
     database_pool_size: int = Field(default=20, ge=1, le=100)
-    power_command_timeout_seconds: float = Field(default=5, gt=0, le=30)
     wallet_manual_topup_max_vnd: int = Field(default=10_000_000, gt=0, le=2**63 - 1)
     wallet_topup_min_vnd: int = Field(default=10_000, gt=0, le=2**63 - 1)
     wallet_topup_max_vnd: int = Field(default=5_000_000, gt=0, le=2**63 - 1)

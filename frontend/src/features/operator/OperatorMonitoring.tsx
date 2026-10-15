@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { AlertsPanel } from "../alerts/AlertsPanel";
 import { notifySessionUnauthorized } from "../auth/sessionEvents";
 import { ControlAction } from "../ocpp/ControlAction";
 import {
@@ -387,6 +386,7 @@ export function OperatorMonitoring({
       <header className="owner-heading">
         <div>
           <h1>Giám sát trụ</h1>
+          <p>Toàn hệ thống · ưu tiên trụ cần chú ý.</p>
         </div>
         <button
           className="secondary-button"
@@ -395,7 +395,6 @@ export function OperatorMonitoring({
           Cập nhật ngay
         </button>
       </header>
-      <AlertsPanel area="ops" />
       <p className="operator-stream" role="status">
         {streamState}
         {updatedAt && ` · ${clock(updatedAt)}`}
@@ -423,7 +422,7 @@ export function OperatorMonitoring({
           {visible.length} / {result?.total ?? 0} trụ
         </span>
       </div>
-      <p className="operator-filter-scope">Bộ lọc áp dụng trong trang hiện tại.</p>
+      <p className="operator-filter-scope">Nhóm ưu tiên và bộ lọc chỉ áp dụng cho các trụ trong trang này. Xem trang khác nếu chưa thấy trụ cần tìm.</p>
       {error && (
         <p role="alert" className="owner-error">
           {error} {result && "Dữ liệu có thể đã cũ."}
@@ -515,7 +514,7 @@ export function OperatorMonitoring({
           {selected ? (
             <>
               <button
-                className="navigation-link text-button operator-detail-back"
+                className="text-button operator-detail-back"
                 onClick={() => setSelection(null)}
               >
                 Quay lại trụ

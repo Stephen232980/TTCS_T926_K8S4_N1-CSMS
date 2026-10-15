@@ -1226,6 +1226,27 @@ dl.owner-review div {
   overflow-y: auto;
   overscroll-behavior: contain;
 }
+.owner-station-sections {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.owner-shell .owner-station-sections button {
+  min-height: 44px;
+  padding: 10px 18px;
+  border: 0;
+  border-radius: 10px;
+  background: #eaf2f5;
+  color: #244e60;
+  font: inherit;
+  font-weight: 650;
+}
+.owner-shell .owner-station-sections button:hover { background: #dce9ee; }
+.owner-shell .owner-station-sections button[aria-pressed='true'] {
+  background: #173b47;
+  color: #fff;
+}
 .owner-tariff-bands { grid-column: 1 / -1; min-width: 0; border: 0; padding: 0; margin: 12px 0 24px; }
 .owner-tariff-bands legend { font-weight: 700; font-size: 18px; margin-bottom: 8px; }
 .owner-band-row { padding: 16px 0; border-bottom: 1px solid var(--field-border, #b9cdd6); }
@@ -1280,8 +1301,3 @@ dl.owner-review div {
 .owner-charger-card { cursor: pointer; }
 .owner-shell .owner-charger-open { background: transparent; border: 0; padding: 0; color: inherit; font: inherit; text-align: left; overflow-wrap: anywhere; cursor: pointer; }
 .owner-shell .owner-charger-open:hover { text-decoration: underline; text-underline-offset: 3px; }
-
-.owner-panel.owner-tariff-history { padding: 8px 16px; }
-.owner-tariff-history-toggle h2 { font-size: 16px; line-height: 1.4; }
-.owner-reservation-policy { margin-top: 16px; padding: 12px 16px; background: #fff; border-radius: 14px; }
-.owner-reservation-policy > summary { min-height: 32px; cursor: pointer; }

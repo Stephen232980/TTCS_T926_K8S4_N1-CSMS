@@ -96,8 +96,6 @@
 .driver-shell .driver-subtle { margin: 10px 0 16px; font-size: 13px; }
 .driver-station-card { background: #fff; border-radius: 14px; padding: 16px; margin-bottom: 12px; box-shadow: 0 6px 18px rgba(25, 61, 75, .045); }
 .driver-station-card.is-selected { outline: 2px solid #2688c1; outline-offset: -2px; }
-.driver-discovery-summary { display: flex; flex-direction: column; gap: 5px; margin-top: 12px; font-size: 13px; color: #526e7b; overflow-wrap: anywhere; }
-.driver-discovery-summary strong { color: #193d4b; }
 .driver-station-select { width: 100%; display: flex; align-items: flex-start; gap: 10px; border: 0; padding: 0; text-align: left; background: transparent; color: var(--ink); font: inherit; }
 .driver-station-select > svg { color: var(--accent); }
 .driver-station-select > span:first-of-type { flex: 1; min-width: 0; }
@@ -770,10 +768,3 @@ details.driver-tx-history-section[open] > summary { margin-bottom: 16px; }
 .driver-session-controls .driver-demo-unplug { display: block; margin-top: .8rem; font-size: .875rem; min-height: 44px; }
 .driver-session-controls .driver-plug-confirm { display: flex; align-items: flex-start; gap: .5rem; }
 .driver-awaiting-session { padding: 1rem 0; }
-
-.reservation-fee-item .tx-description { min-width: 0; }
-.reservation-fee-item .tx-amount { flex-shrink: 0; white-space: nowrap; overflow-wrap: normal; }
-.reservation-fee-item .tx-type-icon svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; }
-@media (max-width: 480px) {
-  .reservation-fee-item .tx-title-row { flex-direction: column; gap: 4px; }
-}

@@ -53,7 +53,7 @@ export function AccountPasswordForm({ account, self, onSaved, onCancel, onConfli
       <p>Các phiên đăng nhập hiện tại của tài khoản này sẽ bị thu hồi. Vai trò và trạng thái tài khoản được giữ nguyên.</p>
       {self && <p>Bạn đang đổi mật khẩu của mình và sẽ cần đăng nhập lại.</p>}
       <div className="admin-actions">
-        <button className="navigation-link" disabled={busy} onClick={() => setReview(false)}>Quay lại</button>
+        <button disabled={busy} onClick={() => setReview(false)}>Quay lại</button>
         <button className="admin-primary" disabled={busy} onClick={() => void save()}>{busy ? 'Đang đổi…' : 'Xác nhận đổi mật khẩu'}</button>
       </div>
     </> : <form onSubmit={event => {

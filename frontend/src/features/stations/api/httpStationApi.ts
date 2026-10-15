@@ -19,7 +19,6 @@ interface StationResponse {
   latitude: number
   longitude: number
   status: StationStatus
-  status_version: number
   created_at: string
   updated_at: string
 }
@@ -57,7 +56,6 @@ function mapStation(response: StationResponse): Station {
     latitude: response.latitude,
     longitude: response.longitude,
     status: response.status,
-    statusVersion: response.status_version,
     createdAt: response.created_at,
     updatedAt: response.updated_at,
     photoUrl: response.photo_url,
