@@ -31,3 +31,7 @@ Migration `e250025a2026` nối `d240024a2026`, giữ một Alembic head. Downgra
 Kiểm thử PostgreSQL thật bao phủ hai worker/năm scan, snapshot, số dư âm, rollback khi audit lỗi, không phạt khi offline/thiếu liên lạc sau hạn, hủy/consume, StartTransaction chậm, quyền owner, đồng ý/version, miễn đặt chỗ cũ và upgrade → downgrade → upgrade. Regression G5 bao gồm OCPP TCP thật tới simulator và đóng phiên tự động. Kiểm thử hiệu năng 20 socket đạt dưới 200 ms; không thay đổi đường MeterValues.
 
 Ảnh UI local dùng tài khoản/dữ liệu demo và rút ngắn timeline một đặt chỗ trong DB disposable để quan sát worker. Đây là bằng chứng giao diện và luồng local, không thay thế nghiệm thu phần cứng hoặc staging. CI/CD và triển khai do người dùng kiểm tra riêng.
+
+## S-19 — Phản hồi số đo
+
+Báo cáo thường và dữ liệu gửi bù sau reconnect ghi các số đo hợp lệ theo lô tối đa 1.024 dòng/câu lệnh, không cần trả về ID từng số đo. Kiểm tra timestamp, đơn vị, hồi quy và trùng giữ nguyên. Dữ liệu cùng durable reply vẫn thuộc một transaction và commit trước OCPP ACK; lỗi ghi reply rollback cả lô, retry không nhân đôi. Ngưỡng CI vẫn 200 ms cho 20 socket, không bỏ worker hoặc bỏ kiểm tra tính bền vững.

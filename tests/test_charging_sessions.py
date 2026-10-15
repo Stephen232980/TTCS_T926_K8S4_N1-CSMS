@@ -745,3 +745,59 @@ async def test_zero_unknown_transaction_is_pending_not_protocol_error(db_session
         )
         == 1
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("recovering", [False, True])
+async def test_meter_batch_and_reply_rollback_together_then_retry(
+    db_session, monkeypatch, recovering
+):
+    from src.modules.ocpp.models import OcppMessageReply
+
+    _, charger, _, _, _, conn, tag = await setup(db_session)
+    stamp = datetime.now(UTC)
+    tid = (await start(db_session, conn, tag, stamp)).payload["transactionId"]
+    payload = meter_payload(tid, stamp + timedelta(seconds=10), 2000)
+    payload["meterValue"][0]["sampledValue"].extend(
+        [
+            {"measurand": "Power.Active.Import", "value": "7200"},
+            {"measurand": "Voltage", "value": "230"},
+            {"measurand": "Current.Import", "value": "32"},
+        ]
+    )
+    if recovering:
+        transaction = await db_session.get(ChargingSession, tid)
+        transaction.recovery_at = stamp
+        await db_session.flush()
+    uid = str(uuid4())
+
+    async def fail_flush(*args, **kwargs):
+        raise RuntimeError("reply persistence failed")
+
+    with pytest.raises(RuntimeError, match="reply persistence failed"):
+        async with db_session.begin_nested():
+            with monkeypatch.context() as patch:
+                patch.setattr(db_session, "flush", fail_flush)
+                await call(db_session, conn, "MeterValues", payload, uid)
+    assert (
+        await db_session.scalar(
+            select(func.count())
+            .select_from(MeterSample)
+            .where(MeterSample.session_id == tid)
+        )
+        == 0
+    )
+    assert await db_session.get(OcppMessageReply, (charger.id, uid)) is None
+    reply = await call(db_session, conn, "MeterValues", payload, uid)
+    assert reply.kind == 3
+    assert (
+        await call(db_session, conn, "MeterValues", payload, uid)
+    ).payload == reply.payload
+    assert (
+        await db_session.scalar(
+            select(func.count())
+            .select_from(MeterSample)
+            .where(MeterSample.session_id == tid)
+        )
+        == 4
+    )

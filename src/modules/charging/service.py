@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from sqlalchemy import case, literal, select, true
+from sqlalchemy import case, insert, literal, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
@@ -180,6 +180,7 @@ async def store_samples(
             (item.measurand, item.phase, item.location): (item.timestamp, item.value)
             for item in previous
         }
+    rows: list[dict[str, object]] = []
     for block in blocks:
         for sample in block.sampledValue:
             numeric = numeric_sample(sample)
@@ -221,18 +222,31 @@ async def store_samples(
             if block.timestamp < transaction.started_at:
                 logger.warning("ocpp_meter_before_start transaction=%s", transaction.id)
                 continue
-            session.add(
-                MeterSample(
-                    session_id=transaction.id,
-                    timestamp=block.timestamp,
-                    measurand=sample.measurand,
-                    phase=sample.phase,
-                    location=sample.location,
-                    value=value,
-                    unit=unit,
-                )
+            rows.append(
+                {
+                    "session_id": transaction.id,
+                    "timestamp": block.timestamp,
+                    "measurand": sample.measurand,
+                    "phase": sample.phase,
+                    "location": sample.location,
+                    "value": value,
+                    "unit": unit,
+                }
             )
             latest[key] = (block.timestamp, value)
+    if rows:
+        # Samples need no generated IDs. One multi-row INSERT avoids per-sample
+        # ORM state/RETURNING work; the dispatcher's transaction still commits
+        # samples and the durable reply together before sending the ACK.
+        await insert_meter_rows(session, rows)
+
+
+async def insert_meter_rows(
+    session: AsyncSession, rows: list[dict[str, object]]
+) -> None:
+    # Bound parameter count and statement size for buffered, multi-block reports.
+    for offset in range(0, len(rows), 1024):
+        await session.execute(insert(MeterSample).values(rows[offset : offset + 1024]))
 
 
 async def store_recovery_samples(
@@ -255,6 +269,7 @@ async def store_recovery_samples(
                 item.timestamp
             ] = item.value
     series = history
+    rows: list[dict[str, object]] = []
     for block in sorted(blocks, key=lambda item: item.timestamp):
         if block.timestamp < transaction.started_at or (
             transaction.ended_at is not None and block.timestamp > transaction.ended_at
@@ -286,18 +301,19 @@ async def store_recovery_samples(
                     following is not None and value > following
                 ):
                     review(transaction, "meter_regression")
-            session.add(
-                MeterSample(
-                    session_id=transaction.id,
-                    timestamp=block.timestamp,
-                    measurand=sample.measurand,
-                    phase=sample.phase,
-                    location=sample.location,
-                    value=value,
-                    unit=unit,
-                )
+            rows.append(
+                {
+                    "session_id": transaction.id,
+                    "timestamp": block.timestamp,
+                    "measurand": sample.measurand,
+                    "phase": sample.phase,
+                    "location": sample.location,
+                    "value": value,
+                    "unit": unit,
+                }
             )
             points[block.timestamp] = value
+    await insert_meter_rows(session, rows)
 
 
 async def start_transaction(
