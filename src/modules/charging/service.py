@@ -5,8 +5,10 @@ import logging
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
+from functools import lru_cache
+from typing import Any
 
-from sqlalchemy import case, insert, literal, select, true
+from sqlalchemy import Select, bindparam, case, insert, literal, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
@@ -156,9 +158,12 @@ async def store_samples(
     backfill: bool = False,
     latest: dict[tuple[str, str, str], tuple[datetime, Decimal]] | None = None,
     history: dict[tuple[str, str, str], dict[datetime, Decimal]] | None = None,
+    deferred_rows: list[dict[str, object]] | None = None,
 ) -> None:
     if backfill:
-        await store_recovery_samples(session, transaction, blocks, history=history)
+        await store_recovery_samples(
+            session, transaction, blocks, history=history, deferred_rows=deferred_rows
+        )
         return
     if latest is None:
         previous = (
@@ -238,7 +243,10 @@ async def store_samples(
         # Samples need no generated IDs. One multi-row INSERT avoids per-sample
         # ORM state/RETURNING work; the dispatcher's transaction still commits
         # samples and the durable reply together before sending the ACK.
-        await insert_meter_rows(session, rows)
+        if deferred_rows is None:
+            await insert_meter_rows(session, rows)
+        else:
+            deferred_rows.extend(rows)
 
 
 async def insert_meter_rows(
@@ -255,6 +263,7 @@ async def store_recovery_samples(
     blocks: Sequence[MeterBlock],
     *,
     history: dict[tuple[str, str, str], dict[datetime, Decimal]] | None = None,
+    deferred_rows: list[dict[str, object]] | None = None,
 ) -> None:
     """Late buffered samples retain their timestamps, including gaps before newest data."""
     if history is None:
@@ -313,7 +322,10 @@ async def store_recovery_samples(
                 }
             )
             points[block.timestamp] = value
-    await insert_meter_rows(session, rows)
+    if deferred_rows is None:
+        await insert_meter_rows(session, rows)
+    else:
+        deferred_rows.extend(rows)
 
 
 async def start_transaction(
@@ -460,14 +472,13 @@ async def start_transaction(
     return {"transactionId": transaction.id, "idTagInfo": {"status": result}}
 
 
-async def meter_values(
-    session: AsyncSession, charger: ChargePoint, frame: Frame, payload: MeterPayload
-) -> dict[str, object]:
+@lru_cache(maxsize=2)
+def meter_query(has_transaction_id: bool) -> Select[Any]:
     # Recovery needs every timestamp to validate buffered gaps; ordinary reports
     # need only the newest point per series. Fetch either in the same locked read.
     recovery_timestamp = (
         case((ChargingSession.recovery_at.is_not(None), MeterSample.timestamp))
-        if payload.transactionId is not None
+        if has_transaction_id
         else case((literal(False), MeterSample.timestamp))
     )
     latest_sample = (
@@ -499,15 +510,38 @@ async def meter_values(
         .join(Connector, Connector.id == ChargingSession.connector_id)
         .outerjoin(latest_sample, true())
         .where(
-            ChargingSession.charge_point_id == charger.id,
-            Connector.connector_number == payload.connectorId,
+            ChargingSession.charge_point_id == bindparam("meter_charger_id"),
+            Connector.connector_number == bindparam("meter_connector_number"),
         )
     )
-    if payload.transactionId is not None:
-        statement = statement.where(ChargingSession.id == payload.transactionId)
+    if has_transaction_id:
+        statement = statement.where(
+            ChargingSession.id == bindparam("meter_transaction_id")
+        )
     else:
         statement = statement.where(ChargingSession.ended_at.is_(None))
-    rows = (await session.execute(statement.with_for_update(of=ChargingSession))).all()
+    return statement.with_for_update(of=ChargingSession)
+
+
+async def meter_values(
+    session: AsyncSession,
+    charger: ChargePoint,
+    frame: Frame,
+    payload: MeterPayload,
+    *,
+    deferred_rows: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
+    parameters: dict[str, object] = {
+        "meter_charger_id": charger.id,
+        "meter_connector_number": payload.connectorId,
+    }
+    if payload.transactionId is not None:
+        parameters["meter_transaction_id"] = payload.transactionId
+    rows = (
+        await session.execute(
+            meter_query(payload.transactionId is not None), parameters
+        )
+    ).all()
     transaction = rows[0][0] if rows else None
     latest: dict[tuple[str, str, str], tuple[datetime, Decimal]] = {}
     history: dict[tuple[str, str, str], dict[datetime, Decimal]] = {}
@@ -532,6 +566,7 @@ async def meter_values(
             history=history,
             backfill=payload.transactionId is not None
             and transaction.recovery_at is not None,
+            deferred_rows=deferred_rows,
         )
     return {}
 
@@ -624,7 +659,11 @@ async def stop_transaction(
 
 
 async def charging_call(
-    session: AsyncSession, charger: ChargePoint, frame: Frame
+    session: AsyncSession,
+    charger: ChargePoint,
+    frame: Frame,
+    *,
+    deferred_meter_rows: list[dict[str, object]] | None = None,
 ) -> dict[str, object]:
     if any(value is None for value in frame.payload.values()):
         raise ValueError("Null OCPP property")
@@ -641,7 +680,11 @@ async def charging_call(
         )
     if frame.action == "MeterValues":
         return await meter_values(
-            session, charger, frame, MeterPayload.model_validate_json(raw)
+            session,
+            charger,
+            frame,
+            MeterPayload.model_validate_json(raw),
+            deferred_rows=deferred_meter_rows,
         )
     return await stop_transaction(
         session, charger, frame, StopPayload.model_validate_json(raw)

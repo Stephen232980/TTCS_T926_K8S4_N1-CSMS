@@ -35,3 +35,5 @@ Kiểm thử PostgreSQL thật bao phủ hai worker/năm scan, snapshot, số d�
 ## S-19 — Phản hồi số đo
 
 Báo cáo thường và dữ liệu gửi bù sau reconnect ghi các số đo hợp lệ theo lô tối đa 1.024 dòng/câu lệnh, không cần trả về ID từng số đo. Kiểm tra timestamp, đơn vị, hồi quy và trùng giữ nguyên. Dữ liệu cùng durable reply vẫn thuộc một transaction và commit trước OCPP ACK; lỗi ghi reply rollback cả lô, retry không nhân đôi. Ngưỡng CI vẫn 200 ms cho 20 socket, không bỏ worker hoặc bỏ kiểm tra tính bền vững.
+
+Bổ sung tối ưu S-19: dispatcher dùng data-modifying CTE ghi các lô số đo và durable reply trong cùng một câu SQL. Truy vấn khóa phiên/số đo tái sử dụng hai cấu trúc bind-parameter (có/không transactionId), không cache kết quả hoặc bỏ khóa. Mục tiêu giảm round trip và tạo object khi 20 trụ báo đồng thời; không thay ngưỡng NFR, không ACK sớm và không tắt worker nền. Kiểm thử riêng xác nhận hai MeterValues cùng message id đồng thời tạo một tập số đo/một reply, rồi replay qua session mới.

@@ -801,3 +801,77 @@ async def test_meter_batch_and_reply_rollback_together_then_retry(
         )
         == 4
     )
+
+
+@pytest.mark.asyncio
+async def test_concurrent_meter_calls_share_committed_samples_and_reply():
+    from src.modules.ocpp.models import OcppMessageReply
+
+    async with SessionFactory() as session, session.begin():
+        station, charger = await charger_fixture(session)
+        station_id, charger_id, owner_id = station.id, charger.id, station.owner_id
+        connector = Connector(charge_point_id=charger.id, connector_number=1)
+        session.add(connector)
+        await session.flush()
+        transaction = ChargingSession(
+            charge_point_id=charger.id,
+            connector_id=connector.id,
+            tag_tail="TEST",
+            authorization_status="Invalid",
+            started_at=datetime.now(UTC) - timedelta(seconds=30),
+            meter_start_wh=Decimal(1000),
+            review_reasons=[],
+            recovery_at=datetime.now(UTC),
+        )
+        session.add(transaction)
+        await session.flush()
+        tid = transaction.id
+    try:
+        frame = Frame(
+            2,
+            str(uuid4()),
+            meter_payload(tid, datetime.now(UTC), 2000),
+            action="MeterValues",
+        )
+
+        async def deliver():
+            conn = connection(charger_id, station_id)
+            conn.boot_accepted = True
+            return await dispatch_call(conn, frame, record_seen=True)
+
+        first, second = await asyncio.gather(deliver(), deliver())
+        assert first == second == await deliver()
+        assert decode_frame(first).kind == 3
+        async with SessionFactory() as session:
+            assert (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(MeterSample)
+                    .where(MeterSample.session_id == tid)
+                )
+                == 1
+            )
+            assert (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(OcppMessageReply)
+                    .where(
+                        OcppMessageReply.charge_point_id == charger_id,
+                        OcppMessageReply.message_id == frame.message_id,
+                    )
+                )
+                == 1
+            )
+    finally:
+        async with SessionFactory() as session, session.begin():
+            await session.execute(
+                delete(ChargingSession).where(ChargingSession.id == tid)
+            )
+            await session.execute(
+                delete(Connector).where(Connector.charge_point_id == charger_id)
+            )
+            await session.execute(
+                delete(ChargePoint).where(ChargePoint.id == charger_id)
+            )
+            await session.execute(delete(Station).where(Station.id == station_id))
+            await session.execute(delete(User).where(User.id == owner_id))
