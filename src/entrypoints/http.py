@@ -28,6 +28,9 @@ from src.modules.pricing.router import router as tariff_router
 from src.modules.stations.charge_points_router import router as charge_points_router
 from src.modules.stations.discovery_router import router as discovery_router
 from src.modules.stations.photo_router import router as station_photo_router
+from src.modules.stations.power_schedule_router import (
+    router as power_schedule_router,
+)
 from src.modules.stations.router import router as stations_router
 from src.modules.wallet.admin_router import router as admin_wallet_router
 from src.modules.wallet.administration_router import (
@@ -53,6 +56,7 @@ app.include_router(admin_accounts_router)
 app.include_router(admin_audit_router)
 app.include_router(stations_router)
 app.include_router(tariff_router)
+app.include_router(power_schedule_router)
 app.include_router(station_photo_router)
 app.include_router(charge_points_router)
 # S-06: serve the OCPP WebSocket endpoint from the existing ASGI application.
