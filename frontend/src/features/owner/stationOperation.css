@@ -13,3 +13,8 @@
 .owner-operation label { min-width: 0; }
 @media (max-width: 800px) { .owner-heading-actions { max-width: 100%; justify-content: flex-start; } }
 .owner-operation form > p { flex-basis: 100%; margin: 0; font-size: 13px; }
+
+.owner-shell .owner-operation .operation-enable { background: #14795e; color: #fff; }
+.owner-shell .owner-operation .operation-enable:hover:not(:disabled) { background: #0d624b; }
+.owner-shell .owner-operation .operation-suspend { background: #fff0df; color: #8a3b06; }
+.owner-shell .owner-operation .operation-suspend:hover:not(:disabled) { background: #ffe0bc; }

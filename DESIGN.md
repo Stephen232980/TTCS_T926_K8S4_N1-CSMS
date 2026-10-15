@@ -227,3 +227,7 @@ Station photos are authenticated API content loaded into temporary blob URLs and
 - **Don't** invent station imagery, zero readings or financial totals to fill missing data.
 - **Don't** remove focus indicators or leave closed mobile navigation keyboard-accessible.
 - **Don't** promote deferred capability placeholders, review screenshots or demo-only assets into a claimed completed product feature.
+
+Station operation actions use green with white text to enable a station and pale
+orange with dark orange text to suspend it, including the suspension confirmation.
+Labels remain explicit; the adjacent station-information action stays secondary.

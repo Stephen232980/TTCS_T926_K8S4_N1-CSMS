@@ -47,11 +47,11 @@ export function StationOperation({ station, onChanged, onReload }: {
   }
   return <section className="owner-operation" aria-label="Hoạt động của trạm" aria-busy={busy}>
     {station.status === 'blocked' ? <p>Trạm bị quản trị viên khóa. Liên hệ quản trị viên để mở lại.</p> : <>
-      {!confirming && <button type="button" className="secondary-button" disabled={busy} onClick={() => station.status === 'active' ? setConfirming(true) : void change('active')}>{busy ? 'Đang lưu…' : station.status === 'active' ? 'Tạm ngừng trạm' : 'Bật trạm'}</button>}
+      {!confirming && <button type="button" className={`secondary-button ${station.status === 'active' ? 'operation-suspend' : 'operation-enable'}`} disabled={busy} onClick={() => station.status === 'active' ? setConfirming(true) : void change('active')}>{busy ? 'Đang lưu…' : station.status === 'active' ? 'Tạm ngừng trạm' : 'Bật trạm'}</button>}
       {confirming && <form onSubmit={event => { event.preventDefault(); void change('suspended') }}>
         <p>Ẩn trạm và chặn phiên mới. Phiên đang chạy tiếp tục bình thường.</p>
         <label>Lý do tạm ngừng<input ref={input} required maxLength={500} value={reason} disabled={busy} onChange={event => setReason(event.target.value)} /></label>
-        <button className="primary-button" disabled={busy || !reason.trim()}>{busy ? 'Đang lưu…' : 'Xác nhận tạm ngừng'}</button>
+        <button className="primary-button operation-suspend" disabled={busy || !reason.trim()}>{busy ? 'Đang lưu…' : 'Xác nhận tạm ngừng'}</button>
         <button type="button" className="secondary-button" disabled={busy} onClick={() => { setConfirming(false); setReason(''); setError('') }}>Hủy</button>
       </form>}
     </>}
