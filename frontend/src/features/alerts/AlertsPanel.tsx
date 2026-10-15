@@ -29,6 +29,9 @@ const stateLabels = { open: 'Chưa xử lý', acknowledged: 'Đã tiếp nhận'
 
 export function AlertsPanel({ area }: { area: 'ops' | 'owner' | 'admin' }) {
   const contentId = useId()
+  const panelRef = useRef<HTMLDivElement>(null)
+  const sectionRef = useRef<HTMLElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
   const [data, setData] = useState<AlertPage>()
   const [error, setError] = useState('')
   const [actionError, setActionError] = useState('')
@@ -44,6 +47,35 @@ export function AlertsPanel({ area }: { area: 'ops' | 'owner' | 'admin' }) {
   const generation = useRef(0)
   const reasonInput = useRef<HTMLInputElement>(null)
   const path = `/${area}/alerts`
+  function dismiss(restoreFocus = false) {
+    setExpanded(false)
+    setClosing('')
+    if (restoreFocus) triggerRef.current?.focus()
+  }
+  useEffect(() => {
+    if (!expanded) return
+    panelRef.current?.focus()
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setExpanded(false)
+        setClosing('')
+        triggerRef.current?.focus()
+      }
+    }
+    const outside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !sectionRef.current?.contains(event.target)) {
+        setExpanded(false)
+        setClosing('')
+      }
+    }
+    document.addEventListener('keydown', escape)
+    document.addEventListener('pointerdown', outside)
+    return () => {
+      document.removeEventListener('keydown', escape)
+      document.removeEventListener('pointerdown', outside)
+    }
+  }, [expanded])
   useEffect(() => {
     if (closing) {
       reasonInput.current?.focus()
@@ -107,20 +139,24 @@ export function AlertsPanel({ area }: { area: 'ops' | 'owner' | 'admin' }) {
       setRevision(value => value + 1)
     }
   }
-  return <section className="csms-alerts" aria-label="Cảnh báo trụ">
+  return <section ref={sectionRef} className={`csms-alerts${expanded ? ' is-expanded' : ''}`} aria-label="Cảnh báo trụ">
     <div className="csms-alerts-heading">
       <h2>Cảnh báo trụ</h2>
       <span className="csms-alerts-count">Đang mở: {totals.active ?? '…'} · Đã đóng: {totals.closed ?? '…'}</span>
       <div className="csms-alerts-actions">
         <button type="button" disabled={!!busy} onClick={() => { setExpanded(true); setHistory(!history); setPage(1); setData(undefined); setClosing(''); setNotice('') }}>{history ? `Đang mở${totals.active === undefined ? '' : ` (${totals.active})`}` : `Lịch sử${totals.closed === undefined ? '' : ` (${totals.closed})`}`}</button>
-        <button type="button" aria-expanded={expanded} aria-controls={contentId} disabled={!!busy} onClick={() => setExpanded(value => !value)}>{expanded ? 'Thu gọn' : 'Xem cảnh báo'}</button>
+        <button ref={triggerRef} type="button" aria-expanded={expanded} aria-controls={contentId} disabled={!!busy} onClick={() => expanded ? dismiss() : setExpanded(true)}>{expanded ? 'Thu gọn' : 'Xem cảnh báo'}</button>
         <button type="button" className="csms-alerts-refresh" aria-label="Tải lại cảnh báo" title="Tải lại cảnh báo" disabled={!!busy} onClick={() => setRevision(value => value + 1)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M20 12a8 8 0 1 0-2 5" /></svg></button>
       </div>
     </div>
     {error && <p role="alert">{error}</p>}
     {actionError && <p role="alert">{actionError}</p>}
     {notice && <p role="status">{notice}</p>}
-    <div id={contentId} hidden={!expanded}>
+    <div ref={panelRef} id={contentId} className="csms-alerts-popover" role="region" aria-label={history ? 'Lịch sử cảnh báo' : 'Cảnh báo đang mở'} tabIndex={-1} hidden={!expanded}>
+      <div className="csms-alerts-popover-heading">
+        <h3>{history ? 'Lịch sử cảnh báo' : 'Cảnh báo đang mở'}</h3>
+        <button type="button" aria-label="Đóng danh sách cảnh báo" onClick={() => dismiss(true)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg></button>
+      </div>
     {!data && !error && <p role="status">Đang tải cảnh báo…</p>}
     {data && !data.items.length && <p className="csms-alerts-muted">{history ? 'Chưa có cảnh báo đã đóng.' : 'Không có cảnh báo đang mở.'}</p>}
     {data && <ul className="csms-alerts-list">{data.items.map(item => <li key={item.id}>
