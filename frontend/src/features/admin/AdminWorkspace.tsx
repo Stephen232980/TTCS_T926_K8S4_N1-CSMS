@@ -7,9 +7,10 @@ import { AdminAccounts } from './AdminAccounts'
 import { AdminAudit } from './AdminAudit'
 import { AdminHealth } from './AdminHealth'
 import { AdminManualTopup } from './AdminManualTopup'
+import { AdminPrivacyRetention } from './AdminPrivacyRetention'
 import './admin.css'
 
-type Area = 'accounts' | 'audit' | 'health' | 'topup'
+type Area = 'accounts' | 'audit' | 'health' | 'topup' | 'privacy'
 const areas: {
   id: Area
   label: string
@@ -19,6 +20,7 @@ const areas: {
   { id: 'topup', label: 'Nạp tiền thủ công', icon: 'report' },
   { id: 'audit', label: 'Nhật ký thao tác', icon: 'session' },
   { id: 'health', label: 'Sức khỏe hệ thống', icon: 'report' },
+  { id: 'privacy', label: 'Lưu trữ & Quyền riêng tư', icon: 'settings' },
 ]
 const readArea = (): Area =>
   areas.find((a) => window.location.hash === `#admin-${a.id}`)?.id ?? 'accounts'
@@ -91,8 +93,10 @@ export function AdminWorkspace({
           <AdminManualTopup key={currentUser.id} adminId={currentUser.id} />
         ) : area === 'audit' ? (
           <AdminAudit />
-        ) : (
+        ) : area === 'health' ? (
           <AdminHealth />
+        ) : (
+          <AdminPrivacyRetention />
         )}
       </main>
     </div>
