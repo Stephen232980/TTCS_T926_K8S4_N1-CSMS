@@ -88,7 +88,7 @@ async def test_smart_charging_profiles_control_real_socket_power_and_energy(tmp_
             await asyncio.wait_for(ready.wait(), 5)
             config = await command("GetConfiguration", {})
             assert any(
-                row["value"] == "Core,SmartCharging"
+                row["value"] == "Core,SmartCharging,Reservation"
                 for row in config["configurationKey"]
             )
             assert (await command("SetChargingProfile", profile(0)))[

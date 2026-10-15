@@ -231,3 +231,16 @@ Station photos are authenticated API content loaded into temporary blob URLs and
 Station operation actions use green with white text to enable a station and pale
 orange with dark orange text to suspend it, including the suspension confirmation.
 Labels remain explicit; the adjacent station-information action stays secondary.
+
+### Driver reservation actions
+
+In the driver connector view, the return-to-map action precedes the reservation
+list. The closed reservation disclosure is a single 44px row with horizontal
+padding only. The reservation trigger sits immediately after Start charging and
+before Refresh connector status, at the same full width as Start charging. Its
+explanatory copy and arrival/fee form appear in a native modal dialog after activation,
+with explicit confirmation/cancellation, focus containment and Escape/focus return.
+The trigger also initiates capability discovery when needed.
+Pending probes have bounded wait and explicit retry feedback. Keep own-hold and
+booking-confirmation facts visible, and preserve fee consent and persisted retry
+identity. Desktop and mobile follow the same DOM/focus order and existing palette.

@@ -121,6 +121,11 @@ async def probe_capability(db: AsyncSession, connector_id: UUID) -> dict[str, st
         cap.boot_at, cap.supported, cap.checked_at = point.last_boot_at, False, None
         cap.locked_until, cap.lease_token = None, None
         cap.next_attempt_at, cap.outcome = now, "queued"
+    elif not cap.supported and (cap.locked_until is None or cap.locked_until <= now):
+        # An explicit retry must re-probe this boot, including a previous
+        # unsupported reply or transient timeout. Never steal an active lease.
+        cap.checked_at = None
+        cap.next_attempt_at, cap.outcome = now, "queued"
     await db.flush()
     return {"status": capability_status(cap, point)}
 
