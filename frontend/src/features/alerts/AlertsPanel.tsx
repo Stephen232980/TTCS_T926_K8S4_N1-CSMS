@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { ownerRequest } from '../owner/ownerApi'
 import './alerts.css'
 
@@ -28,6 +28,7 @@ const emailLabels: Record<string, string> = {
 const stateLabels = { open: 'Chưa xử lý', acknowledged: 'Đã tiếp nhận', closed: 'Đã đóng' }
 
 export function AlertsPanel({ area }: { area: 'ops' | 'owner' | 'admin' }) {
+  const contentId = useId()
   const [data, setData] = useState<AlertPage>()
   const [error, setError] = useState('')
   const [actionError, setActionError] = useState('')
@@ -35,6 +36,8 @@ export function AlertsPanel({ area }: { area: 'ops' | 'owner' | 'admin' }) {
   const [busy, setBusy] = useState('')
   const [page, setPage] = useState(1)
   const [history, setHistory] = useState(false)
+  const [expanded, setExpanded] = useState(false)
+  const [totals, setTotals] = useState<{ active?: number; closed?: number }>({})
   const [revision, setRevision] = useState(0)
   const [reason, setReason] = useState('')
   const [closing, setClosing] = useState('')
@@ -58,16 +61,27 @@ export function AlertsPanel({ area }: { area: 'ops' | 'owner' | 'admin' }) {
         const result = await ownerRequest<AlertPage>(`${path}?status=${history ? 'closed' : 'active'}&page=${page}`, { signal: controller.signal })
         if (!controller.signal.aborted && current === generation.current) {
           setData(result)
+          setTotals(value => ({ ...value, [history ? 'closed' : 'active']: result.total }))
           setPage(result.page)
           setError('')
         }
       } catch {
-        if (!controller.signal.aborted) setError('Chưa cập nhật được cảnh báo. Dữ liệu đang hiển thị có thể đã cũ.')
+        if (!controller.signal.aborted && current === generation.current) setError('Chưa cập nhật được cảnh báo. Dữ liệu đang hiển thị có thể đã cũ.')
       } finally { running = false }
     }
+    async function loadOtherTotal() {
+      if (document.visibilityState === 'hidden') return
+      try {
+        const other = await ownerRequest<AlertPage>(`${path}?status=${history ? 'active' : 'closed'}&page=1`, { signal: controller.signal })
+        if (!controller.signal.aborted && current === generation.current) setTotals(value => ({ ...value, [history ? 'active' : 'closed']: other.total }))
+      } catch {
+        if (!controller.signal.aborted && current === generation.current) setTotals(value => ({ ...value, [history ? 'active' : 'closed']: undefined }))
+      }
+    }
     void load()
-    const timer = setInterval(() => void load(), 10000)
-    const visible = () => { if (document.visibilityState !== 'hidden') void load() }
+    void loadOtherTotal()
+    const timer = setInterval(() => { void load(); void loadOtherTotal() }, 10000)
+    const visible = () => { if (document.visibilityState !== 'hidden') { void load(); void loadOtherTotal() } }
     document.addEventListener('visibilitychange', visible)
     return () => { controller.abort(); clearInterval(timer); document.removeEventListener('visibilitychange', visible) }
   }, [path, page, history, revision])
@@ -95,15 +109,18 @@ export function AlertsPanel({ area }: { area: 'ops' | 'owner' | 'admin' }) {
   }
   return <section className="csms-alerts" aria-label="Cảnh báo trụ">
     <div className="csms-alerts-heading">
-      <h2>Cảnh báo trụ {data && <span>({data.total})</span>}</h2>
+      <h2>Cảnh báo trụ</h2>
+      <span className="csms-alerts-count">Đang mở: {totals.active ?? '…'} · Đã đóng: {totals.closed ?? '…'}</span>
       <div className="csms-alerts-actions">
-        <button type="button" disabled={!!busy} onClick={() => { setHistory(!history); setPage(1); setData(undefined); setClosing(''); setNotice('') }}>{history ? 'Cảnh báo đang mở' : 'Lịch sử cảnh báo'}</button>
-        <button type="button" disabled={!!busy} onClick={() => setRevision(value => value + 1)}>Tải lại cảnh báo</button>
+        <button type="button" disabled={!!busy} onClick={() => { setExpanded(true); setHistory(!history); setPage(1); setData(undefined); setClosing(''); setNotice('') }}>{history ? `Đang mở${totals.active === undefined ? '' : ` (${totals.active})`}` : `Lịch sử${totals.closed === undefined ? '' : ` (${totals.closed})`}`}</button>
+        <button type="button" aria-expanded={expanded} aria-controls={contentId} disabled={!!busy} onClick={() => setExpanded(value => !value)}>{expanded ? 'Thu gọn' : 'Xem cảnh báo'}</button>
+        <button type="button" className="csms-alerts-refresh" aria-label="Tải lại cảnh báo" title="Tải lại cảnh báo" disabled={!!busy} onClick={() => setRevision(value => value + 1)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M20 12a8 8 0 1 0-2 5" /></svg></button>
       </div>
     </div>
     {error && <p role="alert">{error}</p>}
     {actionError && <p role="alert">{actionError}</p>}
     {notice && <p role="status">{notice}</p>}
+    <div id={contentId} hidden={!expanded}>
     {!data && !error && <p role="status">Đang tải cảnh báo…</p>}
     {data && !data.items.length && <p className="csms-alerts-muted">{history ? 'Chưa có cảnh báo đã đóng.' : 'Không có cảnh báo đang mở.'}</p>}
     {data && <ul className="csms-alerts-list">{data.items.map(item => <li key={item.id}>
@@ -124,6 +141,7 @@ export function AlertsPanel({ area }: { area: 'ops' | 'owner' | 'admin' }) {
       </form>}
     </li>)}</ul>}
     {data && data.total_pages > 1 && <div className="csms-alerts-actions"><button disabled={page === 1 || !!busy} onClick={() => { setPage(page - 1); setData(undefined) }}>Trang trước</button><span>Trang {page}/{data.total_pages}</span><button disabled={page >= data.total_pages || !!busy} onClick={() => { setPage(page + 1); setData(undefined) }}>Trang sau</button></div>}
-    {data && <p className="csms-alerts-muted">Cập nhật {new Date(data.generated_at).toLocaleTimeString('vi-VN')} · Tự cập nhật mỗi 10 giây. Cảnh báo không thay thế trạng thái trực tuyến của trụ.</p>}
+    {data && <p className="csms-alerts-muted">Cập nhật {new Date(data.generated_at).toLocaleTimeString('vi-VN')}</p>}
+    </div>
   </section>
 }

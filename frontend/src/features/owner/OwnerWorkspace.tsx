@@ -637,12 +637,16 @@ export function OwnerWorkspace({
                 <h1>{station?.name ?? (area === 'tariffs' ? 'Biểu giá' : 'Trạm của tôi')}</h1>
                 <p>
                   {station?.address ??
-                    (area === 'tariffs' ? 'Chọn trạm để xem lịch sử và khai báo biểu giá.' : 'Nhận diện và quản lý từng trạm của bạn.')}
+                    (area === 'tariffs' ? 'Chọn trạm' : '')}
                 </p>
               </div>
               <div className="owner-heading-actions">
                 {station ? (
                   <>
+                    <StationOperation key={station.id} station={station} onChanged={(nextStatus, version) => {
+                      setStation({ ...station, status: nextStatus, statusVersion: version })
+                      setRevision(value => value + 1)
+                    }} onReload={() => setRevision(value => value + 1)} />
                     <button
                       className="secondary-button"
                       onClick={() => setForm('edit-station')}
@@ -855,12 +859,8 @@ export function OwnerWorkspace({
                     {connectionError}
                   </p>
                 )}
-                <StationOperation key={station.id} station={station} onChanged={(nextStatus, version) => {
-                  setStation({ ...station, status: nextStatus, statusVersion: version })
-                  setRevision(value => value + 1)
-                }} onReload={() => setRevision(value => value + 1)} />
-                <details><summary>Chính sách phí không đến</summary><ReservationPolicy key={station.id} stationId={String(station.id)} /></details>
                 {area === 'tariffs' ? <div className="owner-tariff-scroll owner-grow" role="region" aria-label="Biểu giá của trạm" tabIndex={0}>
+                  <details><summary>Chính sách phí không đến</summary><ReservationPolicy key={station.id} stationId={String(station.id)} /></details>
                   <TariffHistoryPanel key={station.id} stationId={String(station.id)} />
                 </div> : <div className="owner-detail-grid owner-grow">
                   <section className="owner-chargers">
@@ -1038,7 +1038,7 @@ export function OwnerWorkspace({
                       <div className="owner-placeholder">
                         <Icon name="charger" />
                         <h2>Chọn một đầu nối</h2>
-                        <p>Xem số đo phiên sạc và thông số thiết bị tại đây.</p>
+
                       </div>
                     )}
                   </aside>

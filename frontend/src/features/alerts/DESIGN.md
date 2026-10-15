@@ -120,3 +120,14 @@ Fetch errors and action errors use separate alert messages; successful mutations
 - **Don't** expose mutation controls in the read-only owner view.
 - **Don't** clear retained facts on refresh failure or imply that alerts replace live charge-point status.
 - **Don't** invent severity chips, navigation, imagery or a new brand palette for this extension.
+
+
+## Compact alert summary
+
+The default view is a single compact toolbar, wrapping to two rows on narrow screens.
+Active and closed totals have separate explicit labels and remain visible while the
+list is collapsed. Each total comes from its own server-filtered response; unknown
+counts display an ellipsis rather than zero. History opens the list; collapse only
+hides its contents. Refresh uses a labelled icon button with a mobile touch target.
+The update time remains inside the expanded list; polling explanations are omitted.
+Read-only owner permissions and operator/admin incident actions remain unchanged.

@@ -1,4 +1,4 @@
-.owner-operation { flex-shrink: 0; color: #193d4b; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 0; }
+.owner-operation { flex-shrink: 0; color: #193d4b; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 0; min-width: 0; }
 .owner-operation > p { flex: 1 1 280px; margin: 0; font-size: 13px; color: #526e7b; }
 .owner-operation form { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; width: 100%; }
 .owner-operation label { display: flex; flex-direction: column; gap: 6px; flex: 1 1 240px; font-size: 13px; }
@@ -7,3 +7,9 @@
 .owner-operation [role="alert"] { color: #a3382c; width: 100%; }
 .owner-operation [role="status"] { width: 100%; flex-basis: 100%; }
 @media (max-width: 800px) { .owner-operation button { min-height: 44px; } }
+
+.owner-heading-actions { flex-wrap: wrap; flex-shrink: 1; max-width: 65%; align-items: center; justify-content: flex-end; }
+.owner-heading-actions .owner-operation { max-width: 100%; }
+.owner-operation label { min-width: 0; }
+@media (max-width: 800px) { .owner-heading-actions { max-width: 100%; justify-content: flex-start; } }
+.owner-operation form > p { flex-basis: 100%; margin: 0; font-size: 13px; }
