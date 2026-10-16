@@ -139,3 +139,28 @@ it('retains the cancellation key across timeout and presents cancel_pending as u
   expect(screen.getByText(/Chưa có xác nhận cuối từ trụ/)).toBeInTheDocument()
   expect(screen.getByText('Đã ghi nhận miễn phí không đến.')).toBeInTheDocument()
 })
+
+it('offers compatible alternatives and selecting one closes without submitting again', async () => {
+  const selected = vi.fn()
+  const fetch = vi.fn().mockImplementation(async (_url: string, options?: RequestInit) => options?.method === 'POST'
+    ? {ok:false,status:409,json:async()=>({detail:{reason:'connector_reserved',alternatives:[{connector_id:'second',charge_point_code:'CP-2',connector_number:2}]}})}
+    : response({fee_vnd:0,version:0}))
+  vi.stubGlobal('fetch',fetch)
+  render(<ReservationForm connectorId="connector" capability="supported" available ownerId="owner" onChanged={vi.fn()} onSelectAlternative={selected} />)
+  await userEvent.click(screen.getByRole('button',{name:'Đặt trước đầu nối'}))
+  await userEvent.click(screen.getByRole('button',{name:'Xác nhận đặt chỗ'}))
+  await userEvent.click(await screen.findByRole('button',{name:'Chọn CP-2 · Đầu nối 2'}))
+  expect(selected).toHaveBeenCalledWith('second')
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(fetch.mock.calls.filter(([,options])=>options?.method==='POST')).toHaveLength(1)
+  expect(sessionStorage.getItem('csms:reservation:owner:connector')).toBeNull()
+})
+
+it.each(['connector_reserved', {reason:'connector_reserved',alternatives:[null,{}, {connector_id:'bad',charge_point_code:'CP',connector_number:-1}]}])('handles legacy or malformed conflict hints with an empty state', async detail => {
+  vi.stubGlobal('fetch',vi.fn().mockImplementation(async (_url: string,options?:RequestInit)=>options?.method==='POST'
+    ? {ok:false,status:409,json:async()=>({detail})} : response({fee_vnd:0,version:0})))
+  render(<ReservationForm connectorId="connector" capability="supported" available ownerId="owner" onChanged={vi.fn()} />)
+  await userEvent.click(screen.getByRole('button',{name:'Đặt trước đầu nối'}))
+  await userEvent.click(screen.getByRole('button',{name:'Xác nhận đặt chỗ'}))
+  expect(await screen.findByText(/Chưa có đầu nối thay thế phù hợp/)).toBeInTheDocument()
+})

@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import Date, cast, exists, func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from src.modules.charging.driver_models import DriverStartRequest
 from src.modules.charging.models import ChargingSession
@@ -16,12 +17,7 @@ from src.modules.reservations.service import holds_connector
 from src.modules.stations.models import ChargePoint, Connector, Station
 
 
-async def summaries(
-    db: AsyncSession, stations: list[Station], now: datetime
-) -> dict[UUID, dict[str, object]]:
-    if not stations:
-        return {}
-    ids = [station.id for station in stations]
+def available_connector(now: datetime) -> ColumnElement[bool]:
     occupied = exists().where(
         ChargingSession.connector_id == Connector.id,
         or_(
@@ -35,7 +31,7 @@ async def summaries(
         DriverStartRequest.status.in_(("Pending", "Accepted")),
         DriverStartRequest.lease_until > now,
     )
-    available = (
+    return (
         (ChargePoint.status == "online")
         & ChargePoint.last_boot_at.is_not(None)
         & ~expired(now)
@@ -50,12 +46,67 @@ async def summaries(
         & ~pending
         & ~holds_connector()
     )
+
+
+async def reservation_alternatives(
+    db: AsyncSession, connector: Connector, station: Station, now: datetime
+) -> list[dict[str, object]]:
+    """Read-only hints; admission must still recheck on the next booking."""
+    if station.status != "active" or station.archived_at is not None:
+        return []
+    # Booking admission conservatively rejects any unresolved start intent,
+    # including one whose lease elapsed; don't suggest a known blocked target.
+    unresolved_start = exists().where(
+        DriverStartRequest.connector_id == Connector.id,
+        DriverStartRequest.status.in_(("Pending", "Accepted")),
+    )
+    rows = (
+        await db.execute(
+            select(Connector.id, ChargePoint.code, Connector.connector_number)
+            .join(ChargePoint, Connector.charge_point_id == ChargePoint.id)
+            .join(
+                ReservationCapability,
+                ReservationCapability.charge_point_id == ChargePoint.id,
+            )
+            .where(
+                ChargePoint.station_id == station.id,
+                ChargePoint.archived_at.is_(None),
+                Connector.archived_at.is_(None),
+                Connector.id != connector.id,
+                Connector.connector_type == connector.connector_type,
+                Connector.current_type == connector.current_type,
+                available_connector(now),
+                ~unresolved_start,
+                ReservationCapability.supported.is_(True),
+                ReservationCapability.checked_at.is_not(None),
+                ReservationCapability.boot_at == ChargePoint.last_boot_at,
+            )
+            .order_by(ChargePoint.code, Connector.connector_number, Connector.id)
+            .limit(3)
+        )
+    ).all()
+    return [
+        {
+            "connector_id": str(row.id),
+            "charge_point_code": row.code,
+            "connector_number": row.connector_number,
+        }
+        for row in rows
+    ]
+
+
+async def summaries(
+    db: AsyncSession, stations: list[Station], now: datetime
+) -> dict[UUID, dict[str, object]]:
+    if not stations:
+        return {}
+    ids = [station.id for station in stations]
     rows = (
         await db.execute(
             select(
                 ChargePoint.station_id,
                 Connector,
-                available.label("available"),
+                available_connector(now).label("available"),
                 (
                     (ReservationCapability.supported == True)
                     & ReservationCapability.checked_at.is_not(None)

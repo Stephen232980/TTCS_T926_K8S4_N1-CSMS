@@ -77,3 +77,35 @@ Triển khai kế thừa một OCPP gateway process của hệ thống. DB locks
 `tests/test_g5_reservations.py`: PostgreSQL thật, migration downgrade/upgrade giữ dữ liệu nền, 20 yêu cầu từ hai process chỉ một hold/outbox, toàn bộ ReserveNow enums, timeout/disconnect/restart, miễn trừ hủy trước hạn, ví kiểm tra lại, consume/replay, suspended, expiry nguồn mới và WebSocket TCP thật GetConfiguration → ReserveNow → CancelReservation → ReserveNow → StartTransaction → StopTransaction(EVDisconnected) → ClosureRunner.worker tự chốt hóa đơn và trừ ví đúng một lần.
 
 `frontend/src/features/reservations/reservations.test.tsx`: capability pending, retry UUID/body sau timeout và remount, ngày lưu lỗi, Cancel pending không báo đã hủy. CI/CD, SMTP và hardware/staging không được coi là đã xác minh bởi các kiểm thử local này.
+
+## Cập nhật S-49: đầu nối thay thế khi đặt trùng
+
+`POST /api/v1/driver/reservations` trả 409 với `detail` dạng
+`{reason: "connector_reserved", alternatives: [{connector_id, charge_point_code,
+connector_number}], generated_at}` khi đầu nối đã bị giữ chỗ. Các lỗi khác giữ
+nguyên hợp đồng. Danh sách tối đa 3, sắp theo mã trụ/số đầu nối/id, chỉ cùng trạm,
+cùng loại đầu nối và AC/DC, trạm hoạt động, trụ trực tuyến có heartbeat hợp lệ,
+đầu nối Available, chưa lưu trữ, không phiên sạc/chờ rút súng/start intent/hold,
+và đã xác minh Reservation trên boot hiện tại. Không có ứng viên thì trả `[]`.
+
+Đây là gợi ý tại thời điểm đọc, không phải giữ chỗ. Tài xế bấm gợi ý để đổi
+lựa chọn; popup đóng, focus về bộ chọn đầu nối. Lần đặt tiếp theo kiểm tra lại
+trạng thái, tải phí và yêu cầu đồng ý/xác nhận lại với UUID mới. Không tự đặt
+chỗ hoặc chuyển yêu cầu chưa rõ kết quả sang đầu nối khác. UI vẫn đọc được
+lỗi `connector_reserved` dạng chuỗi từ backend cũ và bỏ qua gợi ý sai cấu trúc.
+
+### Coverage Matrix cho phần bổ sung
+
+| Điều kiện | Bằng chứng |
+|---|---|
+| Một người thắng khi đặt đồng thời; người thua 409 | `test_g5_reservations.py` (20 yêu cầu, hai process); khóa/unique index không đổi |
+| 409 có tối đa 3 gợi ý cùng trạm, thứ tự ổn định, không thêm hold/outbox | `test_s49_alternatives.py` |
+| Loại sai chuẩn/AC-DC, lỗi, offline, heartbeat cũ, archive, capability cũ/không hỗ trợ, hold | `test_s49_alternatives.py`; các phiên/start intent dùng chung predicate với discovery đã có kiểm thử G4 |
+| Không có gợi ý; payload cũ/sai cấu trúc | API test S-49 và `reservations.test.tsx` |
+| Chọn gợi ý không tự gửi; UUID/đồng ý phí mới | `reservations.test.tsx`, `DriverCharging.test.tsx` |
+| Giao diện 1366px/360px, tên trụ dài, không tràn ngang, chọn và xác nhận lại | Kiểm tra trình duyệt local với dữ liệu mô phỏng; không thay thế nghiệm thu staging |
+
+Không có migration. Triển khai backend trước hoặc cùng frontend; frontend cũ
+đọc được `detail.reason`, frontend mới chấp nhận lỗi dạng chuỗi cũ. Sau khi
+merge/deploy cần nghiệm thu hai tài xế tranh một đầu nối và bấm gợi ý trên staging
+trước khi chuyển S-49 sang Done.
