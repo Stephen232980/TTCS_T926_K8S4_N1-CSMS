@@ -6,6 +6,9 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.entrypoints.lifecycle import application_lifespan
+from src.modules.accounting.router import (
+    router as accounting_reconciliation_router,
+)
 from src.modules.alerts.router import admin_router as admin_alert_router
 from src.modules.alerts.router import ops_router as ops_alert_router
 from src.modules.alerts.router import owner_router as owner_alert_router
@@ -60,6 +63,7 @@ for documentation_route in app.routes:
     )
 app.include_router(identity_router)
 app.include_router(accounting_finance_router)
+app.include_router(accounting_reconciliation_router)
 app.include_router(reporting_router)
 app.include_router(admin_accounts_router)
 app.include_router(admin_audit_router)

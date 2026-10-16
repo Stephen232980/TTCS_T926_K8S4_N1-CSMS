@@ -3,6 +3,7 @@ import { reviewLabels } from '../owner/ownerApi'
 import { FinanceTechnical } from './FinanceTechnical'
 import { FinanceInsights } from './FinanceInsights'
 import { InvoiceRegister, ReconciliationQueue } from './FinanceRegisters'
+import { ReconciliationRunsView } from './ReconciliationRunsView'
 import { FinanceSummary } from './FinanceSummary'
 import { ageLabels, energy, financeHints, financeLink, financeRequest, financeTitles, financialLabels, financialQuery, instant, money, navigateFinance, type FinanceArea, type FinancialDetail, type FinancialPage, type FinancialSession, type StationOption } from './financeApi'
 
@@ -83,12 +84,13 @@ export function FinancePage({ area }: {area:FinanceArea}) {
   const key = `${path}:${revision}`
   const chartsReady=useCallback(()=>setChartsKey(key),[key])
   useEffect(()=>{
+    if (area === 'runs') return
     const controller=new AbortController()
     void financeRequest<FinancialPage|FinancialDetail>(path,controller.signal).then(data=>{
       if(!controller.signal.aborted)setRecord('items' in data ? {key,list:data,at:new Date().toISOString()} : {key,detail:data,at:new Date().toISOString()})
     }).catch(error=>{if(!controller.signal.aborted)setRecord({key,error:error instanceof Error ? error.message : 'Không tải được dữ liệu.'})})
     return()=>controller.abort()
-  },[path,key])
+  },[path,key,area])
   useEffect(()=>{
     const controller=new AbortController()
     void financeRequest<{items:StationOption[]}>('/finance/stations',controller.signal).then(data=>{if(!controller.signal.aborted){setStations(data.items);setStationsError('')}}).catch(()=>{if(!controller.signal.aborted)setStationsError('Chưa tải được danh sách trạm. Bạn vẫn có thể tìm theo mã phiên hoặc email, hoặc bấm Làm mới.')})
@@ -104,6 +106,11 @@ export function FinancePage({ area }: {area:FinanceArea}) {
   function rememberScroll(){window.history.replaceState({...window.history.state,accountingScroll:{main:document.querySelector('.accountant-page')?.scrollTop??0,window:window.scrollY}},'')}
   function goPage(page:number){const next=new URLSearchParams(listParams);next.set('page',String(page));window.history.replaceState({...window.history.state,accountingScroll:{main:0,window:0}},'');navigateFinance(area,next)}
   const list=current?.list
+
+  if (area === 'runs') {
+    return <ReconciliationRunsView stations={stations} />
+  }
+
   return <section className="finance-workspace" aria-labelledby="finance-title">
     <div className="finance-sticky-header">
     <header className="finance-heading"><div><h1 id="finance-title">{financeTitles[area]}</h1><p>{area==='sessions'?'Theo dõi phiên, hóa đơn và khoản trừ ví trên toàn hệ thống.':area==='invoices'?'Tra cứu hóa đơn phí sạc đã lưu và chi tiết từng khoản phí.':'Theo dõi phiên có dữ liệu cần kiểm tra hoặc đã kết thúc nhưng chưa quyết toán.'}</p></div><button onClick={()=>setRevision(r=>r+1)}>Làm mới</button></header>
