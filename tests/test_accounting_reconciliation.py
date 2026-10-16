@@ -212,7 +212,9 @@ async def test_reconciliation_detects_all_anomalies() -> None:
     c4.meter_start_wh = Decimal(0)
     c4.meter_stop_wh = Decimal(5000)
     c4.settlement_reason = "debited"
-    inv4 = MagicMock(id=uuid4(), driver_id=driver_id, total_vnd=19251)  # 1 VND mismatch!
+    inv4 = MagicMock(
+        id=uuid4(), driver_id=driver_id, total_vnd=19251
+    )  # 1 VND mismatch!
     led4 = MagicMock(amount_vnd=-19251, reference_type="charging_session")
     w4 = MagicMock(driver_id=driver_id)
     r4 = (c4, inv4, MagicMock(id=st_id), MagicMock(), MagicMock(), None, led4, w4)

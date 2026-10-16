@@ -27,13 +27,19 @@ from src.platform.database.base import Base
 class ReconciliationRun(Base):
     __tablename__ = "reconciliation_runs"
     __table_args__ = (
-        CheckConstraint("date_from <= date_to", name="ck_reconciliation_runs_date_range"),
-        CheckConstraint("total_sessions >= 0", name="ck_reconciliation_runs_total_sessions"),
+        CheckConstraint(
+            "date_from <= date_to", name="ck_reconciliation_runs_date_range"
+        ),
+        CheckConstraint(
+            "total_sessions >= 0", name="ck_reconciliation_runs_total_sessions"
+        ),
         Index("ix_reconciliation_runs_created", "created_at"),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    period_type: Mapped[str] = mapped_column(String(20), default="month", nullable=False)
+    period_type: Mapped[str] = mapped_column(
+        String(20), default="month", nullable=False
+    )
     date_from: Mapped[date] = mapped_column(Date, nullable=False)
     date_to: Mapped[date] = mapped_column(Date, nullable=False)
     station_id: Mapped[UUID | None] = mapped_column(
@@ -50,7 +56,9 @@ class ReconciliationRun(Base):
     total_sessions: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     matched_sessions: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     mismatch_sessions: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    missing_data_sessions: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    missing_data_sessions: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
     total_meter_kwh: Mapped[Decimal] = mapped_column(
         Numeric(24, 6), default=Decimal(0), nullable=False
     )
@@ -61,13 +69,21 @@ class ReconciliationRun(Base):
         Numeric(24, 6), default=Decimal(0), nullable=False
     )
     total_billed_vnd: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
-    total_recomputed_vnd: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
-    total_debited_vnd: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
-    money_discrepancy_vnd: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
+    total_recomputed_vnd: Mapped[int] = mapped_column(
+        BigInteger, default=0, nullable=False
+    )
+    total_debited_vnd: Mapped[int] = mapped_column(
+        BigInteger, default=0, nullable=False
+    )
+    money_discrepancy_vnd: Mapped[int] = mapped_column(
+        BigInteger, default=0, nullable=False
+    )
     summary_counts: Mapped[dict[str, Any]] = mapped_column(
         JSONB, default=dict, server_default="{}", nullable=False
     )
-    algorithm_version: Mapped[str] = mapped_column(String(20), default="1.0", nullable=False)
+    algorithm_version: Mapped[str] = mapped_column(
+        String(20), default="1.0", nullable=False
+    )
     input_hash: Mapped[str] = mapped_column(String(64), nullable=False)
 
 
@@ -100,7 +116,9 @@ class ReconciliationIssue(Base):
     money_difference_vnd: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     meter_kwh: Mapped[Decimal | None] = mapped_column(Numeric(24, 6), nullable=True)
     billed_kwh: Mapped[Decimal | None] = mapped_column(Numeric(24, 6), nullable=True)
-    kwh_difference: Mapped[Decimal | None] = mapped_column(Numeric(24, 6), nullable=True)
+    kwh_difference: Mapped[Decimal | None] = mapped_column(
+        Numeric(24, 6), nullable=True
+    )
     details: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
