@@ -135,3 +135,62 @@ tối đa 5 lệnh đồng thời. Sau khi một xe nhường tải: 9 x 3.333 k
 trong ngân sách 30 kW; kiểm tổng W tại mỗi lần áp profile, thứ tự giảm trước
 tăng và kế hoạch không đổi không gửi lại profile đều đạt. Đây là số đo local
 trong cấu hình kiểm thử trên, chưa phải số đo staging/hardware hay p95.
+
+## Bổ sung S-43: SmartCharging cho demo staging
+
+Script `scripts/staging_demo.py` hiện hỗ trợ `Core,Reservation,SmartCharging`,
+khai báo đơn vị Power/W và stack tối đa 1. Nó nhận tập profile mà worker CSMS
+phát: `TxDefaultProfile` stack 0 và `TxProfile` stack 1 gắn đúng transaction,
+Absolute, một kỳ bắt đầu tại 0, không hết hạn. Profile khác bị Rejected thay vì
+nhận ACK nhưng bỏ qua. GetCompositeSchedule trả giới hạn đang có hiệu lực theo W;
+ClearChargingProfile lọc theo id/connector/purpose/stack và lưu kết quả.
+
+Giới hạn đi vào `ConnectorState.offered_watts` và `meter_samples`: baseline 0 W
+không tăng điện năng sau start; các khoảng trước/sau đổi profile được tích phân
+riêng, StopTransaction chốt meterStop theo profile cuối. TxProfile cũ được bỏ
+khi kết thúc phiên; baseline vẫn áp dụng cho xe mới. File `.power.private.json`
+riêng từng trụ được ghi nguyên tử, fsync trước Accepted, quyền 0600. Restart chỉ
+khôi phục TxProfile khi transaction còn khớp DB; file lỗi làm trụ từ chối boot.
+Lỗi ghi file trả Rejected và giữ mức cũ. Đây là mô phỏng, không phải chứng nhận
+thiết bị hoặc bảo vệ điện vật lý.
+
+Phần Reservation từng được cập nhật riêng trên script đang mount cũng được
+đưa vào repository: giữ chỗ đúng thẻ, lưu trạng thái, hết hạn/hủy và truyền
+reservationId khi bắt đầu. Giữ RemoteStop → Finishing → rút súng riêng.
+Không thay tên trạm, marker hoặc dữ liệu seed trong bản bổ sung này.
+
+### Coverage Matrix cho bản bổ sung
+
+| Phần bổ sung | Kiểm chứng |
+|---|---|
+| Capability, Set/GetComposite/Clear qua WebSocket thật | `tests/test_staging_demo_power.py` |
+| Nhiều start dưới 0 W; sau cấp tải tổng 3 × 1 kW = 3 kW, điện năng tăng đúng; đổi profile/stop không mất đoạn đo | `test_real_wire_profiles_bound_multi_start_power_and_energy` |
+| Restart thực của Charger.run giữ baseline và TxProfile đúng phiên; clear profile và xe mới trở về 0 W | `test_actual_demo_restart_restores_profiles_before_boot_and_start` |
+| Sai transaction/đơn vị/stack/kiểu dữ liệu/thời hạn hoặc nhiều kỳ bị từ chối | Parametrized `test_unsupported_profiles_are_rejected_without_changing_baseline` |
+| Ghi đĩa lỗi không ACK giả; file lưu lỗi từ chối boot | Persistence tests trong `test_staging_demo_power.py` |
+| Giữ chỗ đúng thẻ và reservationId; không mất baseline | `test_reservation_ownership_survives_start_under_zero_baseline` |
+| RemoteStop không tự coi đã rút súng | `tests/test_staging_demo_protocol.py` |
+| Cập nhật đúng script đang mount, không seed; chặn khi có hoạt động hoặc chia tải đang bật | `tests/test_staging_demo_update.py` |
+
+### Cập nhật runtime sau merge/deploy
+
+Image backend mới không tự thay file `/demo/staging_demo.py` đang bind mount.
+Sau review, merge và pipeline staging thành công, chạy:
+
+```powershell
+.\scripts\update-csms-staging-demo.ps1
+```
+
+Lệnh lấy script từ **image backend đang chạy**, kiểm tra namespace/manifest,
+phiên mở/chờ rút súng, hold, start intent và power control đang bật, kiểm tra lại
+ngay trước dừng. Có hoạt động thì từ chối. Cần hai cờ demo hiện có được bật;
+lệnh không sửa cấu hình backend để vượt điều kiện này. Nó sao lưu script cũ,
+dừng simulator êm, thay script đang mount, chạy lại bằng image hiện hành với
+`seed=False`, chờ 20/20 online. Không ghi lại tài khoản, ví, tên trạm, hold hay
+profile. Không dùng lệnh start/seed để cập nhật môi trường đã có dữ liệu.
+
+Nếu startup chưa được xác nhận, giữ backup và báo lỗi để kiểm tra; không tự
+kill phiên mới xuất hiện để rollback. Không tự triển khai chỉ vì PR được tạo.
+Sau cập nhật vẫn cần nghiệm thu S-43 trên staging: kiểm baseline, ghi bằng chứng
+mô phỏng trước bật chia tải; đo profile/composite/MeterValues với nhiều phiên,
+các nhánh lỗi/offline/reboot. Jira chưa được chuyển Done bởi bản sửa local này.
