@@ -163,3 +163,31 @@ it('copies issue evidence to clipboard with feedback', async () => {
   expect(clipboard).toHaveBeenCalledWith(expect.stringContaining('Phiên #101'))
   expect(await screen.findByText('Đã sao chép để chuyển vận hành')).toBeInTheDocument()
 })
+
+it('exports reconciliation issues CSV when Xuất CSV button is clicked', async () => {
+  const fetcher = mockApi()
+  const user = userEvent.setup()
+  window.URL.createObjectURL = vi.fn(() => 'blob:mock-url')
+  window.URL.revokeObjectURL = vi.fn()
+
+  render(<ReconciliationRunsView stations={[]} />)
+
+  await user.click(await screen.findByRole('button', { name: /Xem chi tiết/ }))
+  await screen.findByRole('link', { name: 'Phiên #101' })
+
+  const exportBtn = screen.getByRole('button', {
+    name: 'Xuất CSV sai lệch đối soát',
+  })
+  expect(exportBtn).toBeInTheDocument()
+  await user.click(exportBtn)
+
+  await waitFor(() => {
+    expect(fetcher).toHaveBeenCalledWith(
+      expect.stringContaining(
+        '/reconciliation-runs/run-12345678-abcd/issues/export',
+      ),
+      expect.objectContaining({ credentials: 'include' }),
+    )
+  })
+})
+

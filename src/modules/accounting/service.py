@@ -7,6 +7,8 @@ from typing import Any
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
+from fastapi import HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy import String, and_, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,8 +19,26 @@ from src.modules.charging.models import ChargingSession
 from src.modules.identity.models import User
 from src.modules.stations.models import ChargePoint, Connector, Station
 from src.modules.wallet.models import Wallet, WalletLedger
+from src.platform.csv_export import build_csv_streaming_response
 
 REPORT_TIMEZONE = ZoneInfo("Asia/Ho_Chi_Minh")
+
+RECONCILIATION_ISSUES_CSV_HEADERS: list[str] = [
+    "run_id",
+    "session_id",
+    "invoice_id",
+    "issue_code",
+    "severity",
+    "expected_vnd",
+    "actual_vnd",
+    "debited_vnd",
+    "delta_vnd",
+    "meter_kwh",
+    "billed_kwh",
+    "kwh_difference",
+    "details",
+    "status",
+]
 
 
 def resolve_reconciliation_bounds(
@@ -567,3 +587,63 @@ async def get_reconciliation_issues(
         )
 
     return items, total
+
+
+async def export_reconciliation_issues_csv(
+    db: AsyncSession,
+    run_id: UUID,
+    severity: str | None = None,
+    issue_type: str | None = None,
+) -> StreamingResponse:
+    run = await db.scalar(
+        select(ReconciliationRun).where(ReconciliationRun.id == run_id)
+    )
+    if not run:
+        raise HTTPException(status_code=404, detail="Không tìm thấy phiên đối soát")
+
+    stmt = (
+        select(
+            ReconciliationIssue,
+            Invoice.id.label("invoice_id"),
+        )
+        .outerjoin(Invoice, Invoice.session_id == ReconciliationIssue.session_id)
+        .where(ReconciliationIssue.run_id == run_id)
+    )
+    if severity:
+        stmt = stmt.where(ReconciliationIssue.severity == severity)
+    if issue_type:
+        stmt = stmt.where(ReconciliationIssue.issue_type == issue_type)
+
+    stmt = stmt.order_by(
+        ReconciliationIssue.severity.asc(),
+        ReconciliationIssue.created_at.desc(),
+    )
+
+    rows_res = (await db.execute(stmt)).all()
+    csv_rows: list[list[Any]] = []
+    for issue, inv_id in rows_res:
+        csv_rows.append(
+            [
+                str(issue.run_id),
+                issue.session_id,
+                str(inv_id) if inv_id is not None else "",
+                issue.issue_type,
+                issue.severity,
+                issue.recomputed_vnd if issue.recomputed_vnd is not None else "",
+                issue.billed_vnd if issue.billed_vnd is not None else "",
+                issue.debited_vnd if issue.debited_vnd is not None else "",
+                issue.money_difference_vnd
+                if issue.money_difference_vnd is not None
+                else "",
+                issue.meter_kwh if issue.meter_kwh is not None else "",
+                issue.billed_kwh if issue.billed_kwh is not None else "",
+                issue.kwh_difference if issue.kwh_difference is not None else "",
+                issue.details,
+                run.status,
+            ]
+        )
+
+    filename = f"reconciliation_issues_{run_id}.csv"
+    return build_csv_streaming_response(
+        filename, RECONCILIATION_ISSUES_CSV_HEADERS, csv_rows
+    )

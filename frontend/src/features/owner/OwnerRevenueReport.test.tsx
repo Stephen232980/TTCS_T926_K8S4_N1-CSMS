@@ -211,3 +211,41 @@ it('displays empty message when period has no charging data', async () => {
   )
   expect(screen.getByText('Tổng doanh thu hóa đơn')).toBeInTheDocument()
 })
+
+it('triggers CSV export when Xuất CSV button is clicked', async () => {
+  const user = userEvent.setup()
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.includes('/export')) {
+      return new Response('\ufeffperiod_from,period_to\n', {
+        headers: {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition':
+            'attachment; filename="revenue_report_20261101_20261201.csv"',
+        },
+      })
+    }
+    return new Response(JSON.stringify(mockReport))
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  window.URL.createObjectURL = vi.fn(() => 'blob:mock-url')
+  window.URL.revokeObjectURL = vi.fn()
+
+  render(<OwnerRevenueReport />)
+
+  await screen.findByText('Tổng doanh thu hóa đơn')
+
+  const exportBtn = screen.getByRole('button', {
+    name: 'Xuất CSV báo cáo doanh thu',
+  })
+  expect(exportBtn).toBeInTheDocument()
+  await user.click(exportBtn)
+
+  await waitFor(() => {
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/owner/reports/revenue/export'),
+      expect.objectContaining({ credentials: 'include' }),
+    )
+  })
+})
+

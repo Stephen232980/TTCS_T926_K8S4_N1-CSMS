@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
+  exportOwnerRevenueCsv,
   fetchRevenueReport,
   formatKwh,
   formatVnd,
@@ -25,9 +26,11 @@ export function OwnerRevenueReport({
   const [page, setPage] = useState(1)
 
   const [loading, setLoading] = useState(true)
+  const [exporting, setExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [report, setReport] = useState<RevenueReportResponse | null>(null)
   const [refreshCount, setRefreshCount] = useState(0)
+
 
   useEffect(() => {
     let ignore = false
@@ -73,6 +76,27 @@ export function OwnerRevenueReport({
     setError(null)
     setRefreshCount((c) => c + 1)
   }
+
+  const handleExportCsv = async () => {
+    try {
+      setExporting(true)
+      await exportOwnerRevenueCsv({
+        period,
+        date_from: dateFrom || undefined,
+        date_to: dateTo || undefined,
+        station_id: stationId || undefined,
+      })
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Xuất CSV thất bại. Vui lòng thử lại.',
+      )
+    } finally {
+      setExporting(false)
+    }
+  }
+
 
   // Daily timeline max calculation for bar height
   const maxInvoice = report?.daily_timeline
@@ -171,6 +195,15 @@ export function OwnerRevenueReport({
             disabled={loading}
           >
             Làm mới
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={handleExportCsv}
+            aria-label="Xuất CSV báo cáo doanh thu"
+            disabled={loading || exporting}
+          >
+            {exporting ? 'Đang xuất…' : 'Xuất CSV'}
           </button>
         </div>
       </div>

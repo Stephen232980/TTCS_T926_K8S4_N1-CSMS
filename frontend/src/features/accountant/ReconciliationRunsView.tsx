@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import {
   createReconciliationRun,
   energy,
+  exportReconciliationIssuesCsv,
   getReconciliationRunDetail,
   getReconciliationRunIssues,
   getReconciliationRuns,
@@ -26,6 +27,8 @@ export function ReconciliationRunsView({ stations }: Props) {
   const [issuesPage, setIssuesPage] = useState(1)
   const [issuesCategory, setIssuesCategory] = useState<string>('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [exportingIssues, setExportingIssues] = useState(false)
+
 
   // Create form state
   const [formOpen, setFormOpen] = useState(false)
@@ -125,6 +128,23 @@ Bằng chứng: ${JSON.stringify(issue.evidence, null, 2)}`
       // Fallback
     }
   }
+
+  const handleExportIssuesCsv = async () => {
+    if (!selectedRunId) return
+    setExportingIssues(true)
+    try {
+      await exportReconciliationIssuesCsv(
+        selectedRunId,
+        undefined,
+        issuesCategory || undefined,
+      )
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Xuất CSV thất bại.')
+    } finally {
+      setExportingIssues(false)
+    }
+  }
+
 
   return (
     <section className="finance-workspace" aria-labelledby="reconciliation-runs-title">
@@ -328,8 +348,19 @@ Bằng chứng: ${JSON.stringify(issue.evidence, null, 2)}`
           {/* Issue category filter tabs */}
           <section className="finance-panel finance-issues-section" aria-label="Danh sách sai lệch chi tiết">
             <div className="finance-section-heading">
-              <h2>Sai lệch &amp; Hồ sơ chuyển vận hành ({issuesTotal.toLocaleString('vi-VN')})</h2>
-              <span>Dung sai tiền = 0 VND</span>
+              <div>
+                <h2>Sai lệch &amp; Hồ sơ chuyển vận hành ({issuesTotal.toLocaleString('vi-VN')})</h2>
+                <span>Dung sai tiền = 0 VND</span>
+              </div>
+              <button
+                type="button"
+                className="finance-button"
+                onClick={handleExportIssuesCsv}
+                disabled={exportingIssues}
+                aria-label="Xuất CSV sai lệch đối soát"
+              >
+                {exportingIssues ? 'Đang xuất…' : 'Xuất CSV'}
+              </button>
             </div>
 
             <div className="finance-category-tabs" role="tablist">

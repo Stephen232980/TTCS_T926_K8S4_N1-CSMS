@@ -2,9 +2,12 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from math import ceil
+from typing import Any
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
+from fastapi import HTTPException
+from fastapi.responses import StreamingResponse
 from sqlalchemy import String, and_, case, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,6 +24,7 @@ from src.modules.reporting.schemas import (
 )
 from src.modules.stations.models import ChargePoint, Station
 from src.modules.wallet.models import WalletLedger
+from src.platform.csv_export import build_csv_streaming_response
 
 REPORT_TIMEZONE = ZoneInfo("Asia/Ho_Chi_Minh")
 
@@ -88,14 +92,47 @@ def resolve_report_range(
     return start_dt, end_dt
 
 
-async def get_revenue_report(
+REVENUE_CSV_HEADERS: list[str] = [
+    "period_from",
+    "period_to",
+    "timezone",
+    "station_id",
+    "station_name",
+    "charge_point_id",
+    "charge_point_code",
+    "sessions",
+    "energy_kwh",
+    "energy_vnd",
+    "idle_vnd",
+    "invoice_total_vnd",
+    "debited_vnd",
+]
+
+
+async def _compute_revenue_data(
     db: AsyncSession,
     query: RevenueReportQuery,
     owner_id: UUID | None = None,
-) -> RevenueReportResponse:
+) -> tuple[
+    datetime,
+    datetime,
+    list[ChargePointRevenueItem],
+    RevenueSummary,
+    list[DailyRevenueItem],
+]:
     start_dt, end_dt = resolve_report_range(
         query.period, query.date_from, query.date_to
     )
+
+    if owner_id is not None and query.station_id is not None:
+        station_owner = await db.scalar(
+            select(Station.owner_id).where(Station.id == query.station_id)
+        )
+        if station_owner is not None and station_owner != owner_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Không có quyền truy cập trạm sạc này",
+            )
 
     # 1. Subquery aggregating InvoiceLine metrics per invoice to prevent duplicates
     line_subq = (
@@ -341,14 +378,6 @@ async def get_revenue_report(
         reverse=True,
     )
 
-    # Paginate charge points
-    total_items = len(cp_list)
-    page_size = query.page_size
-    total_pages = max(1, ceil(total_items / page_size))
-    current_page = min(query.page, total_pages)
-    offset = (current_page - 1) * page_size
-    paginated_cps = cp_list[offset : offset + page_size]
-
     summary = RevenueSummary(
         invoiced_sessions=total_invoiced_sessions,
         total_kwh=round(total_energy_wh / Decimal(1000), 4),
@@ -372,6 +401,25 @@ async def get_revenue_report(
         for d in sorted(daily_map.values(), key=lambda x: x.date)
     ]
 
+    return start_dt, end_dt, cp_list, summary, daily_timeline
+
+
+async def get_revenue_report(
+    db: AsyncSession,
+    query: RevenueReportQuery,
+    owner_id: UUID | None = None,
+) -> RevenueReportResponse:
+    start_dt, end_dt, cp_list, summary, daily_timeline = await _compute_revenue_data(
+        db, query, owner_id
+    )
+
+    total_items = len(cp_list)
+    page_size = query.page_size
+    total_pages = max(1, ceil(total_items / page_size))
+    current_page = min(query.page, total_pages)
+    offset = (current_page - 1) * page_size
+    paginated_cps = cp_list[offset : offset + page_size]
+
     return RevenueReportResponse(
         from_date=start_dt,
         to_date=end_dt,
@@ -386,3 +434,39 @@ async def get_revenue_report(
             total_pages=total_pages,
         ),
     )
+
+
+async def export_revenue_report_csv(
+    db: AsyncSession,
+    query: RevenueReportQuery,
+    owner_id: UUID | None = None,
+) -> StreamingResponse:
+    start_dt, end_dt, cp_list, _, _ = await _compute_revenue_data(db, query, owner_id)
+
+    from_str = start_dt.isoformat()
+    to_str = end_dt.isoformat()
+
+    rows: list[list[Any]] = []
+    for item in cp_list:
+        rows.append(
+            [
+                from_str,
+                to_str,
+                "Asia/Ho_Chi_Minh",
+                str(item.station_id),
+                item.station_name,
+                str(item.charge_point_id),
+                item.charge_point_code,
+                item.sessions_count,
+                item.energy_kwh,
+                item.energy_amount_vnd,
+                item.idle_amount_vnd,
+                item.total_invoice_vnd,
+                item.debited_vnd,
+            ]
+        )
+
+    filename = (
+        f"revenue_report_{start_dt.strftime('%Y%m%d')}_{end_dt.strftime('%Y%m%d')}.csv"
+    )
+    return build_csv_streaming_response(filename, REVENUE_CSV_HEADERS, rows)
