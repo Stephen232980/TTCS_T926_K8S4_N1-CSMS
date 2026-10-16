@@ -25,3 +25,6 @@
 
 .driver-reservation-form label.reservation-fee-consent { flex-basis: 100%; flex-direction: row; align-items: flex-start; line-height: 1.5; min-height: 44px; }
 .driver-reservation-form input[type=checkbox] { width: 20px; min-height: 20px; height: 20px; flex: 0 0 20px; margin: 2px 0; }
+.reservation-alternatives { margin-block: 16px; }
+.reservation-alternatives ul { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 8px; }
+.driver-shell .reservation-alternatives button { width: 100%; min-height: 44px; white-space: normal; overflow-wrap: anywhere; text-align: start; }

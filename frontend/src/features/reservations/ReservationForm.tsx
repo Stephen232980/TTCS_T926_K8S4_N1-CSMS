@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { changed, dateLabel, definitiveRejection, json, reservationRequest, type BookingBody, type Reservation } from './api'
+import { changed, dateLabel, definitiveRejection, json, reservationRequest, type BookingBody, type Reservation, type ReservationAlternative } from './api'
 import './reservations.css'
 
 function localTime(offsetMinutes: number) {
@@ -12,8 +12,8 @@ function stored(key: string, connectorId: string): BookingBody | null {
     return data?.connector_id === connectorId && typeof data.request_id === 'string' && (data.arrival_at === null || (typeof data.arrival_at === 'string' && !Number.isNaN(Date.parse(data.arrival_at)))) ? data : null
   } catch { return null }
 }
-export function ReservationForm({ connectorId, capability, available, ownReservation = false, ownerId, onChanged }: {
-  connectorId: string; capability: string; available: boolean; ownReservation?: boolean; ownerId: string; onChanged: () => void
+export function ReservationForm({ connectorId, capability, available, ownReservation = false, ownerId, onChanged, onSelectAlternative }: {
+  connectorId: string; capability: string; available: boolean; ownReservation?: boolean; ownerId: string; onChanged: () => void; onSelectAlternative?: (connectorId: string) => void
 }) {
   const storageKey = `csms:reservation:${ownerId}:${connectorId}`
   const [attempt, setAttempt] = useState<BookingBody | null>(() => stored(storageKey, connectorId))
@@ -28,6 +28,7 @@ export function ReservationForm({ connectorId, capability, available, ownReserva
   const [checking, setChecking] = useState(false)
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
+  const [conflict, setConflict] = useState<ReservationAlternative[] | null>(null)
   const [policy, setPolicy] = useState<{fee_vnd:number; version:number} | null>(null)
   const [acceptedFee, setAcceptedFee] = useState(false)
   const [policyRevision, setPolicyRevision] = useState(0)
@@ -100,7 +101,7 @@ export function ReservationForm({ connectorId, capability, available, ownReserva
     if (!attempt && when === 'later' && Number.isNaN(new Date(arrival).getTime())) { setError('Chọn thời gian đến hợp lệ trong hai giờ tới.'); return }
     const next = attempt ?? { request_id: crypto.randomUUID(), connector_id: connectorId, arrival_at: when === 'now' ? null : new Date(arrival).toISOString(), accepted_fee_vnd: policy!.fee_vnd, accepted_policy_version: policy!.version }
     setAttempt(next); sessionStorage.setItem(storageKey, JSON.stringify(next))
-    inFlight.current = true; setBusy(true); setError(''); setNotice('')
+    inFlight.current = true; setBusy(true); setError(''); setNotice(''); setConflict(null)
     try {
       const result = await reservationRequest<Reservation>('', json(next))
       sessionStorage.removeItem(storageKey)
@@ -108,13 +109,17 @@ export function ReservationForm({ connectorId, capability, available, ownReserva
       setAttempt(null); setExpanded(false); setNotice(`Đã ghi nhận yêu cầu. Hạn giữ đến ${dateLabel(result.expires_at)}. Theo dõi xác nhận tại Đặt chỗ của bạn.`)
       changed(); onChanged()
     } catch (cause) {
+      if (definitiveRejection(cause) && cause.code === 'connector_reserved' && mounted.current) {
+        setConflict(cause.alternatives.filter(item => item.connector_id !== connectorId))
+        onChanged()
+      }
       if (definitiveRejection(cause)) { sessionStorage.removeItem(storageKey); if (mounted.current) {setAttempt(null); setPolicy(null); setPolicyRevision(value => value + 1)} }
       if (mounted.current) setError(definitiveRejection(cause) ? cause.message : 'Kết quả gửi chưa rõ. Thử lại cùng yêu cầu; không đổi đầu nối hoặc giờ đến.')
     } finally { inFlight.current = false; if (mounted.current) setBusy(false) }
   }
   return <section className="driver-reservation-form" aria-label="Đặt trước đầu nối" aria-busy={busy}>
     <button ref={trigger} type="button" className="secondary-button driver-reservation-trigger" aria-haspopup="dialog" aria-expanded={expanded} disabled={busy || checking || (!available && !attempt)} onClick={() => {
-      setExpanded(true)
+      setConflict(null); setError(''); setExpanded(true)
       if (capability !== 'supported' && !attempt) void probe()
     }}>{checking ? 'Đang kiểm tra hỗ trợ đặt chỗ…' : 'Đặt trước đầu nối'}</button>
     <dialog ref={dialog} className="driver-reservation-dialog" aria-labelledby={`reservation-title-${connectorId}`} onCancel={event => {event.preventDefault(); closePopup()}}>
@@ -127,7 +132,7 @@ export function ReservationForm({ connectorId, capability, available, ownReserva
     </ul>
     {capability !== 'supported' && !attempt ? <>
       <p>{capability === 'unsupported' ? 'Trụ chưa hỗ trợ đặt chỗ.' : 'Cần kiểm tra trụ hỗ trợ đặt chỗ trước khi gửi yêu cầu.'}</p>
-    </> : available || attempt ? <>
+    </> : conflict !== null ? null : available || attempt ? <>
       {(expanded || attempt) && <form onSubmit={event => { event.preventDefault(); void book() }}>
         <label>Giờ đến<select value={when} disabled={busy || !!attempt} onChange={event => setWhen(event.target.value)}><option value="now">Ngay bây giờ</option><option value="later">Trong hai giờ tới</option></select></label>
         {when === 'later' && <label>Thời gian đến<input ref={arrivalInput} type="datetime-local" required value={arrival} min={localTime(0)} max={localTime(120)} disabled={busy || !!attempt} onChange={event => setArrival(event.target.value)} /></label>}
@@ -136,8 +141,23 @@ export function ReservationForm({ connectorId, capability, available, ownReserva
       </form>}
     </> : <p>{ownReservation ? 'Đầu nối đang được giữ cho bạn. Xem trạng thái tại Đặt chỗ của bạn; khi đã xác nhận, cắm súng rồi bắt đầu sạc.' : 'Đầu nối không còn rảnh. Xem Đặt chỗ của bạn hoặc tải lại trạng thái.'}</p>}
     {error && <p role="alert">{error}</p>}
+    {conflict !== null && <section className="reservation-alternatives" aria-label="Đầu nối thay thế">
+      {conflict.length > 0 ? <>
+        <p>Đầu nối khác cùng trạm:</p>
+        <ul>{conflict.map(item => <li key={item.connector_id}>
+          <button type="button" className="secondary-button" disabled={busy || !onSelectAlternative} onClick={() => {
+            closePopup()
+            onSelectAlternative?.(item.connector_id)
+          }}>Chọn {item.charge_point_code} · Đầu nối {item.connector_number}</button>
+        </li>)}</ul>
+        <p>Trạng thái có thể thay đổi. Chọn đầu nối rồi xác nhận đặt chỗ lại.</p>
+      </> : <>
+        <p>Chưa có đầu nối thay thế phù hợp cùng trạm. Tải lại trạng thái hoặc chọn trạm khác.</p>
+        <button type="button" className="secondary-button" onClick={() => {closePopup(); onChanged()}}>Tải lại đầu nối</button>
+      </>}
+    </section>}
     {!checking && !busy && capability !== 'supported' && <button type="button" className="secondary-button" onClick={() => void probe()}>Thử lại kiểm tra hỗ trợ</button>}
-    {error && available && capability === 'supported' && !attempt && <button type="button" className="secondary-button" onClick={() => {setError(''); setPolicy(null); setPolicyRevision(value => value + 1)}}>Tải lại mức phí</button>}
+    {error && conflict === null && available && capability === 'supported' && !attempt && <button type="button" className="secondary-button" onClick={() => {setError(''); setPolicy(null); setPolicyRevision(value => value + 1)}}>Tải lại mức phí</button>}
     {notice && <p role="status">{notice}</p>}
     </div>}
     <button type="button" className="secondary-button driver-reservation-cancel" disabled={busy && !!attempt} onClick={closePopup}>Hủy</button>
