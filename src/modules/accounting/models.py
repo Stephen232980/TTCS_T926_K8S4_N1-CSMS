@@ -33,7 +33,7 @@ class ReconciliationRun(Base):
         CheckConstraint(
             "total_sessions >= 0", name="ck_reconciliation_runs_total_sessions"
         ),
-        Index("ix_reconciliation_runs_created", "created_at"),
+        Index("ix_reconciliation_runs_created", "created_at", "status"),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)

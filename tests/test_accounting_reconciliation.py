@@ -36,6 +36,8 @@ BASE = "/api/v1/accounting/reconciliation-runs"
 def clean_actor() -> Generator[None, None, None]:
     actor("accountant")
     mock_db = AsyncMock()
+    mock_db.add = MagicMock()
+    mock_db.add_all = MagicMock()
     mock_db.scalar.return_value = None
     mock_db.scalars.return_value.all.return_value = []
     mock_db.execute.return_value.all.return_value = []
@@ -78,6 +80,8 @@ def test_create_request_validation() -> None:
 @pytest.mark.asyncio
 async def test_reconciliation_clean_match() -> None:
     db = AsyncMock()
+    db.add = MagicMock()
+    db.add_all = MagicMock()
     sess_id = 100
     st_id = uuid4()
     driver_id = uuid4()
@@ -161,6 +165,8 @@ async def test_reconciliation_clean_match() -> None:
 @pytest.mark.asyncio
 async def test_reconciliation_detects_all_anomalies() -> None:
     db = AsyncMock()
+    db.add = MagicMock()
+    db.add_all = MagicMock()
     driver_id = uuid4()
     st_id = uuid4()
 
