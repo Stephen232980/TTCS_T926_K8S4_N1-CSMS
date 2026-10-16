@@ -348,6 +348,33 @@ def test_corrupt_profile_store_fails_closed(charger, tmp_path):
         charger.load_power_profiles()
 
 
+@pytest.mark.parametrize(
+    "kind", ["missing", "partial_connectors", "partial_fields", "invalid_json"]
+)
+def test_restart_with_incomplete_profile_storage_refuses_unbounded_resume(
+    charger, tmp_path, kind
+):
+    path = tmp_path / "DEMO-STG-TEST-001.power.private.json"
+    assert (
+        charger.power_command("SetChargingProfile", profile(1, 0))["status"]
+        == "Accepted"
+    )
+    charger.transactions[1] = 42
+    if kind == "missing":
+        path.unlink()
+    elif kind == "invalid_json":
+        path.write_text("{broken")
+    else:
+        data = json.loads(path.read_text())
+        if kind == "partial_connectors":
+            data["connectors"].pop("2")
+        else:
+            data["connectors"]["1"].pop("default_limit_w")
+        path.write_text(json.dumps(data))
+    with pytest.raises(RuntimeError, match="refusing to boot"):
+        charger.load_power_profiles()
+
+
 async def test_reservation_ownership_survives_start_under_zero_baseline(charger):
     charger.status = AsyncMock()
     expiry = (datetime.now(UTC) + timedelta(minutes=15)).isoformat()

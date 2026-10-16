@@ -228,6 +228,8 @@ def update():
     # package. A legacy /demo/scripts therefore shadows /app/scripts entirely.
     dependencies = []
     scripts = ROOT / "scripts"
+    if scripts.exists() and not scripts.is_dir():
+        raise RuntimeError("Mounted demo scripts path must be a directory")
     if scripts.is_symlink() or any(
         (scripts / name).is_symlink()
         for name in ("__init__.py", "ocpp_control_simulator.py")

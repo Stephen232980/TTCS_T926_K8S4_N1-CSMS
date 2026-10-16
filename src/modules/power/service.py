@@ -86,6 +86,7 @@ async def power_snapshot(db: AsyncSession, station_id: UUID) -> dict[str, object
     return {
         "station_id": str(station_id),
         "version": config.version if config else 0,
+        "generation": config.generation if config else 0,
         "limit_kw": str(Decimal(config.limit_w) / 1000) if config else None,
         "applied_limit_w": config.applied_limit_w
         if config
@@ -226,6 +227,11 @@ async def change_control(
     )
     if {c.id for c, _ in rows} != {c.connector_id for c in caps} or not rows:
         raise HTTPException(409, "power_configuration_incomplete")
+    if enable:
+        # A previous disable may have cleared profiles after its zero readback.
+        # Every enable/retry must establish defaults again before admitting cars.
+        for cap in caps:
+            cap.baseline_boot_at = None
     config.version += 1
     config.generation += 1
     config.enabled = True  # Disable remains guarded until device profiles are cleared.

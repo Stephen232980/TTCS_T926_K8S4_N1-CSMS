@@ -125,8 +125,9 @@ Local HTTP + OCPP cũng đã mở 20 phiên đồng thời: tất cả request 2
 20 x 1.5 kW = 30 kW; dừng một xe cho 19 x 1.578 kW = 29.982 kW. Chờ xác nhận
 kế hoạch sau các request khoảng 7.5 giây; kế hoạch sau stop khoảng 5.8 giây
 trên máy test. Một ca này không chứng minh p95/worst-case toàn đội trụ.
-Đo hiệu năng lặp lại và commissioning thật cần evidence riêng trước nghiệm
-thu story Done hoặc bật trên thiết bị thật.
+Các số đo này không thay thế nghiệm thu staging. Commissioning thiết bị thật
+cần bằng chứng riêng trước khi bật trên thiết bị thật; không dùng nó làm điều
+kiện bổ sung để chốt phạm vi mô phỏng.
 
 Kiểm thử tối ưu demo 10 đầu nối ngày 14/10/2026 trên WSL/Linux + PostgreSQL 16:
 83 test power/simulator đạt. Với phản hồi adapter trễ 2 giây/lệnh, từ sự kiện
@@ -218,3 +219,32 @@ Các ca hồi quy trong `tests/test_power.py` dùng handler profile thật của
 để kiểm stop về idle và đổi transaction nhanh với cùng mức W, thay vì adapter
 chấp nhận mọi SetChargingProfile. Chúng dùng PostgreSQL kiểm thử riêng; kết quả
 local không thay thế lượt nghiệm thu staging sau merge/deploy.
+
+### Rà soát toàn bộ S-43 trong PR #170
+
+| Tiêu chí | Đường kiểm chứng |
+|---|---|
+| AC-1 ngân sách W và trần từng xe | Hand answers 30 kW/7-22-22, 1 W/3 xe và các ca allocator bảo toàn tổng |
+| AC-2 nền 0 W, capability, restart | Handler thật, WebSocket thật; file thiếu/hỏng/thiếu đầu nối hoặc trường không được boot lại với phiên mở |
+| AC-3 giảm xác minh trước tăng | Rejected/Timeout/Disconnected/ProtocolError tại cả Set và Composite đều giữ ngân sách cũ, không tăng xe khác |
+| AC-4 degraded, chặn start, dừng có xác nhận | Ngân sách chỉ giảm sau readback; ACK RemoteStop không kết thúc phiên; stop intent có UUID ổn định |
+| AC-5 mọi đường start | Gate API/Authorize/StartTransaction; phiên không được phép không nhận công suất và được yêu cầu dừng, giữ dữ liệu review |
+| AC-6 số đo thật theo profile | TCP WebSocket + W/Wh/stop/restart; xe SuspendedEVSE do nền 0 W vẫn có thể được cấp tải, SuspendedEV nhường tải |
+| AC-7 UI | Yêu cầu/xác nhận/ngân sách giữ, generation của kế hoạch và thông báo lỗi; test component và xem thử desktop/mobile |
+| NFR-1 PostgreSQL/outbox/retry | Khóa trạm, không chờ socket trong transaction; hủy worker giữa ACK vẫn giữ intent và tái dùng UUID khi chạy tiếp |
+| NFR-2 profile theo transaction | Stack 0/1 đúng mục đích, không kế thừa xác nhận xe trước, readback muộn không ghi đè phiên mới |
+| NFR-3 deadline/fail-safe | Timeout có giới hạn ≤30 s; profile lưu trước ACK, chứng minh restart mô phỏng; thiết bị thật cần commissioning riêng |
+
+Composite chỉ được chấp nhận khi connector ID đúng kiểu, đơn vị W, thời lượng
+bao phủ yêu cầu 60 s, scheduleStart có múi giờ và còn mới, các kỳ bắt đầu từ 0
+và tăng đúng thứ tự, mức W hữu hạn/không âm/không vượt yêu cầu. Payload lỗi làm
+kiểm chứng thất bại thay vì làm chết vòng worker. Capability có key/value sai
+kiểu hoặc key trùng cũng bị từ chối.
+
+Mỗi yêu cầu enable/retry bỏ dấu xác minh baseline cũ. Disable cũ không được
+gỡ profile sau khi generation đã đổi trong giai đoạn đặt nền, hoặc ghi đè
+trạng thái của yêu cầu enable mới sau khi clear. Lần enable mới phải có bằng
+chứng nền hiện hành trước khi cho xe bắt đầu.
+
+Đây là ma trận kiểm chứng phần mềm. Chỉ kết luận staging sau khi commit tương
+ứng đã merge/deploy và được chạy lại; không suy ra đã nghiệm thu thiết bị vật lý.

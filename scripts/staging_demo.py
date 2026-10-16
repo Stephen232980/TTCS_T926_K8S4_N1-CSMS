@@ -374,21 +374,43 @@ class Charger:
     def load_power_profiles(self):
         path = ROOT / (self.config["code"] + ".power.private.json")
         if not path.exists():
+            if self.transactions:
+                raise RuntimeError(
+                    "Missing profiles for open demo sessions; refusing to boot"
+                )
             return
-        stored = json.loads(path.read_text(encoding="utf8"))
+        try:
+            stored = json.loads(path.read_text(encoding="utf8"))
+        except (ValueError, UnicodeError) as error:
+            raise RuntimeError(
+                "Invalid persisted demo power profiles; refusing to boot"
+            ) from error
         if (
             not isinstance(stored, dict)
+            or type(stored.get("version")) is not int
             or stored.get("version") != 1
             or not isinstance(stored.get("connectors"), dict)
         ):
             raise RuntimeError(
                 "Invalid persisted demo power profiles; refusing to boot"
             )
+        if set(stored["connectors"]) != {str(n) for n in self.meters}:
+            raise RuntimeError("Incomplete persisted demo connectors; refusing to boot")
         for key, prior in stored["connectors"].items():
             number = int(key)
             if number not in self.meters or not isinstance(prior, dict):
                 raise RuntimeError(
                     "Persisted power connectors changed; refusing to boot"
+                )
+            if set(prior) != {
+                "default_limit_w",
+                "default_profile_id",
+                "transaction_id",
+                "transaction_limit_w",
+                "transaction_profile_id",
+            }:
+                raise RuntimeError(
+                    "Incomplete persisted demo power fields; refusing to boot"
                 )
             for field in (
                 "default_limit_w",
