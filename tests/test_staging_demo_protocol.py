@@ -12,6 +12,7 @@ from scripts.ocpp_control_simulator import ConnectorState
 async def test_remote_stop_waits_for_separate_simulated_unplug(tmp_path, monkeypatch):
     """Local sockets only: no staging API, database, accounts or financial writes."""
     monkeypatch.setattr(staging_demo, "STOP", tmp_path / "stop.request")
+    monkeypatch.setattr(staging_demo, "ROOT", tmp_path)
     monkeypatch.setattr(
         ocpp_control_simulator,
         "load_connectors",
