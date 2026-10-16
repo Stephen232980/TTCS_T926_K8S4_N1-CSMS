@@ -1,4 +1,6 @@
 import { notifySessionUnauthorized } from '../auth/sessionEvents'
+import { downloadCsvFile } from '../owner/ownerRevenueApi'
+
 
 export const financialLabels = {
   in_progress: 'Đang sạc', awaiting_unplug: 'Chờ rút súng', needs_review: 'Cần kiểm tra',
@@ -239,4 +241,38 @@ export async function getReconciliationRunIssues(
   }
   return response.json()
 }
+
+export async function exportAccountantRevenueCsv(
+  params: {
+    period?: string
+    date_from?: string
+    date_to?: string
+    station_id?: string
+  } = {}
+): Promise<void> {
+  const query = new URLSearchParams()
+  if (params.period) query.set('period', params.period)
+  if (params.date_from) query.set('date_from', params.date_from)
+  if (params.date_to) query.set('date_to', params.date_to)
+  if (params.station_id) query.set('station_id', params.station_id)
+
+  const qs = query.toString()
+  const path = `/accounting/reports/revenue/export${qs ? `?${qs}` : ''}`
+  await downloadCsvFile(path, 'revenue_report.csv')
+}
+
+export async function exportReconciliationIssuesCsv(
+  runId: string,
+  severity?: string,
+  issueType?: string
+): Promise<void> {
+  const params = new URLSearchParams()
+  if (severity) params.set('severity', severity)
+  if (issueType) params.set('issue_type', issueType)
+
+  const qs = params.toString()
+  const path = `/accounting/reconciliation-runs/${encodeURIComponent(runId)}/issues/export${qs ? `?${qs}` : ''}`
+  await downloadCsvFile(path, `reconciliation_issues_${runId}.csv`)
+}
+
 

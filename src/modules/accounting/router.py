@@ -4,6 +4,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.accounting.models import ReconciliationRun
@@ -17,6 +18,7 @@ from src.modules.accounting.schemas import (
 )
 from src.modules.accounting.service import (
     execute_reconciliation_run,
+    export_reconciliation_issues_csv,
     get_reconciliation_issues,
     get_reconciliation_run,
     list_reconciliation_runs,
@@ -155,4 +157,22 @@ async def get_run_issues(
         total=total,
         page=page,
         total_pages=total_pages,
+    )
+
+
+@router.get(
+    "/{run_id}/issues/export",
+)
+@user_policy("accounting.reconciliation.read", "all", "accountant")
+async def export_run_issues(
+    run_id: UUID,
+    db: Database,
+    severity: Annotated[IssueSeverity | None, Query()] = None,
+    issue_type: Annotated[str | None, Query()] = None,
+) -> StreamingResponse:
+    return await export_reconciliation_issues_csv(
+        db,
+        run_id=run_id,
+        severity=severity,
+        issue_type=issue_type,
     )

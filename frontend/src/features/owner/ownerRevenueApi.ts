@@ -98,3 +98,59 @@ export async function fetchRevenueReport(
   const path = `/owner/reports/revenue${qs ? `?${qs}` : ''}`
   return ownerRequest<RevenueReportResponse>(path)
 }
+
+export async function downloadCsvFile(
+  path: string,
+  fallbackFilename: string,
+): Promise<void> {
+  const base = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''
+  const response = await fetch(`${base}/api/v1${path}`, {
+    credentials: 'include',
+  })
+  if (response.status === 401) {
+    throw new Error('Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại.')
+  }
+  if (!response.ok) {
+    let detail = ''
+    try {
+      const data = await response.json()
+      detail = data.detail
+    } catch {
+      // ignore
+    }
+    throw new Error(detail || 'Xuất CSV thất bại. Vui lòng thử lại.')
+  }
+  const blob = await response.blob()
+  let filename = fallbackFilename
+  const disposition = response.headers.get('content-disposition')
+  if (disposition) {
+    const match = disposition.match(/filename="?([^";]+)"?/)
+    if (match?.[1]) {
+      filename = match[1]
+    }
+  }
+  const blobUrl = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = blobUrl
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  window.URL.revokeObjectURL(blobUrl)
+}
+
+export async function exportOwnerRevenueCsv(
+  params: RevenueReportParams = {},
+): Promise<void> {
+  const query = new URLSearchParams()
+  if (params.period) query.set('period', params.period)
+  if (params.date_from) query.set('date_from', params.date_from)
+  if (params.date_to) query.set('date_to', params.date_to)
+  if (params.station_id) query.set('station_id', params.station_id)
+  if (params.charge_point_id) query.set('charge_point_id', params.charge_point_id)
+
+  const qs = query.toString()
+  const path = `/owner/reports/revenue/export${qs ? `?${qs}` : ''}`
+  await downloadCsvFile(path, 'revenue_report.csv')
+}
+
