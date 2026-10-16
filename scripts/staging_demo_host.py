@@ -224,17 +224,51 @@ def update():
         raise RuntimeError(
             "Backend image does not contain the reviewed SmartCharging demo"
         )
+    # Running /demo/staging_demo.py puts /demo ahead of the editable image
+    # package. A legacy /demo/scripts therefore shadows /app/scripts entirely.
+    dependencies = []
+    scripts = ROOT / "scripts"
+    if scripts.is_symlink() or any(
+        (scripts / name).is_symlink()
+        for name in ("__init__.py", "ocpp_control_simulator.py")
+    ):
+        raise RuntimeError("Unexpected symlink in mounted demo dependencies")
+    for name in ("__init__.py", "ocpp_control_simulator.py"):
+        prepared = ROOT / (name + ".candidate")
+        docker("cp", "csms-app:/app/scripts/" + name, str(prepared))
+        tree = ast.parse(prepared.read_text(encoding="utf-8"))
+        if name == "ocpp_control_simulator.py":
+            fields = {
+                field.target.id
+                for node in tree.body
+                if isinstance(node, ast.ClassDef) and node.name == "ConnectorState"
+                for field in node.body
+                if isinstance(field, ast.AnnAssign)
+                and isinstance(field.target, ast.Name)
+            }
+            if not {"default_limit_w", "transaction_limit_w"} <= fields:
+                raise RuntimeError("Image simulator lacks SmartCharging state")
+        dependencies.append((prepared, scripts / name))
     current = ROOT / "staging_demo.py"
     if not current.is_file():
         raise RuntimeError("Existing mounted script required; update refused")
     backup = ROOT / ("staging_demo.backup-" + str(time.time_ns()) + ".py")
     backup.write_bytes(current.read_bytes())
     backup.chmod(0o600)
+    stamp = str(time.time_ns())
+    for _, current_dependency in dependencies:
+        if current_dependency.exists():
+            dependency_backup = ROOT / (current_dependency.name + ".backup-" + stamp)
+            dependency_backup.write_bytes(current_dependency.read_bytes())
+            dependency_backup.chmod(0o600)
     assert_idle()
     stop()
     # Keep the stopped container until startup is validated, so an unsuccessful
     # stop never leads to a script replacement. Existing profile/reservation files stay.
     candidate.replace(current)
+    scripts.mkdir(exist_ok=True)
+    for prepared, current_dependency in dependencies:
+        prepared.replace(current_dependency)
     try:
         start(seed=False, mounted=True)
     except (OSError, ValueError, RuntimeError, subprocess.CalledProcessError):

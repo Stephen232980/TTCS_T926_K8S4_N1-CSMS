@@ -204,7 +204,7 @@ async def capabilities(device: Device, station_id: UUID, generation: int) -> boo
 def profile(device: Device, watts: int, baseline: bool = False) -> dict[str, object]:
     charging: dict[str, object] = {
         "chargingProfileId": device.profile_id * 2 + (0 if baseline else 1),
-        "stackLevel": 0 if baseline else 1,
+        "stackLevel": 0 if baseline or device.transaction_id is None else 1,
         "chargingProfilePurpose": "TxDefaultProfile"
         if baseline or device.transaction_id is None
         else "TxProfile",
@@ -312,6 +312,22 @@ async def set_limit(
     ):
         return False
     async with SessionFactory() as db, db.begin():
+        # Serialize with StartTransaction's confirmation invalidation. A late
+        # readback for the previous car must not restore its confirmed watts.
+        await db.scalar(
+            select(StationPower)
+            .where(StationPower.station_id == station_id)
+            .with_for_update()
+        )
+        if not baseline:
+            current_transaction = await db.scalar(
+                select(ChargingSession.id).where(
+                    ChargingSession.connector_id == device.connector_id,
+                    ChargingSession.ended_at.is_(None),
+                )
+            )
+            if current_transaction != device.transaction_id:
+                return False
         cap = await db.get(ConnectorPower, device.connector_id)
         assert cap is not None
         cap.confirmed_w = watts

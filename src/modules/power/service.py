@@ -274,6 +274,23 @@ async def power_start_allowed(db: AsyncSession, station_id: UUID) -> bool:
     )
 
 
+async def note_power_start(
+    db: AsyncSession, station_id: UUID, connector_id: UUID
+) -> None:
+    """A previous transaction's readback cannot confirm power for a new car."""
+    config = await db.scalar(
+        select(StationPower)
+        .where(StationPower.station_id == station_id)
+        .with_for_update()
+    )
+    if config and config.enabled:
+        cap = await db.get(ConnectorPower, connector_id)
+        if cap is not None:
+            # The verified default profile is zero. Keep the old reservation
+            # until the worker verifies the profile bound to this transaction.
+            cap.confirmed_w = 0
+
+
 async def note_power_event(db: AsyncSession, station_id: UUID) -> None:
     config = await db.scalar(
         select(StationPower)

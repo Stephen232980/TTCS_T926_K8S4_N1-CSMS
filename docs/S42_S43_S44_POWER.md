@@ -194,3 +194,27 @@ kill phiên mới xuất hiện để rollback. Không tự triển khai chỉ v
 Sau cập nhật vẫn cần nghiệm thu S-43 trên staging: kiểm baseline, ghi bằng chứng
 mô phỏng trước bật chia tải; đo profile/composite/MeterValues với nhiều phiên,
 các nhánh lỗi/offline/reboot. Jira chưa được chuyển Done bởi bản sửa local này.
+
+### Lỗi phát hiện khi nghiệm thu lặp lại ngày 16/10
+
+Sau khi StopTransaction đã đóng phiên, worker cần giảm đầu nối rảnh về 0 W.
+Profile lúc này là TxDefaultProfile stack 0; stack 1 chỉ dùng cho TxProfile gắn
+transaction đang chạy. Điều này khớp tập profile mà demo đã khai báo hỗ trợ.
+Không dùng stack 1 cho profile mặc định của đầu nối rảnh.
+
+Khi một StartTransaction hợp lệ tạo phiên mới trên cùng đầu nối, mức đã xác
+nhận của phiên trước phải về 0 (baseline đã xác minh), nhưng reserved_w vẫn giữ
+nguyên. Worker vì vậy phải gửi và đọc lại profile gắn transaction mới ngay cả
+khi mức W mục tiêu không thay đổi. Chỉ sau readback mới ghi mức confirmed mới.
+Điều này tránh báo đã cấp tải khi xe mới vẫn đang ở baseline 0 W.
+
+Lệnh update cũng đồng bộ `scripts/__init__.py` và
+`scripts/ocpp_control_simulator.py` từ cùng image backend. Thư mục `/demo/scripts`
+cũ có thể che khuất package trong `/app`; chỉ thay script chính không đủ.
+Mọi candidate được parse/kiểm tra trước dừng, các file cũ được sao lưu và chỉ
+thay khi simulator đã dừng; không chạy seed hoặc thay dữ liệu demo.
+
+Các ca hồi quy trong `tests/test_power.py` dùng handler profile thật của demo
+để kiểm stop về idle và đổi transaction nhanh với cùng mức W, thay vì adapter
+chấp nhận mọi SetChargingProfile. Chúng dùng PostgreSQL kiểm thử riêng; kết quả
+local không thay thế lượt nghiệm thu staging sau merge/deploy.

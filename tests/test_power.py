@@ -32,6 +32,7 @@ from src.modules.power.schemas import PowerSetting
 from src.modules.power.service import (
     change_control,
     note_power_event,
+    note_power_start,
     power_start_allowed,
     save_settings,
 )
@@ -192,6 +193,189 @@ def device_wire(monkeypatch, charger):
     monkeypatch.setattr(worker.ocpp_connections, "get", get)
     monkeypatch.setattr(worker, "wire", wire)
     return state, trace, failures
+
+
+def real_demo_profiles(fleet, monkeypatch, tmp_path):
+    """Use the reviewed device parser, not an adapter accepting every profile."""
+    from scripts import staging_demo as demo
+
+    factory, _, charger, _, _, _ = fleet
+    monkeypatch.setattr(demo, "ROOT", tmp_path)
+    device = demo.Charger({"code": charger.code, "fault_connector": None})
+    connection = SimpleNamespace(boot_accepted=True)
+    trace = []
+
+    async def snapshot():
+        return {charger.id: connection}
+
+    async def get(code):
+        return connection
+
+    async def wire(connection, action, payload, request_id):
+        async with factory() as db:
+            active = {
+                row.connector_id: row.id
+                for row in await db.scalars(
+                    select(ChargingSession).where(ChargingSession.ended_at.is_(None))
+                )
+            }
+            connectors = list(
+                await db.scalars(
+                    select(Connector).where(Connector.charge_point_id == charger.id)
+                )
+            )
+        for connector in connectors:
+            number = connector.connector_number
+            tx = active.get(connector.id)
+            state = device.power_state(number)
+            if device.transactions.get(number) != tx:
+                state.transaction_limit_w = state.transaction_profile_id = None
+            if tx is None:
+                device.transactions.pop(number, None)
+            else:
+                device.transactions[number] = tx
+        response = (
+            device.reservation_command(action, payload)
+            if action == "GetConfiguration"
+            else device.power_command(action, payload)
+        )
+        trace.append((action, payload, response))
+        return (
+            "Accepted" if action == "GetConfiguration" else response["status"],
+            response,
+        )
+
+    monkeypatch.setattr(worker.ocpp_connections, "snapshot", snapshot)
+    monkeypatch.setattr(worker.ocpp_connections, "get", get)
+    monkeypatch.setattr(worker, "wire", wire)
+    return device, trace
+
+
+async def test_stop_to_idle_profile_is_supported_by_actual_staging_demo(
+    fleet, monkeypatch, tmp_path
+):
+    factory, station, _, ids, _, _ = fleet
+    device, trace = real_demo_profiles(fleet, monkeypatch, tmp_path)
+    await configure(fleet)
+    await run_plan(factory, station)
+    await sessions(fleet)
+    await run_plan(factory, station)
+    assert [device.power_state(n).offered_watts for n in (1, 2, 3)] == [10000] * 3
+    async with factory() as db, db.begin():
+        for transaction in await db.scalars(
+            select(ChargingSession).where(ChargingSession.connector_id.in_(ids))
+        ):
+            transaction.ended_at = datetime.now(UTC)
+        for connector_id in ids:
+            (await db.get(Connector, connector_id)).raw_ocpp_status = "Available"
+    trace.clear()
+    await run_plan(factory, station)
+    async with factory() as db:
+        assert (await db.get(StationPower, station.id)).state == "ready"
+        assert await db.scalar(select(func.sum(ConnectorPower.reserved_w))) == 0
+    writes = [(p, r) for action, p, r in trace if action == "SetChargingProfile"]
+    assert len(writes) == 3
+    assert all(p["csChargingProfiles"]["stackLevel"] == 0 for p, _ in writes)
+    assert all(r["status"] == "Accepted" for _, r in writes)
+    assert [device.power_state(n).offered_watts for n in (1, 2, 3)] == [0] * 3
+
+
+async def test_fast_new_transaction_requires_fresh_profile_at_same_watts(
+    fleet, monkeypatch, tmp_path
+):
+    factory, station, charger, ids, _, _ = fleet
+    device, trace = real_demo_profiles(fleet, monkeypatch, tmp_path)
+    await configure(fleet)
+    await run_plan(factory, station)
+    await sessions(fleet)
+    await run_plan(factory, station)
+    async with factory() as db, db.begin():
+        old = await db.scalar(
+            select(ChargingSession).where(ChargingSession.connector_id == ids[0])
+        )
+        old.ended_at = datetime.now(UTC)
+        new = ChargingSession(
+            charge_point_id=charger.id,
+            connector_id=ids[0],
+            driver_id=station.owner_id,
+            tag_tail="NEXT",
+            authorization_status="Accepted",
+            started_at=datetime.now(UTC),
+            meter_start_wh=Decimal(1000),
+        )
+        db.add(new)
+        await db.flush()
+        await note_power_start(db, station.id, ids[0])
+        await note_power_event(db, station.id)
+        cap = await db.get(ConnectorPower, ids[0])
+        assert cap.confirmed_w == 0 and cap.reserved_w == 10000
+        new_id = new.id
+    trace.clear()
+    await run_plan(factory, station)
+    writes = [p for action, p, _ in trace if action == "SetChargingProfile"]
+    assert len(writes) == 1
+    assert writes[0]["csChargingProfiles"]["transactionId"] == new_id
+    assert (
+        writes[0]["csChargingProfiles"]["chargingSchedule"]["chargingSchedulePeriod"][
+            0
+        ]["limit"]
+        == 10000
+    )
+    assert device.power_state(1).offered_watts == 10000
+    async with factory() as db:
+        cap = await db.get(ConnectorPower, ids[0])
+        assert cap.confirmed_w == cap.reserved_w == 10000
+
+
+async def test_late_old_readback_cannot_reconfirm_power_for_new_transaction(
+    fleet, monkeypatch, tmp_path
+):
+    factory, station, charger, ids, _, _ = fleet
+    real_demo_profiles(fleet, monkeypatch, tmp_path)
+    await configure(fleet)
+    await run_plan(factory, station)
+    await sessions(fleet)
+    await run_plan(factory, station)
+    old_device = next(d for d in await worker.devices(station.id) if d.number == 1)
+    original = worker.wire
+    replaced = False
+
+    async def turnover(connection, action, payload, request_id):
+        nonlocal replaced
+        response = await original(connection, action, payload, request_id)
+        if action == "GetCompositeSchedule" and not replaced:
+            replaced = True
+            async with factory() as db, db.begin():
+                old = await db.get(ChargingSession, old_device.transaction_id)
+                old.ended_at = datetime.now(UTC)
+                db.add(
+                    ChargingSession(
+                        charge_point_id=charger.id,
+                        connector_id=ids[0],
+                        driver_id=station.owner_id,
+                        tag_tail="RACE",
+                        authorization_status="Accepted",
+                        started_at=datetime.now(UTC),
+                        meter_start_wh=Decimal(1000),
+                    )
+                )
+                await db.flush()
+                await note_power_start(db, station.id, ids[0])
+                await note_power_event(db, station.id)
+        return response
+
+    monkeypatch.setattr(worker, "wire", turnover)
+    async with factory() as db:
+        generation = (await db.get(StationPower, station.id)).generation
+    assert not await worker.set_limit(old_device, station.id, generation, 10000)
+    async with factory() as db:
+        cap = await db.get(ConnectorPower, ids[0])
+        assert cap.confirmed_w == 0 and cap.reserved_w == 10000
+        assert cap.pending_command_id is not None
+    await run_plan(factory, station)
+    async with factory() as db:
+        cap = await db.get(ConnectorPower, ids[0])
+        assert cap.confirmed_w == cap.reserved_w == 10000
 
 
 async def sessions(fleet):
