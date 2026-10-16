@@ -469,6 +469,10 @@ async def start_transaction(
     from src.modules.charging.driver import attach_remote_start
 
     await attach_remote_start(session, transaction, card)
+    if result == "Accepted":
+        from src.modules.power.service import note_power_start
+
+        await note_power_start(session, charger.station_id, connector.id)
     return {"transactionId": transaction.id, "idTagInfo": {"status": result}}
 
 

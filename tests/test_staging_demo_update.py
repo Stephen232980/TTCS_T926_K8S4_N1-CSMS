@@ -32,10 +32,20 @@ def update_env(tmp_path, monkeypatch):
 
     def docker(*args, **kwargs):
         calls.append(args)
-        assert args[:2] == ("cp", "csms-app:/app/scripts/staging_demo.py")
-        (tmp_path / "staging_demo.candidate.py").write_text(
-            "# demo-3-smart-charging\npass\n"
-        )
+        assert args[0] == "cp"
+        name = args[1].rsplit("/", 1)[1]
+        sources = {
+            "staging_demo.py": "# demo-3-smart-charging\npass\n",
+            "__init__.py": "",
+            "ocpp_control_simulator.py": (
+                "class ConnectorState:\n"
+                "    default_limit_w: int | None = None\n"
+                "    transaction_limit_w: int | None = None\n"
+            ),
+        }
+        from pathlib import Path
+
+        Path(args[2]).write_text(sources[name])
 
     monkeypatch.setattr(host, "docker", docker)
     idle = Mock()
@@ -60,7 +70,45 @@ def test_update_uses_reviewed_image_skips_seed_and_preserves_accounts(update_env
         len(backups) == 1
         and backups[0].read_text() == "# existing reservation-capable script"
     )
-    assert len(calls) == 1
+    assert len(calls) == 3
+    assert "default_limit_w" in (root / "scripts/ocpp_control_simulator.py").read_text()
+
+
+def test_update_replaces_shadowing_dependency_and_preserves_old_copy(update_env):
+    root, _, _, _, _, _ = update_env
+    (root / "scripts").mkdir()
+    (root / "scripts/__init__.py").write_text("# legacy package")
+    (root / "scripts/ocpp_control_simulator.py").write_text("# legacy state")
+    host.update()
+    assert (root / "scripts/__init__.py").read_text() == ""
+    assert (
+        "transaction_limit_w"
+        in (root / "scripts/ocpp_control_simulator.py").read_text()
+    )
+    assert next(root.glob("ocpp_control_simulator.py.backup-*")).read_text() == (
+        "# legacy state"
+    )
+
+
+def test_invalid_image_dependency_prevents_stop(update_env, monkeypatch):
+    from pathlib import Path
+
+    root, _, _, stop, start, _ = update_env
+    original = host.docker
+
+    def corrupt(*args, **kwargs):
+        original(*args, **kwargs)
+        if args[1].endswith("/ocpp_control_simulator.py"):
+            Path(args[2]).write_text("class ConnectorState:\n    pass\n")
+
+    monkeypatch.setattr(host, "docker", corrupt)
+    with pytest.raises(RuntimeError, match="SmartCharging state"):
+        host.update()
+    stop.assert_not_called()
+    start.assert_not_called()
+    assert (
+        root / "staging_demo.py"
+    ).read_text() == "# existing reservation-capable script"
 
 
 @pytest.mark.parametrize(
