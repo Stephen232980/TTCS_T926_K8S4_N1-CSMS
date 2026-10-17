@@ -33,6 +33,8 @@ from src.modules.payments.vnpay_router import router as vnpay_router
 from src.modules.payments.webhook_router import router as payment_webhook_router
 from src.modules.power.router import router as power_router
 from src.modules.pricing.router import router as tariff_router
+from src.modules.privacy.router import driver_router as driver_privacy_router
+from src.modules.privacy.router import router as admin_privacy_router
 from src.modules.reporting.router import router as reporting_router
 from src.modules.reservations.policy import router as reservation_policy_router
 from src.modules.reservations.router import router as reservation_router
@@ -100,6 +102,8 @@ app.include_router(payment_webhook_router)
 app.include_router(vnpay_router)
 app.include_router(reconciliation_router)
 app.include_router(fake_payment_router)
+app.include_router(admin_privacy_router)
+app.include_router(driver_privacy_router)
 app.include_router(
     scoped_routes(
         [

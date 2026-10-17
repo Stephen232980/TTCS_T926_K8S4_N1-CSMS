@@ -17,6 +17,10 @@ if "DATABASE_URL" not in os.environ:
                 k, v = line.split("=", 1)
                 os.environ.setdefault(k.strip(), v.strip())
 
+# Feature tests invoke the privacy worker explicitly; unrelated route tests
+# must not execute jobs committed by another fixture.
+os.environ.setdefault("PRIVACY_WORKER_ENABLED", "false")
+
 # Only disposable test databases use this fixed explicit migration cutoff.
 os.environ.setdefault("LEGACY_SETTLEMENT_CUTOFF", "1970-01-01T00:00:00+00:00")
 
