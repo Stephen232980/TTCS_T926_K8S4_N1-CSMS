@@ -5,7 +5,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.charging.models import ChargingSession
@@ -251,7 +251,9 @@ async def change_control(
     )
 
 
-async def power_start_allowed(db: AsyncSession, station_id: UUID) -> bool:
+async def power_start_allowed(
+    db: AsyncSession, station_id: UUID, at_time: datetime | None = None
+) -> bool:
     config = await db.scalar(
         select(StationPower)
         .where(StationPower.station_id == station_id)
@@ -265,6 +267,31 @@ async def power_start_allowed(db: AsyncSession, station_id: UUID) -> bool:
         or not config.target_enabled
     ):
         return False
+
+    from src.modules.stations.power_schedule_service import (
+        get_current_power_limit_w,
+    )
+
+    scheduled_limit = await get_current_power_limit_w(
+        db, station_id, at_time or datetime.now(UTC)
+    )
+    if scheduled_limit is not None:
+        if (
+            config.applied_limit_w is not None
+            and config.applied_limit_w > scheduled_limit
+        ):
+            return False
+        total_reserved = (
+            await db.scalar(
+                select(func.sum(ConnectorPower.reserved_w)).where(
+                    ConnectorPower.station_id == station_id
+                )
+            )
+            or 0
+        )
+        if total_reserved + 1380 > scheduled_limit:
+            return False
+
     rows = await registered_connectors(db, station_id)
     caps = {
         c.connector_id: c

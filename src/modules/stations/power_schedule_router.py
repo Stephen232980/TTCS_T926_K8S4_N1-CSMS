@@ -139,6 +139,9 @@ async def put_power_schedule(
             effective_from=request.effective_from,
             raw_bands=band_inputs,
         )
+        from src.modules.power.service import note_power_event
+
+        await note_power_event(db, station_id)
         await db.commit()
         return _format_schedule_response(schedule)
     except PowerBandsError as error:
@@ -169,10 +172,45 @@ async def get_current_power_limit(
     if station is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "resource_not_found")
 
+    from src.modules.power.models import StationPower
+
+    power_cfg = await db.get(StationPower, station_id)
+
     now = datetime.now(UTC)
     local_d = ngay_dia_phuong(station.timezone, now)
     local_m = phut_trong_ngay(station.timezone, now)
     limit_w = await get_current_power_limit_w(db, station_id, now)
+
+    compliance_status = "unconfigured"
+    applied_limit_w: int | None = None
+    if limit_w is None:
+        compliance_status = "unconfigured"
+    elif power_cfg is None or not power_cfg.enabled:
+        compliance_status = "disabled"
+    elif power_cfg.state == "degraded":
+        compliance_status = "degraded"
+        applied_limit_w = power_cfg.applied_limit_w
+    elif power_cfg.state == "applying":
+        compliance_status = "applying"
+        applied_limit_w = power_cfg.applied_limit_w
+    elif power_cfg.state == "ready":
+        applied_limit_w = power_cfg.applied_limit_w
+        if power_cfg.applied_limit_w == limit_w:
+            compliance_status = "confirmed"
+        else:
+            compliance_status = "applying"
+    else:
+        compliance_status = power_cfg.state
+        applied_limit_w = power_cfg.applied_limit_w
+
+    applied_limit_kw = (
+        f"{Decimal(applied_limit_w) / Decimal(1000):.3f}"
+        if applied_limit_w is not None
+        else None
+    )
+    scheduled_limit_kw = (
+        f"{Decimal(limit_w) / Decimal(1000):.3f}" if limit_w is not None else None
+    )
 
     return CurrentPowerLimitResponse(
         station_id=station_id,
@@ -180,7 +218,14 @@ async def get_current_power_limit(
         local_time=_minute_to_time(local_m),
         local_date=local_d,
         power_limit_w=limit_w,
-        power_limit_kw=f"{Decimal(limit_w) / Decimal(1000):.3f}"
-        if limit_w is not None
-        else None,
+        power_limit_kw=scheduled_limit_kw,
+        scheduled_limit_w=limit_w,
+        scheduled_limit_kw=scheduled_limit_kw,
+        applied_limit_w=applied_limit_w,
+        applied_limit_kw=applied_limit_kw,
+        confirmed_limit_w=applied_limit_w,
+        confirmed_limit_kw=applied_limit_kw,
+        compliance_status=compliance_status,
+        state=power_cfg.state if power_cfg else None,
+        issue=power_cfg.issue if power_cfg else None,
     )
