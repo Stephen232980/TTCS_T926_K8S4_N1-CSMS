@@ -119,7 +119,7 @@ export function AdminPrivacyRetention() {
           <h1>Lưu trữ dữ liệu & Quyền riêng tư</h1>
           <p className="admin-page-description">
             Xem chính sách lưu trữ, quản lý tạm giữ và duyệt yêu cầu dữ liệu cá nhân.
-            Thực thi xóa đang bị chặn cho tới khi đủ policy và cơ chế bảo vệ dữ liệu.
+            Thực thi theo policy CSMS-PRIVACY-2026-01 sau khi kiểm tra hồ sơ và hạ tầng phục hồi.
           </p>
         </div>
       </header>
@@ -162,7 +162,7 @@ export function AdminPrivacyRetention() {
         {/* Cleanup Result Banner */}
         {cleanupResult && (
           <div className="admin-banner success" role="status">
-            <h3>Dọn dẹp bị chặn: chưa có policy được phê duyệt</h3>
+            <h3>{cleanupResult.status === 'completed' ? 'Đã dọn dẹp theo policy' : 'Dọn dẹp bị chặn'}</h3>
             <p>
               Thời gian thực hiện: {dateTime(cleanupResult.executed_at)} ·{' '}
               <strong>Tổng số bản ghi đã xóa an toàn: {numberText(cleanupResult.total_deleted)}</strong>

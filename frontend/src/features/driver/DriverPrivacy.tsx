@@ -61,7 +61,7 @@ export function DriverPrivacy() {
       <p>{{ pending: 'Chờ duyệt', approved: 'Đã duyệt, chưa thực thi', rejected: 'Đã từ chối' }[row.status]}</p>
       {row.decision_reason && <p>Lý do quyết định: {row.decision_reason}</p>}
       {row.policy_version && <p>Phiên bản policy: {row.policy_version}</p>}
-      <p>Chưa xóa dữ liệu. Đang chờ chính sách lưu giữ, cơ chế tách định danh và phục hồi dữ liệu an toàn.</p>
+      <p>Yêu cầu được xử lý theo CSMS-PRIVACY-2026-01. Khi bắt đầu thực thi, đăng nhập và thẻ sẽ bị thu hồi. Chứng từ tài chính giữ tối thiểu 10 năm trong phạm vi hạn chế; không xóa toàn bộ lịch sử.</p>
       {row.blockers.includes('refund_required') && <p>Cần xử lý hoàn tiền và đối chiếu chứng từ.</p>}
       {row.blockers.includes('debt_resolution_required') && <p>Cần xử lý khoản nợ trước khi tiếp tục.</p>}
       {row.blockers.includes('legal_hold_or_unsettled_charging') && <p>Có tạm giữ hoặc phiên sạc chưa quyết toán.</p>}

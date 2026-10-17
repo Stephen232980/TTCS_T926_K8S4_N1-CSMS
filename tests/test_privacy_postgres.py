@@ -91,13 +91,13 @@ async def test_request_approval_and_legacy_execution_preserve_committed_data(
             PrivacyDecision(
                 decision="approved",
                 reason="Reviewed intake only",
-                policy_version="test-policy-v1",
+                policy_version="CSMS-PRIVACY-2026-01",
             ),
             admin,
             AUTH,
         )
         assert approved.status == "approved"
-        assert approved.execution_status == "blocked"
+        assert approved.execution_status == "queued"
         with pytest.raises(HTTPException, match="privacy_execution_unavailable"):
             await PrivacyRetentionService(db).anonymize_user(
                 uid, admin, "User request", "CONFIRM_ANONYMIZE"
@@ -120,7 +120,7 @@ async def test_request_approval_and_legacy_execution_preserve_committed_data(
             await db.scalar(select(ChargingCard).where(ChargingCard.driver_id == uid))
         ).status == "active"
         request = await db.get(PrivacyRequest, receipt.id)
-        assert request.policy_version == "test-policy-v1"
+        assert request.policy_version == "CSMS-PRIVACY-2026-01"
         assert request.reviewer_id == admin
 
 
@@ -203,7 +203,9 @@ async def test_rejection_is_durable_and_cannot_be_reapproved():
         service = PrivacyRetentionService(db)
         receipt = await service.create_request(uid, "privacy-test-password", "Request")
         decision = PrivacyDecision(
-            decision="rejected", reason="Needs clarification", policy_version="test-v1"
+            decision="rejected",
+            reason="Needs clarification",
+            policy_version="CSMS-PRIVACY-2026-01",
         )
         await service.review_request(receipt.id, decision, admin, AUTH)
         with pytest.raises(HTTPException) as error:
@@ -226,7 +228,9 @@ async def test_hold_after_approval_is_visible_and_cleanup_deletes_nothing():
         await service.review_request(
             receipt.id,
             PrivacyDecision(
-                decision="approved", reason="Review only", policy_version="test-v1"
+                decision="approved",
+                reason="Review only",
+                policy_version="CSMS-PRIVACY-2026-01",
             ),
             admin,
             AUTH,

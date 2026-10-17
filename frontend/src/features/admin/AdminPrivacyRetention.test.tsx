@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AdminPrivacyRetention } from './AdminPrivacyRetention'
 import * as privacyApi from './privacyApi'
 
-vi.mock('./privacyApi', () => ({
+vi.mock('./privacyApi', () => ({ DEFAULT_PRIVACY_POLICY_VERSION: 'CSMS-PRIVACY-2026-01', executePrivacyRequest: vi.fn(),
   fetchRetentionPolicies: vi.fn(),
   triggerRetentionCleanup: vi.fn(),
   fetchLegalHold: vi.fn(),

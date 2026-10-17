@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
@@ -15,7 +15,12 @@ from src.modules.ocpp.admin_health_models import (
     OcppTelemetryBucket,
     SystemHealthSample,
 )
-from src.modules.privacy.models import PrivacyRequest
+from src.modules.privacy.default_policy import VERSION
+from src.modules.privacy.models import (
+    PrivacyJob,
+    PrivacyPolicy,
+    PrivacyRequest,
+)
 from src.modules.privacy.schemas import (
     AnonymizeUserResponse,
     LegalHoldResponse,
@@ -166,7 +171,7 @@ class PrivacyRetentionService:
             policies=items,
             auto_cleanup_interval_seconds=settings.retention_cleanup_interval_seconds,
             checked_at=now,
-            blocked_reason="Chưa có policy được phê duyệt và phân loại legal hold theo dữ liệu",
+            blocked_reason="Cleanup kỹ thuật nằm ngoài phạm vi AC gốc S-57",
         )
 
     async def run_retention_cleanup(
@@ -237,6 +242,7 @@ class PrivacyRetentionService:
         actor_id: UUID,
         authorization: AuthorizationEvidence | None = None,
     ) -> LegalHoldResponse:
+        await self.db.execute(text("SELECT pg_advisory_xact_lock(57170028)"))
         user = await self._lock_user(user_id)
         if user.status == "anonymized":
             raise HTTPException(
@@ -280,12 +286,10 @@ class PrivacyRetentionService:
                 "Xác nhận không đúng. Vui lòng nhập chính xác 'CONFIRM_ANONYMIZE'",
             )
 
-        # Legacy clients must not bypass intake/approval. No revocation or
-        # redaction is allowed while subject separation and restore replay are
-        # unavailable. There is deliberately no configuration bypass.
+        # The old direct endpoint cannot bypass request approval.
         raise HTTPException(
             409,
-            "privacy_execution_unavailable: Chưa có policy, tách PII và tombstone restore; tài khoản chưa bị thay đổi",
+            "privacy_execution_unavailable: Dùng luồng yêu cầu đã duyệt; tài khoản chưa bị thay đổi",
         )
 
     async def _lock_user(self, user_id: UUID) -> User:
@@ -368,11 +372,18 @@ class PrivacyRetentionService:
             raise HTTPException(409, "Yêu cầu đã được duyệt hoặc từ chối")
         if request.user_id == actor_id:
             raise HTTPException(409, "Không được tự duyệt yêu cầu của mình")
+        if payload.decision == "approved" and (
+            payload.policy_version != VERSION
+            or await self.db.get(PrivacyPolicy, VERSION) is None
+        ):
+            raise HTTPException(409, "Policy chưa được hỗ trợ hoặc chưa được duyệt")
         request.status = payload.decision
         request.decision_reason = payload.reason
         request.policy_version = payload.policy_version
         request.reviewer_id = actor_id
         request.reviewed_at = datetime.now(UTC)
+        if payload.decision == "approved":
+            self.db.add(PrivacyJob(request_id=request.id))
         await ghi_nhat_ky(
             self.db,
             actor_id=actor_id,
@@ -388,14 +399,12 @@ class PrivacyRetentionService:
         return receipt
 
     async def _receipt(self, request: PrivacyRequest) -> PrivacyReceipt:
-        blockers = [
-            "privacy_execution_unavailable",
-            "approved_data_class_policy_required",
-            "subject_pii_separation_required",
-            "restricted_financial_retention_required",
-            "checkpoint_executor_and_restore_tombstones_required",
-            "dispute_and_accounting_period_clearance_required",
-        ]
+        job = await self.db.scalar(
+            select(PrivacyJob).where(PrivacyJob.request_id == request.id)
+        )
+        blockers = []
+        if request.policy_version != VERSION and request.status == "approved":
+            blockers.append("approved_data_class_policy_required")
         if request.status != "approved":
             blockers.append(
                 "approval_required"
@@ -446,5 +455,59 @@ class PrivacyRetentionService:
             reviewed_at=request.reviewed_at,
             decision_reason=request.decision_reason,
             policy_version=request.policy_version,
-            blockers=blockers,
+            blockers=[] if job and job.status == "completed" else blockers,
+            execution_status=job.status if job else "blocked",
+            checkpoint=job.checkpoint if job else 0,
+            last_error=job.last_error if job else None,
+            retained_data=[
+                "financial_documents_minimum_10_years",
+                "deidentified_operational_measurements",
+            ],
         )
+
+    async def enqueue_execution(
+        self,
+        request_id: UUID,
+        actor_id: UUID,
+        authorization: AuthorizationEvidence,
+        reason: str,
+    ) -> PrivacyReceipt:
+        request = await self.db.scalar(
+            select(PrivacyRequest)
+            .where(PrivacyRequest.id == request_id)
+            .with_for_update()
+        )
+        if request is None:
+            raise HTTPException(404, "Yêu cầu không tồn tại")
+        if (
+            request.user_id == actor_id
+            or request.status != "approved"
+            or request.policy_version != VERSION
+        ):
+            raise HTTPException(409, "Yêu cầu chưa đủ điều kiện duyệt")
+        await self._lock_user(request.user_id)
+        receipt = await self._receipt(request)
+        if receipt.blockers:
+            raise HTTPException(409, ", ".join(receipt.blockers))
+        job = await self.db.scalar(
+            select(PrivacyJob)
+            .where(PrivacyJob.request_id == request_id)
+            .with_for_update()
+        )
+        if job is None:
+            self.db.add(PrivacyJob(request_id=request_id))
+        elif job.status == "needs_review":
+            job.status = "queued"
+            job.last_error = None
+        await ghi_nhat_ky(
+            self.db,
+            actor_id=actor_id,
+            action="privacy.execution_queued",
+            object_type="privacy_request",
+            object_id=str(request_id),
+            data={"reason": reason, "policy_version": VERSION},
+            permission=authorization.permission,
+            actor_roles=authorization.roles,
+        )
+        await self.db.commit()
+        return await self._receipt(request)

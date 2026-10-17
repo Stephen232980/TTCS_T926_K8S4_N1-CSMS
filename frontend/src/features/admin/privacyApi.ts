@@ -17,8 +17,8 @@ export interface RetentionPoliciesResponse {
 }
 
 export interface RetentionCleanupResponse {
-  status: 'blocked'
-  blocked_reason: string
+  status: 'blocked' | 'completed'
+  blocked_reason: string | null
   executed_at: string
   deleted_login_attempts: number
   deleted_expired_sessions: number
@@ -106,7 +106,11 @@ export interface PrivacyReceipt {
   reviewed_at: string | null
   decision_reason: string | null
   policy_version: string | null
-  execution_status: 'blocked'
+  execution_status: 'blocked' | 'queued' | 'processing' | 'needs_review' | 'completed'
+  checkpoint?: number
+  last_error?: string | null
+  privacy_mode?: string
+  retained_data?: string[] | 'completed'
   blockers: string[]
 }
 
@@ -117,4 +121,12 @@ export function fetchPrivacyRequests(signal?: AbortSignal) {
 export function reviewPrivacyRequest(id: string, decision: 'approved' | 'rejected', reason: string, policyVersion: string) {
   return adminRequest<PrivacyReceipt>(`/admin/privacy/requests/${id}/decision`,
     writeJson('POST', { decision, reason, policy_version: policyVersion }))
+}
+
+export const DEFAULT_PRIVACY_POLICY_VERSION = 'CSMS-PRIVACY-2026-01'
+
+export function executePrivacyRequest(id: string, reason: string, confirmPhrase: string) {
+  return adminRequest<PrivacyReceipt>(`/admin/privacy/requests/${id}/execute`, writeJson('POST', {
+    reason, confirm_phrase: confirmPhrase,
+  }))
 }

@@ -4,7 +4,7 @@ import { expect, it, vi } from 'vitest'
 import { fetchPrivacyRequests, reviewPrivacyRequest } from './privacyApi'
 import { PrivacyRequestReview } from './PrivacyRequestReview'
 
-vi.mock('./privacyApi', () => ({ fetchPrivacyRequests: vi.fn(), reviewPrivacyRequest: vi.fn() }))
+vi.mock('./privacyApi', () => ({ DEFAULT_PRIVACY_POLICY_VERSION: 'CSMS-PRIVACY-2026-01', executePrivacyRequest: vi.fn(), fetchPrivacyRequests: vi.fn(), reviewPrivacyRequest: vi.fn() }))
 
 it('requires reason and policy version, and keeps approved execution blocked', async () => {
   const user = userEvent.setup()
@@ -17,6 +17,7 @@ it('requires reason and policy version, and keeps approved execution blocked', a
   const approve = await screen.findByRole('button', { name: 'Duyệt yêu cầu' })
   expect(approve).toBeDisabled()
   await user.type(screen.getByLabelText('Lý do quyết định'), 'Reviewed')
+  await user.clear(screen.getByLabelText('Phiên bản policy đã phê duyệt'))
   await user.type(screen.getByLabelText('Phiên bản policy đã phê duyệt'), 'v1')
   await user.click(approve)
   expect(reviewPrivacyRequest).toHaveBeenCalledWith('request-1', 'approved', 'Reviewed', 'v1')

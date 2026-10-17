@@ -174,6 +174,9 @@ class Settings(BaseSettings):
     charging_closure_scan_interval_seconds: int = Field(default=60, gt=0)
     legacy_settlement_cutoff: str = ""
 
+    privacy_worker_enabled: bool = True
+    privacy_worker_interval_seconds: int = Field(default=10, ge=1)
+
     retention_cleanup_interval_seconds: int = Field(default=86_400, gt=0)
     retention_login_attempts_days: int = Field(default=1, ge=1)
     retention_expired_sessions_days: int = Field(default=30, ge=1)

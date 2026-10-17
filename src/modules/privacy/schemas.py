@@ -25,8 +25,8 @@ class RetentionPoliciesResponse(BaseModel):
 
 class RetentionCleanupResponse(BaseModel):
     executed_at: datetime
-    status: Literal["blocked"] = "blocked"
-    blocked_reason: str = "retention_policy_unavailable"
+    status: Literal["blocked", "completed"] = "blocked"
+    blocked_reason: str | None = "retention_policy_unavailable"
     deleted_login_attempts: int = Field(default=0, ge=0)
     deleted_expired_sessions: int = Field(default=0, ge=0)
     deleted_idempotency_keys: int = Field(default=0, ge=0)
@@ -93,5 +93,18 @@ class PrivacyReceipt(BaseModel):
     reviewed_at: datetime | None
     decision_reason: str | None
     policy_version: str | None
-    execution_status: Literal["blocked"] = "blocked"
+    execution_status: Literal[
+        "blocked", "queued", "processing", "needs_review", "completed"
+    ] = "blocked"
+    checkpoint: int = 0
+    last_error: str | None = None
+    privacy_mode: str = "unlink_original_account_preserve_financials"
+    retained_data: list[str] = Field(default_factory=list)
     blockers: list[str]
+
+
+class PrivacyExecutionPayload(BaseModel):
+    confirm_phrase: Literal["EXECUTE_PRIVACY_REQUEST"]
+    reason: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=3, max_length=500)
+    ]

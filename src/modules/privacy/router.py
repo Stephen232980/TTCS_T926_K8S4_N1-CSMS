@@ -23,6 +23,7 @@ from src.modules.privacy.schemas import (
     LegalHoldRequest,
     LegalHoldResponse,
     PrivacyDecision,
+    PrivacyExecutionPayload,
     PrivacyReceipt,
     RetentionCleanupResponse,
     RetentionPoliciesResponse,
@@ -48,7 +49,7 @@ class AdminPrivacyRoute(PolicyRoute):
                     status_code, code, message = (
                         422,
                         "validation_error",
-                        "Dá»¯ liá»‡u khÃ´ng há»£p lá»‡",
+                        "Dữ liệu không hợp lệ",
                     )
                     fields = [
                         {
@@ -151,7 +152,7 @@ async def get_account_legal_hold(
 ) -> LegalHoldResponse:
     user = await db_session.get(User, user_id)
     if user is None:
-        raise HTTPException(404, "TÃ i khoáº£n khÃ´ng tá»“n táº¡i")
+        raise HTTPException(404, "Tài khoản không tồn tại")
 
     is_held, reason = await PrivacyRetentionService(db_session).check_legal_hold(
         user_id
@@ -223,4 +224,28 @@ async def review_privacy_request(
 ) -> PrivacyReceipt:
     return await PrivacyRetentionService(db_session).review_request(
         request_id, payload, actor.user_id, authorization
+    )
+
+
+@router.get("/policy")
+@user_policy("admin.privacy.view", "all", "admin")
+async def get_privacy_policy() -> dict[str, object]:
+    from src.modules.privacy.default_policy import DOCUMENT
+
+    return DOCUMENT
+
+
+@router.post(
+    "/requests/{request_id}/execute", response_model=PrivacyReceipt, status_code=202
+)
+@user_policy("admin.privacy.manage", "all", "admin")
+async def execute_privacy_request(
+    request_id: UUID,
+    payload: PrivacyExecutionPayload,
+    actor: CurrentActorDependency,
+    authorization: AuditEvidence,
+    db_session: DatabaseSession,
+) -> PrivacyReceipt:
+    return await PrivacyRetentionService(db_session).enqueue_execution(
+        request_id, actor.user_id, authorization, payload.reason
     )
