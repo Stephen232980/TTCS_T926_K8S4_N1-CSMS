@@ -55,10 +55,13 @@ export interface ReconciliationRunItem {
   mismatch_sessions: number
   missing_data_sessions: number
   exempt_sessions: number
+  beginning_uncollected_invoices_vnd?: string
+  beginning_uncollected_count?: number
   total_billed_vnd: string
   total_recomputed_vnd: string
   total_debited_vnd: string
   money_discrepancy_vnd: string
+  wallet_discrepancy_vnd?: string
   total_meter_kwh: string
   total_billed_kwh: string
   kwh_discrepancy: string
@@ -112,6 +115,7 @@ export const issueCategoryLabels: Record<string, string> = {
   pricing_mismatch: 'Lệch đơn giá (tính lại)',
   meter_decreased: 'Số đo giảm bất thường',
   meter_missing: 'Thiếu số đo công tơ',
+  meter_discrepancy: 'Lệch kWh đo vs tính tiền',
   meter_wh_discrepancy: 'Lệch kWh đo vs tính tiền',
   legacy_exempt: 'Miễn trừ dữ liệu cũ',
 }
@@ -264,11 +268,14 @@ export async function exportAccountantRevenueCsv(
 export async function exportReconciliationIssuesCsv(
   runId: string,
   severity?: string,
-  issueType?: string
+  issueCategory?: string
 ): Promise<void> {
   const params = new URLSearchParams()
   if (severity) params.set('severity', severity)
-  if (issueType) params.set('issue_type', issueType)
+  if (issueCategory) {
+    params.set('issue_category', issueCategory)
+    params.set('issue_type', issueCategory)
+  }
 
   const qs = params.toString()
   const path = `/accounting/reconciliation-runs/${encodeURIComponent(runId)}/issues/export${qs ? `?${qs}` : ''}`

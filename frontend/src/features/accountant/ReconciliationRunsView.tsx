@@ -275,7 +275,7 @@ Bằng chứng: ${JSON.stringify(issue.evidence, null, 2)}`
                 </p>
               </div>
               <div className="finance-code-chip" title="Mã băm dữ liệu đầu vào (SHA-256)">
-                Băm bất biến: {selectedRun.input_hash.slice(0, 16)}…
+                Băm bất biến: {selectedRun.input_hash ? `${selectedRun.input_hash.slice(0, 16)}…` : '—'}
               </div>
             </div>
             <dl className="finance-facts">
@@ -317,7 +317,7 @@ Bằng chứng: ${JSON.stringify(issue.evidence, null, 2)}`
               <div className="finance-summary-sub">
                 <small>Tính lại: {money(selectedRun.total_recomputed_vnd)}</small>
                 <small className={Number(selectedRun.money_discrepancy_vnd) > 0 ? 'finance-diff is-warning' : 'finance-diff'}>
-                  Lệch: {money(selectedRun.money_discrepancy_vnd)}
+                  Lệch giá: {money(selectedRun.money_discrepancy_vnd)}
                 </small>
               </div>
             </div>
@@ -327,8 +327,8 @@ Bằng chứng: ${JSON.stringify(issue.evidence, null, 2)}`
               <strong className="finance-summary-value">{money(selectedRun.total_debited_vnd)}</strong>
               <div className="finance-summary-sub">
                 <small>Hóa đơn: {money(selectedRun.total_billed_vnd)}</small>
-                <small className={BigInt(selectedRun.total_debited_vnd) !== BigInt(selectedRun.total_billed_vnd) ? 'finance-diff is-warning' : 'finance-diff'}>
-                  Lệch ví: {money(String(BigInt(selectedRun.total_billed_vnd) - BigInt(selectedRun.total_debited_vnd)))}
+                <small className={(selectedRun.wallet_discrepancy_vnd && selectedRun.wallet_discrepancy_vnd !== '0') || (BigInt(selectedRun.total_debited_vnd) !== BigInt(selectedRun.total_billed_vnd)) ? 'finance-diff is-warning' : 'finance-diff'}>
+                  Lệch ví: {money(selectedRun.wallet_discrepancy_vnd ?? String(BigInt(selectedRun.total_billed_vnd) - BigInt(selectedRun.total_debited_vnd)))}
                 </small>
               </div>
             </div>
@@ -343,6 +343,16 @@ Bằng chứng: ${JSON.stringify(issue.evidence, null, 2)}`
                 </small>
               </div>
             </div>
+
+            {selectedRun.beginning_uncollected_count !== undefined && selectedRun.beginning_uncollected_count > 0 && (
+              <div className="finance-summary-card" data-testid="beginning-uncollected-card">
+                <span className="finance-summary-label">Nợ tồn đầu kỳ (trước ngày bắt đầu)</span>
+                <strong className="finance-summary-value">{money(selectedRun.beginning_uncollected_invoices_vnd ?? '0')}</strong>
+                <div className="finance-summary-sub">
+                  <small>{selectedRun.beginning_uncollected_count} hóa đơn chưa thu</small>
+                </div>
+              </div>
+            )}
           </section>
 
           {/* Issue category filter tabs */}
@@ -373,7 +383,13 @@ Bằng chứng: ${JSON.stringify(issue.evidence, null, 2)}`
               >
                 Tất cả ({selectedRun.mismatch_sessions})
               </button>
-              {Object.entries(selectedRun.summary_counts || {}).map(([cat, cnt]) => (
+              {Object.entries(selectedRun.summary_counts || {})
+                .filter(([cat, cnt]) =>
+                  typeof cnt === 'number' &&
+                  cnt > 0 &&
+                  !['critical', 'warning', 'info', 'beginning_uncollected_vnd', 'beginning_uncollected_count'].includes(cat)
+                )
+                .map(([cat, cnt]) => (
                 <button
                   key={cat}
                   className={`finance-tab ${issuesCategory === cat ? 'is-active' : ''}`}
