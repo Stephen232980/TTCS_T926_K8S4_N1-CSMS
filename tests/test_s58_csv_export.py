@@ -63,6 +63,9 @@ async def test_export_revenue_report_csv_unpaginated_and_neutralized() -> None:
     row1.idle_amount_vnd = 5000
     row1.debited_vnd = 50000
 
+    row1.session_debited_vnd = 50000
+    row1.settlement_reason = "debited"
+
     row2 = MagicMock()
     row2.invoice_id = uuid4()
     row2.session_id = uuid4()
@@ -76,14 +79,40 @@ async def test_export_revenue_report_csv_unpaginated_and_neutralized() -> None:
     row2.energy_amount_vnd = 90000
     row2.idle_amount_vnd = 10000
     row2.debited_vnd = 100000
+    row2.session_debited_vnd = 100000
+    row2.settlement_reason = "debited"
+
+    debit_row1 = MagicMock()
+    debit_row1.station_id = station_id
+    debit_row1.station_name = "=SUM(A1:A10)"
+    debit_row1.charge_point_id = cp1_id
+    debit_row1.charge_point_code = "CP-01"
+    debit_row1.debited_vnd = 50000
+    debit_row1.created_at = now
+
+    debit_row2 = MagicMock()
+    debit_row2.station_id = station_id
+    debit_row2.station_name = "=SUM(A1:A10)"
+    debit_row2.charge_point_id = cp2_id
+    debit_row2.charge_point_code = "@EVIL_CP"
+    debit_row2.debited_vnd = 100000
+    debit_row2.created_at = now
 
     mock_inv_res = MagicMock()
     mock_inv_res.all.return_value = [row1, row2]
 
-    mock_unbilled_res = MagicMock()
-    mock_unbilled_res.all.return_value = []
+    mock_debit_res = MagicMock()
+    mock_debit_res.all.return_value = [debit_row1, debit_row2]
 
-    db.execute.side_effect = [mock_inv_res, mock_unbilled_res]
+    mock_empty_res = MagicMock()
+    mock_empty_res.all.return_value = []
+
+    db.execute.side_effect = [
+        mock_inv_res,
+        mock_debit_res,
+        mock_empty_res,
+        mock_empty_res,
+    ]
 
     query = RevenueReportQuery(
         period="month",
@@ -125,11 +154,9 @@ async def test_api_owner_revenue_export_success() -> None:
     set_actor("station_owner")
     db = AsyncMock()
 
-    mock_inv_res = MagicMock()
-    mock_inv_res.all.return_value = []
-    mock_unbilled_res = MagicMock()
-    mock_unbilled_res.all.return_value = []
-    db.execute.side_effect = [mock_inv_res, mock_unbilled_res]
+    mock_empty_res = MagicMock()
+    mock_empty_res.all.return_value = []
+    db.execute.return_value = mock_empty_res
 
     async def override_db() -> AsyncGenerator[AsyncMock, None]:
         yield db
@@ -192,11 +219,9 @@ async def test_api_accountant_revenue_export_success() -> None:
     set_actor("accountant")
     db = AsyncMock()
 
-    mock_inv_res = MagicMock()
-    mock_inv_res.all.return_value = []
-    mock_unbilled_res = MagicMock()
-    mock_unbilled_res.all.return_value = []
-    db.execute.side_effect = [mock_inv_res, mock_unbilled_res]
+    mock_empty_res = MagicMock()
+    mock_empty_res.all.return_value = []
+    db.execute.return_value = mock_empty_res
 
     async def override_db() -> AsyncGenerator[AsyncMock, None]:
         yield db

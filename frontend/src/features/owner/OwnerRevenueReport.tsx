@@ -237,13 +237,31 @@ export function OwnerRevenueReport({
               </span>
               <div className="owner-metric-subtext">
                 <div>
-                  <span className="owner-badge success">Đã thu ví</span>{' '}
+                  <span className="owner-badge success">Đã trừ ví kỳ này</span>{' '}
                   <strong>{formatVnd(report.summary.debited_vnd)}</strong>
                 </div>
                 <div>
-                  <span className="owner-badge pending">Chờ thu / Đối soát</span>{' '}
-                  <strong>{formatVnd(report.summary.awaiting_settlement_vnd)}</strong>
+                  <span className="owner-badge pending">Chờ settlement</span>{' '}
+                  <strong>{formatVnd(report.summary.awaiting_settlement_vnd)}</strong>{' '}
+                  <span className="owner-subtle">
+                    ({report.summary.awaiting_settlement_sessions ?? 0} phiên)
+                  </span>
                 </div>
+                {Boolean(report.summary.legacy_exempt_sessions) && (
+                  <div>
+                    <span className="owner-badge subtle">Miễn trừ cũ</span>{' '}
+                    <strong>{formatVnd(report.summary.legacy_exempt_vnd ?? 0)}</strong>{' '}
+                    <span className="owner-subtle">
+                      ({report.summary.legacy_exempt_sessions} phiên)
+                    </span>
+                  </div>
+                )}
+                {Boolean(report.summary.free_sessions) && (
+                  <div>
+                    <span className="owner-badge subtle">Phiên miễn phí</span>{' '}
+                    <strong>{report.summary.free_sessions} phiên</strong>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -263,13 +281,14 @@ export function OwnerRevenueReport({
 
             {/* Card 3: Fee Breakdown */}
             <div className="owner-metric-card info">
-              <span className="owner-metric-title">Cơ cấu doanh thu</span>
+              <span className="owner-metric-title">Cơ cấu doanh thu & phí</span>
               <span className="owner-metric-value">
                 {formatVnd(report.summary.energy_amount_vnd)}
               </span>
               <div className="owner-metric-subtext">
                 <div>Tiền điện năng: <strong>{formatVnd(report.summary.energy_amount_vnd)}</strong></div>
                 <div>Phí quá giờ: <strong>{formatVnd(report.summary.idle_amount_vnd)}</strong></div>
+                <div>Phí giữ chỗ (No-show): <strong>{formatVnd(report.summary.reservation_fee_vnd ?? 0)}</strong> <span className="owner-subtle">({report.summary.reservation_count ?? 0} lượt)</span></div>
               </div>
             </div>
 
@@ -284,6 +303,13 @@ export function OwnerRevenueReport({
                   Phiên hoàn tất chưa xuất HĐ:{' '}
                   <strong>{report.summary.unbilled_sessions} phiên</strong>
                 </div>
+                {Boolean(report.summary.unbilled_missing_meter_sessions) && (
+                  <div>
+                    <span className="owner-badge warning">
+                      Thiếu số đo: {report.summary.unbilled_missing_meter_sessions} phiên
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -320,7 +346,10 @@ export function OwnerRevenueReport({
                       <div className="owner-bar-tooltip">
                         <strong>{d.date}</strong>
                         <div>Doanh thu: {formatVnd(d.invoice_vnd)}</div>
-                        <div>Đã thu: {formatVnd(d.debited_vnd)}</div>
+                        <div>Đã trừ ví: {formatVnd(d.debited_vnd)}</div>
+                        {Boolean(d.reservation_fee_vnd) && (
+                          <div>Phí giữ chỗ: {formatVnd(d.reservation_fee_vnd ?? 0)}</div>
+                        )}
                         <div>Sản lượng: {formatKwh(d.kwh)}</div>
                         <div>Số phiên: {d.sessions_count}</div>
                       </div>
@@ -352,13 +381,14 @@ export function OwnerRevenueReport({
                     <th className="num">Tổng hóa đơn</th>
                     <th className="num">Đã trừ ví</th>
                     <th className="num">Chờ thu</th>
+                    <th className="num">Phí đặt chỗ</th>
                     <th className="num">Chưa lập HĐ</th>
                   </tr>
                 </thead>
                 <tbody>
                   {report.charge_points.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="owner-empty-row">
+                      <td colSpan={11} className="owner-empty-row">
                         Không có dữ liệu phiên sạc hoặc doanh thu trong kỳ đã chọn.
                       </td>
                     </tr>
@@ -387,9 +417,25 @@ export function OwnerRevenueReport({
                           )}
                         </td>
                         <td className="num">
-                          {cp.unbilled_sessions > 0
-                            ? `${formatKwh(cp.unbilled_operating_kwh)} (${cp.unbilled_sessions} phiên)`
-                            : '—'}
+                          {(cp.reservation_fee_vnd ?? 0) > 0 ? (
+                            <span>{formatVnd(cp.reservation_fee_vnd ?? 0)}</span>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                        <td className="num">
+                          {cp.unbilled_sessions > 0 ? (
+                            <span>
+                              {formatKwh(cp.unbilled_operating_kwh)} ({cp.unbilled_sessions} phiên)
+                              {Boolean(cp.unbilled_missing_meter_sessions) && (
+                                <span className="owner-badge warning" style={{ marginLeft: 4 }}>
+                                  Thiếu {cp.unbilled_missing_meter_sessions}
+                                </span>
+                              )}
+                            </span>
+                          ) : (
+                            '—'
+                          )}
                         </td>
                       </tr>
                     ))

@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
-from sqlalchemy import String, and_, case, cast, func, select
+from sqlalchemy import String, and_, case, cast, func, literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.billing.models import Invoice, InvoiceLine
@@ -22,8 +22,9 @@ from src.modules.reporting.schemas import (
     RevenueReportResponse,
     RevenueSummary,
 )
+from src.modules.reservations.models import Reservation
 from src.modules.stations.models import ChargePoint, Station
-from src.modules.wallet.models import WalletLedger
+from src.modules.wallet.models import Wallet, WalletLedger
 from src.platform.csv_export import build_csv_streaming_response
 
 REPORT_TIMEZONE = ZoneInfo("Asia/Ho_Chi_Minh")
@@ -41,9 +42,17 @@ class _CPAccumulator:
     idle_amount_vnd: int = 0
     total_invoice_vnd: int = 0
     debited_vnd: int = 0
+    invoice_cohort_settled_vnd: int = 0
     awaiting_settlement_vnd: int = 0
+    awaiting_settlement_sessions: int = 0
+    legacy_exempt_sessions: int = 0
+    legacy_exempt_vnd: int = 0
+    free_sessions: int = 0
+    reservation_fee_vnd: int = 0
+    reservation_count: int = 0
     unbilled_sessions: int = 0
     unbilled_operating_kwh: Decimal = field(default_factory=lambda: Decimal(0))
+    unbilled_missing_meter_sessions: int = 0
 
 
 @dataclass
@@ -53,6 +62,7 @@ class _DailyAccumulator:
     kwh: Decimal = field(default_factory=lambda: Decimal(0))
     invoice_vnd: int = 0
     debited_vnd: int = 0
+    reservation_fee_vnd: int = 0
 
 
 def resolve_report_range(
@@ -106,6 +116,17 @@ REVENUE_CSV_HEADERS: list[str] = [
     "idle_vnd",
     "invoice_total_vnd",
     "debited_vnd",
+    "invoice_cohort_settled_vnd",
+    "awaiting_settlement_vnd",
+    "awaiting_settlement_sessions",
+    "legacy_exempt_sessions",
+    "legacy_exempt_vnd",
+    "free_sessions",
+    "reservation_fee_vnd",
+    "reservation_count",
+    "unbilled_sessions",
+    "unbilled_operating_kwh",
+    "unbilled_missing_meter_sessions",
 ]
 
 
@@ -134,10 +155,9 @@ async def _compute_revenue_data(
                 detail="Không có quyền truy cập trạm sạc này",
             )
 
-    # 1. Subquery aggregating InvoiceLine metrics per invoice to prevent duplicates
-    line_subq = (
+    # 1. LATERAL correlated subquery aggregating InvoiceLine metrics per invoice using index (AC-6)
+    line_lateral = (
         select(
-            InvoiceLine.invoice_id,
             func.coalesce(
                 func.sum(
                     case(
@@ -166,59 +186,54 @@ async def _compute_revenue_data(
                 0,
             ).label("idle_amount_vnd"),
         )
-        .group_by(InvoiceLine.invoice_id)
-        .subquery("line_agg")
+        .where(InvoiceLine.invoice_id == Invoice.id)
+        .correlate(Invoice)
+        .subquery()
+        .lateral("line_agg")
     )
 
-    # 2. Subquery aggregating WalletLedger charging_debit per session
-    ledger_subq = (
-        select(
-            WalletLedger.reference_id,
-            func.coalesce(
-                func.sum(
-                    case(
-                        (
-                            and_(
-                                WalletLedger.entry_type == "charging_debit",
-                                WalletLedger.amount_vnd < 0,
-                            ),
-                            -WalletLedger.amount_vnd,
-                        ),
-                        else_=0,
-                    )
-                ),
-                0,
-            ).label("debited_vnd"),
-        )
-        .where(WalletLedger.entry_type == "charging_debit")
-        .group_by(WalletLedger.reference_id)
-        .subquery("ledger_agg")
-    )
-
-    # 3. Main invoiced query within [start_dt, end_dt)
+    # 2. Invoiced sessions query within [start_dt, end_dt) with direct ledger lookup
     invoiced_query = (
         select(
             Invoice.id.label("invoice_id"),
             Invoice.session_id,
             Invoice.created_at.label("invoice_created_at"),
             Invoice.total_vnd.label("invoice_total_vnd"),
+            ChargingSession.settlement_reason.label("settlement_reason"),
             Station.id.label("station_id"),
             Station.name.label("station_name"),
             ChargePoint.id.label("charge_point_id"),
             ChargePoint.code.label("charge_point_code"),
-            func.coalesce(line_subq.c.energy_wh, 0).label("energy_wh"),
-            func.coalesce(line_subq.c.energy_amount_vnd, 0).label("energy_amount_vnd"),
-            func.coalesce(line_subq.c.idle_amount_vnd, 0).label("idle_amount_vnd"),
-            func.coalesce(ledger_subq.c.debited_vnd, 0).label("debited_vnd"),
+            func.coalesce(line_lateral.c.energy_wh, 0).label("energy_wh"),
+            func.coalesce(line_lateral.c.energy_amount_vnd, 0).label(
+                "energy_amount_vnd"
+            ),
+            func.coalesce(line_lateral.c.idle_amount_vnd, 0).label("idle_amount_vnd"),
+            case(
+                (
+                    and_(
+                        Wallet.id.is_not(None),
+                        Wallet.driver_id == ChargingSession.driver_id,
+                    ),
+                    -WalletLedger.amount_vnd,
+                ),
+                else_=0,
+            ).label("session_debited_vnd"),
         )
         .join(ChargingSession, ChargingSession.id == Invoice.session_id)
         .join(ChargePoint, ChargePoint.id == ChargingSession.charge_point_id)
         .join(Station, Station.id == ChargePoint.station_id)
-        .outerjoin(line_subq, line_subq.c.invoice_id == Invoice.id)
+        .outerjoin(line_lateral, literal_column("true"))
         .outerjoin(
-            ledger_subq,
-            ledger_subq.c.reference_id == cast(ChargingSession.id, String),
+            WalletLedger,
+            and_(
+                WalletLedger.entry_type == "charging_debit",
+                WalletLedger.reference_type == "charging_session",
+                WalletLedger.reference_id == cast(Invoice.session_id, String),
+                WalletLedger.amount_vnd < 0,
+            ),
         )
+        .outerjoin(Wallet, Wallet.id == WalletLedger.wallet_id)
         .where(
             Invoice.created_at >= start_dt,
             Invoice.created_at < end_dt,
@@ -234,7 +249,87 @@ async def _compute_revenue_data(
 
     invoiced_rows = (await db.execute(invoiced_query)).all()
 
-    # 3. Query unbilled operating sessions within [start_dt, end_dt) (AC-5)
+    # 3. Debits query within [start_dt, end_dt) filtered strictly by ledger.created_at (AC-3)
+    debits_query = (
+        select(
+            WalletLedger.id.label("ledger_id"),
+            (-WalletLedger.amount_vnd).label("debited_vnd"),
+            WalletLedger.created_at.label("ledger_created_at"),
+            Station.id.label("station_id"),
+            Station.name.label("station_name"),
+            ChargePoint.id.label("charge_point_id"),
+            ChargePoint.code.label("charge_point_code"),
+        )
+        .join(Wallet, Wallet.id == WalletLedger.wallet_id)
+        .join(
+            ChargingSession,
+            and_(
+                WalletLedger.reference_type == "charging_session",
+                WalletLedger.reference_id == cast(ChargingSession.id, String),
+                Wallet.driver_id == ChargingSession.driver_id,
+            ),
+        )
+        .join(ChargePoint, ChargePoint.id == ChargingSession.charge_point_id)
+        .join(Station, Station.id == ChargePoint.station_id)
+        .where(
+            WalletLedger.created_at >= start_dt,
+            WalletLedger.created_at < end_dt,
+            WalletLedger.entry_type == "charging_debit",
+            WalletLedger.amount_vnd < 0,
+        )
+    )
+
+    if owner_id is not None:
+        debits_query = debits_query.where(Station.owner_id == owner_id)
+    if query.station_id is not None:
+        debits_query = debits_query.where(Station.id == query.station_id)
+    if query.charge_point_id is not None:
+        debits_query = debits_query.where(ChargePoint.id == query.charge_point_id)
+
+    debit_rows = (await db.execute(debits_query)).all()
+
+    # 4. Reservation fee debits query within [start_dt, end_dt) (S-50 / AC-4)
+    reservations_query = (
+        select(
+            WalletLedger.id.label("ledger_id"),
+            (-WalletLedger.amount_vnd).label("reservation_fee_vnd"),
+            WalletLedger.created_at.label("ledger_created_at"),
+            Station.id.label("station_id"),
+            Station.name.label("station_name"),
+            ChargePoint.id.label("charge_point_id"),
+            ChargePoint.code.label("charge_point_code"),
+        )
+        .join(Wallet, Wallet.id == WalletLedger.wallet_id)
+        .join(
+            Reservation,
+            and_(
+                WalletLedger.reference_type == "reservation",
+                WalletLedger.reference_id == cast(Reservation.id, String),
+                Wallet.driver_id == Reservation.driver_id,
+            ),
+        )
+        .join(ChargePoint, ChargePoint.id == Reservation.charge_point_id)
+        .join(Station, Station.id == Reservation.station_id)
+        .where(
+            WalletLedger.created_at >= start_dt,
+            WalletLedger.created_at < end_dt,
+            WalletLedger.entry_type == "reservation_fee",
+            WalletLedger.amount_vnd < 0,
+        )
+    )
+
+    if owner_id is not None:
+        reservations_query = reservations_query.where(Station.owner_id == owner_id)
+    if query.station_id is not None:
+        reservations_query = reservations_query.where(Station.id == query.station_id)
+    if query.charge_point_id is not None:
+        reservations_query = reservations_query.where(
+            ChargePoint.id == query.charge_point_id
+        )
+
+    reservation_rows = (await db.execute(reservations_query)).all()
+
+    # 5. Unbilled operating sessions within [start_dt, end_dt) (AC-5)
     unbilled_query = (
         select(
             ChargingSession.id.label("session_id"),
@@ -264,17 +359,33 @@ async def _compute_revenue_data(
 
     unbilled_rows = (await db.execute(unbilled_query)).all()
 
-    # 4. Aggregations
-    # Accumulate by charge point
+    # 6. Accumulators and timeline initialization
     cp_map: dict[UUID, _CPAccumulator] = {}
 
-    total_invoiced_sessions = len(invoiced_rows)
+    def _get_cp(s_id: UUID, s_name: str, cp_id: UUID, cp_code: str) -> _CPAccumulator:
+        if cp_id not in cp_map:
+            cp_map[cp_id] = _CPAccumulator(
+                station_id=s_id,
+                station_name=s_name,
+                charge_point_id=cp_id,
+                charge_point_code=cp_code,
+            )
+        return cp_map[cp_id]
+
+    total_invoiced_sessions = 0
     total_energy_wh = Decimal(0)
     total_energy_amount_vnd = 0
     total_idle_amount_vnd = 0
     total_invoice_vnd = 0
     total_debited_vnd = 0
+    total_invoice_cohort_settled_vnd = 0
     total_awaiting_settlement_vnd = 0
+    total_awaiting_settlement_sessions = 0
+    total_legacy_exempt_sessions = 0
+    total_legacy_exempt_vnd = 0
+    total_free_sessions = 0
+    total_reservation_fee_vnd = 0
+    total_reservation_count = 0
 
     # Daily timeline map (keyed by "YYYY-MM-DD")
     daily_map: dict[str, _DailyAccumulator] = {}
@@ -285,40 +396,54 @@ async def _compute_revenue_data(
         daily_map[d_str] = _DailyAccumulator(date=d_str)
         curr_d += timedelta(days=1)
 
+    # Process invoiced sessions
     for row in invoiced_rows:
         inv_total = int(row.invoice_total_vnd)
-        debited = int(row.debited_vnd)
-        awaiting = max(0, inv_total - debited)
         energy_wh = Decimal(str(row.energy_wh))
         energy_amt = int(row.energy_amount_vnd)
         idle_amt = int(row.idle_amount_vnd)
+        cohort_debited = int(
+            getattr(row, "session_debited_vnd", getattr(row, "debited_vnd", 0))
+        )
+        settlement_reason = getattr(row, "settlement_reason", "debited")
 
+        total_invoiced_sessions += 1
         total_energy_wh += energy_wh
         total_energy_amount_vnd += energy_amt
         total_idle_amount_vnd += idle_amt
         total_invoice_vnd += inv_total
-        total_debited_vnd += debited
-        total_awaiting_settlement_vnd += awaiting
 
-        cp_id = row.charge_point_id
-        if cp_id not in cp_map:
-            cp_map[cp_id] = _CPAccumulator(
-                station_id=row.station_id,
-                station_name=row.station_name,
-                charge_point_id=cp_id,
-                charge_point_code=row.charge_point_code,
-            )
-
-        item = cp_map[cp_id]
+        item = _get_cp(
+            row.station_id,
+            row.station_name,
+            row.charge_point_id,
+            row.charge_point_code,
+        )
         item.sessions_count += 1
         item.energy_wh += energy_wh
         item.energy_amount_vnd += energy_amt
         item.idle_amount_vnd += idle_amt
         item.total_invoice_vnd += inv_total
-        item.debited_vnd += debited
-        item.awaiting_settlement_vnd += awaiting
 
-        # Timeline aggregate
+        if settlement_reason == "legacy_exempt":
+            total_legacy_exempt_sessions += 1
+            total_legacy_exempt_vnd += inv_total
+            item.legacy_exempt_sessions += 1
+            item.legacy_exempt_vnd += inv_total
+        elif settlement_reason == "zero_invoice" or inv_total == 0:
+            total_free_sessions += 1
+            item.free_sessions += 1
+        else:
+            total_invoice_cohort_settled_vnd += cohort_debited
+            item.invoice_cohort_settled_vnd += cohort_debited
+            unpaid = max(0, inv_total - cohort_debited)
+            total_awaiting_settlement_vnd += unpaid
+            item.awaiting_settlement_vnd += unpaid
+            if unpaid > 0 or settlement_reason != "debited":
+                total_awaiting_settlement_sessions += 1
+                item.awaiting_settlement_sessions += 1
+
+        # Timeline: invoices plotted on invoice creation date
         inv_created = row.invoice_created_at.astimezone(REPORT_TIMEZONE)
         d_str = inv_created.date().isoformat()
         if d_str in daily_map:
@@ -326,28 +451,65 @@ async def _compute_revenue_data(
             d_entry.sessions_count += 1
             d_entry.kwh += energy_wh / Decimal(1000)
             d_entry.invoice_vnd += inv_total
-            d_entry.debited_vnd += debited
 
-    # Unbilled aggregation
+    # Process debits occurred in period (AC-3: independent ledger period)
+    for deb in debit_rows:
+        deb_amt = int(deb.debited_vnd)
+        total_debited_vnd += deb_amt
+
+        item = _get_cp(
+            deb.station_id,
+            deb.station_name,
+            deb.charge_point_id,
+            deb.charge_point_code,
+        )
+        item.debited_vnd += deb_amt
+
+        deb_created = deb.ledger_created_at.astimezone(REPORT_TIMEZONE)
+        d_str = deb_created.date().isoformat()
+        if d_str in daily_map:
+            daily_map[d_str].debited_vnd += deb_amt
+
+    # Process reservation fees occurred in period (AC-4: isolated from energy)
+    for res in reservation_rows:
+        res_amt = int(res.reservation_fee_vnd)
+        total_reservation_fee_vnd += res_amt
+        total_reservation_count += 1
+
+        item = _get_cp(
+            res.station_id,
+            res.station_name,
+            res.charge_point_id,
+            res.charge_point_code,
+        )
+        item.reservation_fee_vnd += res_amt
+        item.reservation_count += 1
+
+        res_created = res.ledger_created_at.astimezone(REPORT_TIMEZONE)
+        d_str = res_created.date().isoformat()
+        if d_str in daily_map:
+            daily_map[d_str].reservation_fee_vnd += res_amt
+
+    # Process unbilled sessions (AC-5: distinguish missing meter vs 0 kWh)
     total_unbilled_sessions = len(unbilled_rows)
+    total_unbilled_missing_meter_sessions = 0
     total_unbilled_kwh = Decimal(0)
     for ub in unbilled_rows:
-        ub_kwh = (
-            Decimal(str(ub.energy_kwh)) if ub.energy_kwh is not None else Decimal(0)
+        item = _get_cp(
+            ub.station_id,
+            ub.station_name,
+            ub.charge_point_id,
+            ub.charge_point_code,
         )
-        total_unbilled_kwh += ub_kwh
-
-        cp_id = ub.charge_point_id
-        if cp_id not in cp_map:
-            cp_map[cp_id] = _CPAccumulator(
-                station_id=ub.station_id,
-                station_name=ub.station_name,
-                charge_point_id=cp_id,
-                charge_point_code=ub.charge_point_code,
-            )
-        item = cp_map[cp_id]
         item.unbilled_sessions += 1
-        item.unbilled_operating_kwh += ub_kwh
+
+        if ub.energy_kwh is None:
+            total_unbilled_missing_meter_sessions += 1
+            item.unbilled_missing_meter_sessions += 1
+        else:
+            ub_kwh = Decimal(str(ub.energy_kwh))
+            total_unbilled_kwh += ub_kwh
+            item.unbilled_operating_kwh += ub_kwh
 
     # Format charge point list
     cp_list: list[ChargePointRevenueItem] = []
@@ -366,15 +528,23 @@ async def _compute_revenue_data(
                 idle_amount_vnd=item.idle_amount_vnd,
                 total_invoice_vnd=item.total_invoice_vnd,
                 debited_vnd=item.debited_vnd,
+                invoice_cohort_settled_vnd=item.invoice_cohort_settled_vnd,
                 awaiting_settlement_vnd=item.awaiting_settlement_vnd,
+                awaiting_settlement_sessions=item.awaiting_settlement_sessions,
+                legacy_exempt_sessions=item.legacy_exempt_sessions,
+                legacy_exempt_vnd=item.legacy_exempt_vnd,
+                free_sessions=item.free_sessions,
+                reservation_fee_vnd=item.reservation_fee_vnd,
+                reservation_count=item.reservation_count,
                 unbilled_sessions=item.unbilled_sessions,
                 unbilled_operating_kwh=unbilled_kwh,
+                unbilled_missing_meter_sessions=item.unbilled_missing_meter_sessions,
             )
         )
 
-    # Sort charge points by total_invoice_vnd desc, then charge_point_code
+    # Sort charge points by total_invoice_vnd desc, then debited_vnd desc, then energy_kwh desc
     cp_list.sort(
-        key=lambda x: (x.total_invoice_vnd, x.energy_kwh),
+        key=lambda x: (x.total_invoice_vnd, x.debited_vnd, x.energy_kwh),
         reverse=True,
     )
 
@@ -385,9 +555,17 @@ async def _compute_revenue_data(
         idle_amount_vnd=total_idle_amount_vnd,
         total_invoice_vnd=total_invoice_vnd,
         debited_vnd=total_debited_vnd,
+        invoice_cohort_settled_vnd=total_invoice_cohort_settled_vnd,
         awaiting_settlement_vnd=total_awaiting_settlement_vnd,
+        awaiting_settlement_sessions=total_awaiting_settlement_sessions,
+        legacy_exempt_sessions=total_legacy_exempt_sessions,
+        legacy_exempt_vnd=total_legacy_exempt_vnd,
+        free_sessions=total_free_sessions,
+        reservation_fee_vnd=total_reservation_fee_vnd,
+        reservation_count=total_reservation_count,
         unbilled_sessions=total_unbilled_sessions,
         unbilled_operating_kwh=round(total_unbilled_kwh, 4),
+        unbilled_missing_meter_sessions=total_unbilled_missing_meter_sessions,
     )
 
     daily_timeline = [
@@ -397,6 +575,7 @@ async def _compute_revenue_data(
             kwh=round(d.kwh, 4),
             invoice_vnd=d.invoice_vnd,
             debited_vnd=d.debited_vnd,
+            reservation_fee_vnd=d.reservation_fee_vnd,
         )
         for d in sorted(daily_map.values(), key=lambda x: x.date)
     ]
@@ -463,6 +642,17 @@ async def export_revenue_report_csv(
                 item.idle_amount_vnd,
                 item.total_invoice_vnd,
                 item.debited_vnd,
+                item.invoice_cohort_settled_vnd,
+                item.awaiting_settlement_vnd,
+                item.awaiting_settlement_sessions,
+                item.legacy_exempt_sessions,
+                item.legacy_exempt_vnd,
+                item.free_sessions,
+                item.reservation_fee_vnd,
+                item.reservation_count,
+                item.unbilled_sessions,
+                item.unbilled_operating_kwh,
+                item.unbilled_missing_meter_sessions,
             ]
         )
 
