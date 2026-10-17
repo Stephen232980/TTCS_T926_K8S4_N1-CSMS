@@ -402,8 +402,10 @@ async def _compute_revenue_data(
         energy_wh = Decimal(str(row.energy_wh))
         energy_amt = int(row.energy_amount_vnd)
         idle_amt = int(row.idle_amount_vnd)
-        cohort_debited = int(row.session_debited_vnd)
-        settlement_reason = row.settlement_reason
+        cohort_debited = int(
+            getattr(row, "session_debited_vnd", getattr(row, "debited_vnd", 0))
+        )
+        settlement_reason = getattr(row, "settlement_reason", "debited")
 
         total_invoiced_sessions += 1
         total_energy_wh += energy_wh
