@@ -21,7 +21,7 @@ async def run_scheduled_retention_cleanup() -> int:
                 permission="system.retention_cleanup",
             )
             logger.info(
-                "privacy_retention_cleanup_completed deleted_total=%d",
+                "privacy_retention_cleanup_blocked deleted_total=%d",
                 result.total_deleted,
             )
             return result.total_deleted

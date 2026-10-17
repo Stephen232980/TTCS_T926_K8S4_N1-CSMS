@@ -22,6 +22,8 @@ from src.modules.privacy.schemas import (
     DriverPrivacyRequest,
     LegalHoldRequest,
     LegalHoldResponse,
+    PrivacyDecision,
+    PrivacyReceipt,
     RetentionCleanupResponse,
     RetentionPoliciesResponse,
 )
@@ -46,7 +48,7 @@ class AdminPrivacyRoute(PolicyRoute):
                     status_code, code, message = (
                         422,
                         "validation_error",
-                        "Dữ liệu không hợp lệ",
+                        "Dá»¯ liá»‡u khÃ´ng há»£p lá»‡",
                     )
                     fields = [
                         {
@@ -93,7 +95,7 @@ driver_router = APIRouter(
     prefix="/api/v1/driver/privacy",
     tags=["driver-privacy"],
     dependencies=[Depends(authorize_request)],
-    route_class=PolicyRoute,
+    route_class=AdminPrivacyRoute,
 )
 
 DatabaseSession = Annotated[AsyncSession, Depends(get_db_session)]
@@ -147,7 +149,7 @@ async def get_account_legal_hold(
 ) -> LegalHoldResponse:
     user = await db_session.get(User, user_id)
     if user is None:
-        raise HTTPException(404, "Tài khoản không tồn tại")
+        raise HTTPException(404, "TÃ i khoáº£n khÃ´ng tá»“n táº¡i")
 
     is_held, reason = await PrivacyRetentionService(db_session).check_legal_hold(
         user_id
@@ -178,20 +180,45 @@ async def update_account_legal_hold(
     )
 
 
-@driver_router.post("/anonymize-request", response_model=AnonymizeUserResponse)
+@driver_router.post(
+    "/anonymize-request", response_model=PrivacyReceipt, status_code=202
+)
 @user_policy("driver.privacy.request", "own", "driver")
 async def driver_self_anonymize(
     payload: DriverPrivacyRequest,
     actor: CurrentActorDependency,
+    db_session: DatabaseSession,
+) -> PrivacyReceipt:
+    return await PrivacyRetentionService(db_session).create_request(
+        user_id=actor.user_id,
+        password=payload.current_password.get_secret_value(),
+        reason=payload.reason or "Yêu cầu xử lý dữ liệu cá nhân",
+    )
+
+
+@driver_router.get("/requests", response_model=list[PrivacyReceipt])
+@user_policy("driver.privacy.request", "own", "driver")
+async def driver_privacy_requests(
+    actor: CurrentActorDependency, db_session: DatabaseSession
+) -> list[PrivacyReceipt]:
+    return await PrivacyRetentionService(db_session).list_requests(actor.user_id)
+
+
+@router.get("/requests", response_model=list[PrivacyReceipt])
+@user_policy("admin.privacy.view", "all", "admin")
+async def admin_privacy_requests(db_session: DatabaseSession) -> list[PrivacyReceipt]:
+    return await PrivacyRetentionService(db_session).list_requests()
+
+
+@router.post("/requests/{request_id}/decision", response_model=PrivacyReceipt)
+@user_policy("admin.privacy.manage", "all", "admin")
+async def review_privacy_request(
+    request_id: UUID,
+    payload: PrivacyDecision,
+    actor: CurrentActorDependency,
     authorization: AuditEvidence,
     db_session: DatabaseSession,
-) -> AnonymizeUserResponse:
-    reason = payload.reason or "Yêu cầu ẩn danh hóa tài khoản tự phục vụ của tài xế"
-    return await PrivacyRetentionService(db_session).anonymize_user(
-        user_id=actor.user_id,
-        actor_id=actor.user_id,
-        reason=reason,
-        confirm_phrase="CONFIRM_ANONYMIZE",
-        actor_roles=actor.roles,
-        authorization=authorization,
+) -> PrivacyReceipt:
+    return await PrivacyRetentionService(db_session).review_request(
+        request_id, payload, actor.user_id, authorization
     )

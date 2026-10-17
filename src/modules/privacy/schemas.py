@@ -1,7 +1,8 @@
 from datetime import datetime
+from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr, StringConstraints
 
 
 class RetentionPolicyItem(BaseModel):
@@ -18,10 +19,14 @@ class RetentionPoliciesResponse(BaseModel):
     policies: list[RetentionPolicyItem]
     auto_cleanup_interval_seconds: int
     checked_at: datetime
+    cleanup_enabled: bool = False
+    blocked_reason: str | None = None
 
 
 class RetentionCleanupResponse(BaseModel):
     executed_at: datetime
+    status: Literal["blocked"] = "blocked"
+    blocked_reason: str = "retention_policy_unavailable"
     deleted_login_attempts: int = Field(default=0, ge=0)
     deleted_expired_sessions: int = Field(default=0, ge=0)
     deleted_idempotency_keys: int = Field(default=0, ge=0)
@@ -65,4 +70,28 @@ class LegalHoldResponse(BaseModel):
 
 
 class DriverPrivacyRequest(BaseModel):
+    current_password: SecretStr = Field(min_length=1, max_length=1024)
     reason: str | None = Field(default=None, max_length=500)
+
+
+class PrivacyDecision(BaseModel):
+    decision: Literal["approved", "rejected"]
+    reason: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=3, max_length=500)
+    ]
+    policy_version: Annotated[
+        str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)
+    ]
+
+
+class PrivacyReceipt(BaseModel):
+    id: UUID
+    user_id: UUID
+    status: Literal["pending", "approved", "rejected"]
+    reason: str
+    created_at: datetime
+    reviewed_at: datetime | None
+    decision_reason: str | None
+    policy_version: str | None
+    execution_status: Literal["blocked"] = "blocked"
+    blockers: list[str]

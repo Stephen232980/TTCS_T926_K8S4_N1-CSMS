@@ -11,10 +11,14 @@ export interface RetentionPolicyItem {
 export interface RetentionPoliciesResponse {
   policies: RetentionPolicyItem[]
   auto_cleanup_interval_seconds: number
+  cleanup_enabled: boolean
+  blocked_reason: string | null
   checked_at: string
 }
 
 export interface RetentionCleanupResponse {
+  status: 'blocked'
+  blocked_reason: string
   executed_at: string
   deleted_login_attempts: number
   deleted_expired_sessions: number
@@ -91,4 +95,26 @@ export async function submitAnonymizeUser(
     `/admin/privacy/anonymize/${userId}`,
     writeJson('POST', { reason, confirm_phrase: confirmPhrase }),
   )
+}
+
+export interface PrivacyReceipt {
+  id: string
+  user_id: string
+  reason: string
+  status: 'pending' | 'approved' | 'rejected'
+  created_at: string
+  reviewed_at: string | null
+  decision_reason: string | null
+  policy_version: string | null
+  execution_status: 'blocked'
+  blockers: string[]
+}
+
+export function fetchPrivacyRequests(signal?: AbortSignal) {
+  return adminRequest<PrivacyReceipt[]>('/admin/privacy/requests', { signal })
+}
+
+export function reviewPrivacyRequest(id: string, decision: 'approved' | 'rejected', reason: string, policyVersion: string) {
+  return adminRequest<PrivacyReceipt>(`/admin/privacy/requests/${id}/decision`,
+    writeJson('POST', { decision, reason, policy_version: policyVersion }))
 }

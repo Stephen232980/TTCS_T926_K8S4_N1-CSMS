@@ -5,7 +5,6 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 
-from src.modules.identity.authorization import AuthorizationEvidence
 from src.modules.identity.models import User
 from src.modules.privacy.service import PrivacyRetentionService
 from src.platform.audit.models import AuditLog
@@ -37,34 +36,15 @@ async def test_get_retention_policies(mock_db):
 
 @pytest.mark.asyncio
 async def test_run_retention_cleanup(mock_db):
-    # Mock rowcount returns for the 7 delete executions
-    rowcounts = [4, 6, 1, 0, 50, 2, 12]
-    mock_results = []
-    for count in rowcounts:
-        m = MagicMock()
-        m.rowcount = count
-        mock_results.append(m)
-
-    mock_db.execute.side_effect = mock_results
-
     with patch(
         "src.modules.privacy.service.ghi_nhat_ky", new_callable=AsyncMock
-    ) as mock_audit:
-        service = PrivacyRetentionService(mock_db)
-        result = await service.run_retention_cleanup(
-            actor_id=uuid4(), permission="admin.privacy.manage"
+    ) as audit:
+        result = await PrivacyRetentionService(mock_db).run_retention_cleanup(
+            actor_id=uuid4()
         )
-
-        assert result.deleted_login_attempts == 4
-        assert result.deleted_expired_sessions == 6
-        assert result.deleted_idempotency_keys == 1
-        assert result.deleted_pending_messages == 0
-        assert result.deleted_telemetry_buckets == 50
-        assert result.deleted_sent_alert_emails == 2
-        assert result.deleted_health_samples == 12
-        assert result.total_deleted == sum(rowcounts)
-
-        mock_audit.assert_awaited_once()
+        assert result.total_deleted == 0
+        mock_db.execute.assert_not_awaited()
+        assert audit.await_args.kwargs["action"] == "system.retention_cleanup_blocked"
         mock_db.commit.assert_awaited_once()
 
 
@@ -114,7 +94,7 @@ async def test_set_legal_hold(mock_db):
     user_id = uuid4()
     actor_id = uuid4()
     user = User(id=user_id, email="driver@test.local", status="active")
-    mock_db.get.return_value = user
+    mock_db.scalar.return_value = user
 
     with patch(
         "src.modules.privacy.service.ghi_nhat_ky", new_callable=AsyncMock
@@ -137,7 +117,7 @@ async def test_set_legal_hold(mock_db):
 async def test_set_legal_hold_on_anonymized_rejected(mock_db):
     user_id = uuid4()
     user = User(id=user_id, email="anon@deleted.local", status="anonymized")
-    mock_db.get.return_value = user
+    mock_db.scalar.return_value = user
 
     service = PrivacyRetentionService(mock_db)
     with pytest.raises(HTTPException) as exc:
@@ -164,128 +144,16 @@ async def test_anonymize_user_invalid_confirmation_phrase(mock_db):
 
 
 @pytest.mark.asyncio
-async def test_anonymize_user_not_found(mock_db):
-    mock_db.scalar.return_value = None
+async def test_legacy_anonymize_is_blocked_without_any_mutation(mock_db):
     service = PrivacyRetentionService(mock_db)
-
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises(HTTPException) as error:
         await service.anonymize_user(
             user_id=uuid4(),
             actor_id=uuid4(),
-            reason="Xóa tài khoản",
+            reason="User request",
             confirm_phrase="CONFIRM_ANONYMIZE",
         )
-    assert exc.value.status_code == 404
-
-
-@pytest.mark.asyncio
-async def test_anonymize_user_already_anonymized(mock_db):
-    uid = uuid4()
-    user = User(id=uid, email="anonymized_123@deleted.local", status="anonymized")
-    mock_db.scalar.return_value = user
-    service = PrivacyRetentionService(mock_db)
-
-    with pytest.raises(HTTPException) as exc:
-        await service.anonymize_user(
-            user_id=uid,
-            actor_id=uuid4(),
-            reason="Xóa",
-            confirm_phrase="CONFIRM_ANONYMIZE",
-        )
-    assert exc.value.status_code == 409
-
-
-@pytest.mark.asyncio
-async def test_anonymize_user_admin_cannot_self_anonymize(mock_db):
-    admin_id = uuid4()
-    user = User(id=admin_id, email="admin@csms.local", status="active")
-    mock_db.scalar.return_value = user
-    service = PrivacyRetentionService(mock_db)
-
-    with pytest.raises(HTTPException) as exc:
-        await service.anonymize_user(
-            user_id=admin_id,
-            actor_id=admin_id,
-            reason="Xóa chính mình",
-            confirm_phrase="CONFIRM_ANONYMIZE",
-            actor_roles=frozenset({"admin"}),
-        )
-    assert exc.value.status_code == 409
-
-
-@pytest.mark.asyncio
-async def test_anonymize_user_blocks_last_active_admin(mock_db):
-    admin_id = uuid4()
-    actor_id = uuid4()
-    user = User(id=admin_id, email="admin1@csms.local", status="active")
-
-    # 1. select User
-    # 2. check is_admin -> returns "admin"
-    # 3. check other admin -> returns None (no other admin)
-    mock_db.scalar.side_effect = [user, "admin", None]
-    service = PrivacyRetentionService(mock_db)
-
-    with pytest.raises(HTTPException) as exc:
-        await service.anonymize_user(
-            user_id=admin_id,
-            actor_id=actor_id,
-            reason="Xóa admin",
-            confirm_phrase="CONFIRM_ANONYMIZE",
-            actor_roles=frozenset({"admin"}),
-        )
-    assert exc.value.status_code == 409
-    assert "ít nhất một quản trị viên" in exc.value.detail
-
-
-@pytest.mark.asyncio
-async def test_anonymize_user_success_preserves_records(mock_db):
-    driver_id = uuid4()
-    actor_id = uuid4()
-    user = User(
-        id=driver_id,
-        email="driver@ev-charge.vn",
-        status="active",
-        password_hash="SECRET_HASH",
-        failed_login_count=2,
-    )
-
-    # 1. select User -> user
-    # 2. check is_admin -> None (driver is not admin)
-    # 3. check active charging session -> None (clean)
-    # 4. check legal hold audit -> None (clean)
-    # 5. count invoices -> 15
-    # 6. count charging sessions -> 10
-    # 7. count wallet ledger -> 22
-    mock_db.scalar.side_effect = [user, None, None, None, 15, 10, 22]
-
-    with patch(
-        "src.modules.privacy.service.ghi_nhat_ky", new_callable=AsyncMock
-    ) as mock_audit:
-        service = PrivacyRetentionService(mock_db)
-        resp = await service.anonymize_user(
-            user_id=driver_id,
-            actor_id=actor_id,
-            reason="Yêu cầu hủy tài khoản tài xế",
-            confirm_phrase="CONFIRM_ANONYMIZE",
-            actor_roles=frozenset({"admin"}),
-            authorization=AuthorizationEvidence(
-                permission="admin.privacy.manage", roles=("admin",)
-            ),
-        )
-
-        assert resp.status == "anonymized"
-        assert resp.anonymized_email == f"anonymized_{driver_id.hex[:12]}@deleted.local"
-        assert resp.preserved_financial_records["invoices"] == 15
-        assert resp.preserved_financial_records["charging_sessions"] == 10
-        assert resp.preserved_financial_records["wallet_ledger_entries"] == 22
-
-        # User state mutated properly
-        assert user.status == "anonymized"
-        assert user.password_hash == "ANONYMIZED_DISABLED_PASSWORD_HASH"
-        assert user.failed_login_count == 0
-        assert user.email == f"anonymized_{driver_id.hex[:12]}@deleted.local"
-
-        # Verify session revocation and role deletion executed
-        assert mock_db.execute.await_count == 2
-        mock_audit.assert_awaited_once()
-        mock_db.commit.assert_awaited_once()
+    assert error.value.status_code == 409
+    assert "privacy_execution_unavailable" in error.value.detail
+    mock_db.execute.assert_not_awaited()
+    mock_db.commit.assert_not_awaited()

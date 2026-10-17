@@ -1,37 +1,35 @@
 from datetime import UTC, datetime, timedelta
-from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
 from src.modules.alerts.models import AlertEmail
-from src.modules.billing.models import Invoice
-from src.modules.charging.models import ChargingSession, PendingChargingMessage
+from src.modules.charging.models import ChargingSession
 from src.modules.identity.authorization import AuthorizationEvidence
-from src.modules.identity.models import LoginIpAttempt, Role, Session, User, UserRole
+from src.modules.identity.models import LoginIpAttempt, Session, User
+from src.modules.identity.security import verify_password
 from src.modules.ocpp.admin_health_models import (
     OcppTelemetryBucket,
     SystemHealthSample,
 )
+from src.modules.privacy.models import PrivacyRequest
 from src.modules.privacy.schemas import (
     AnonymizeUserResponse,
     LegalHoldResponse,
+    PrivacyDecision,
+    PrivacyReceipt,
     RetentionCleanupResponse,
     RetentionPoliciesResponse,
     RetentionPolicyItem,
 )
+from src.modules.reservations.models import HOLDS, Reservation
 from src.modules.stations.models import StationCreateIdempotency
-from src.modules.wallet.models import Wallet, WalletLedger
+from src.modules.wallet.models import Wallet
 from src.platform.audit.models import AuditLog
 from src.platform.audit.service import ghi_nhat_ky
-
-
-def _extract_rowcount(result: Any) -> int:
-    rowcount = getattr(result, "rowcount", None)
-    return int(rowcount) if rowcount is not None and rowcount > 0 else 0
 
 
 class PrivacyRetentionService:
@@ -44,7 +42,6 @@ class PrivacyRetentionService:
         cutoff_login = now - timedelta(days=settings.retention_login_attempts_days)
         cutoff_sessions = now - timedelta(days=settings.retention_expired_sessions_days)
         cutoff_idempotency = now - timedelta(days=settings.retention_idempotency_days)
-        cutoff_pending = now - timedelta(days=settings.retention_pending_messages_days)
         cutoff_telemetry = now - timedelta(hours=settings.retention_telemetry_hours)
         cutoff_emails = now - timedelta(days=settings.retention_sent_alert_emails_days)
         cutoff_health = now - timedelta(days=settings.retention_health_samples_days)
@@ -81,14 +78,8 @@ class PrivacyRetentionService:
             or 0
         )
 
-        count_pending = (
-            await self.db.scalar(
-                select(func.count(PendingChargingMessage.id)).where(
-                    PendingChargingMessage.received_at < cutoff_pending
-                )
-            )
-            or 0
-        )
+        # Pending is unresolved evidence, regardless of its age.
+        count_pending = 0
 
         count_telemetry = (
             await self.db.scalar(
@@ -145,7 +136,7 @@ class PrivacyRetentionService:
                 table_name="charging_pending_messages",
                 policy_type="Tin nhắn OCPP chờ xử lý mồ côi",
                 retention_threshold=f"{settings.retention_pending_messages_days} ngày",
-                description="Dọn dẹp các tin nhắn OCPP pending quá hạn không giải quyết",
+                description="Giữ lại để phục hồi/đối soát; chưa có policy xác nhận mồ côi",
                 eligible_count=count_pending,
             ),
             RetentionPolicyItem(
@@ -175,6 +166,7 @@ class PrivacyRetentionService:
             policies=items,
             auto_cleanup_interval_seconds=settings.retention_cleanup_interval_seconds,
             checked_at=now,
+            blocked_reason="Chưa có policy được phê duyệt và phân loại legal hold theo dữ liệu",
         )
 
     async def run_retention_cleanup(
@@ -182,112 +174,20 @@ class PrivacyRetentionService:
         actor_id: UUID | None = None,
         permission: str | None = None,
     ) -> RetentionCleanupResponse:
-        now = datetime.now(UTC)
-
-        cutoff_login = now - timedelta(days=settings.retention_login_attempts_days)
-        cutoff_sessions = now - timedelta(days=settings.retention_expired_sessions_days)
-        cutoff_idempotency = now - timedelta(days=settings.retention_idempotency_days)
-        cutoff_pending = now - timedelta(days=settings.retention_pending_messages_days)
-        cutoff_telemetry = now - timedelta(hours=settings.retention_telemetry_hours)
-        cutoff_emails = now - timedelta(days=settings.retention_sent_alert_emails_days)
-        cutoff_health = now - timedelta(days=settings.retention_health_samples_days)
-
-        res_login = await self.db.execute(
-            delete(LoginIpAttempt).where(
-                (
-                    LoginIpAttempt.locked_until.is_(None)
-                    | (LoginIpAttempt.locked_until < now)
-                )
-                & (LoginIpAttempt.updated_at < cutoff_login)
-            )
-        )
-        del_login = _extract_rowcount(res_login)
-
-        res_sess = await self.db.execute(
-            delete(Session).where(
-                Session.revoked_at.is_not(None) & (Session.revoked_at < cutoff_sessions)
-            )
-        )
-        del_sess = _extract_rowcount(res_sess)
-
-        res_idemp = await self.db.execute(
-            delete(StationCreateIdempotency).where(
-                StationCreateIdempotency.created_at < cutoff_idempotency
-            )
-        )
-        del_idemp = _extract_rowcount(res_idemp)
-
-        res_pend = await self.db.execute(
-            delete(PendingChargingMessage).where(
-                PendingChargingMessage.received_at < cutoff_pending
-            )
-        )
-        del_pend = _extract_rowcount(res_pend)
-
-        res_telem = await self.db.execute(
-            delete(OcppTelemetryBucket).where(
-                OcppTelemetryBucket.timestamp < cutoff_telemetry
-            )
-        )
-        del_telem = _extract_rowcount(res_telem)
-
-        res_emails = await self.db.execute(
-            delete(AlertEmail).where(
-                (AlertEmail.status == "sent")
-                & AlertEmail.sent_at.is_not(None)
-                & (AlertEmail.sent_at < cutoff_emails)
-            )
-        )
-        del_emails = _extract_rowcount(res_emails)
-
-        res_health = await self.db.execute(
-            delete(SystemHealthSample).where(
-                SystemHealthSample.timestamp < cutoff_health
-            )
-        )
-        del_health = _extract_rowcount(res_health)
-
-        total = (
-            del_login
-            + del_sess
-            + del_idemp
-            + del_pend
-            + del_telem
-            + del_emails
-            + del_health
-        )
-
+        # A time threshold is not approval to destroy evidence. Keep the worker
+        # alive, but make both scheduled and manual calls safe until an approved
+        # data-class policy and hold-aware batch executor are implemented.
         await ghi_nhat_ky(
             self.db,
             actor_id=actor_id,
-            action="system.retention_cleanup",
+            action="system.retention_cleanup_blocked",
             object_type="system",
             object_id="retention",
-            data={
-                "deleted_login_attempts": del_login,
-                "deleted_expired_sessions": del_sess,
-                "deleted_idempotency_keys": del_idemp,
-                "deleted_pending_messages": del_pend,
-                "deleted_telemetry_buckets": del_telem,
-                "deleted_sent_alert_emails": del_emails,
-                "deleted_health_samples": del_health,
-                "total_deleted": total,
-            },
+            data={"reason_code": "retention_policy_unavailable", "total_deleted": 0},
             permission=permission or "admin.privacy.manage",
         )
         await self.db.commit()
-
-        return RetentionCleanupResponse(
-            executed_at=now,
-            deleted_login_attempts=del_login,
-            deleted_expired_sessions=del_sess,
-            deleted_idempotency_keys=del_idemp,
-            deleted_pending_messages=del_pend,
-            deleted_telemetry_buckets=del_telem,
-            deleted_sent_alert_emails=del_emails,
-            deleted_health_samples=del_health,
-            total_deleted=total,
-        )
+        return RetentionCleanupResponse(executed_at=datetime.now(UTC))
 
     async def check_legal_hold(self, user_id: UUID) -> tuple[bool, str | None]:
         active_session = await self.db.scalar(
@@ -337,9 +237,7 @@ class PrivacyRetentionService:
         actor_id: UUID,
         authorization: AuthorizationEvidence | None = None,
     ) -> LegalHoldResponse:
-        user = await self.db.get(User, user_id)
-        if user is None:
-            raise HTTPException(404, "Tài khoản không tồn tại")
+        user = await self._lock_user(user_id)
         if user.status == "anonymized":
             raise HTTPException(
                 409, "Không thể thay đổi tạm giữ của tài khoản đã ẩn danh"
@@ -382,6 +280,15 @@ class PrivacyRetentionService:
                 "Xác nhận không đúng. Vui lòng nhập chính xác 'CONFIRM_ANONYMIZE'",
             )
 
+        # Legacy clients must not bypass intake/approval. No revocation or
+        # redaction is allowed while subject separation and restore replay are
+        # unavailable. There is deliberately no configuration bypass.
+        raise HTTPException(
+            409,
+            "privacy_execution_unavailable: Chưa có policy, tách PII và tombstone restore; tài khoản chưa bị thay đổi",
+        )
+
+    async def _lock_user(self, user_id: UUID) -> User:
         user = await self.db.scalar(
             select(User)
             .where(User.id == user_id)
@@ -390,117 +297,154 @@ class PrivacyRetentionService:
         )
         if user is None:
             raise HTTPException(404, "Tài khoản không tồn tại")
-        if user.status == "anonymized":
-            raise HTTPException(409, "Tài khoản đã được ẩn danh trước đó")
-        if user_id == actor_id and "admin" in actor_roles:
-            raise HTTPException(409, "Quản trị viên không thể tự ẩn danh chính mình")
+        return user
 
-        # Check if user is the last active admin
-        is_admin = await self.db.scalar(
-            select(Role.code)
-            .join(UserRole)
-            .where(UserRole.user_id == user_id, Role.code == "admin")
-        )
-        if is_admin is not None and user.status == "active":
-            other = await self.db.scalar(
-                select(User.id)
-                .join(UserRole)
-                .join(Role)
-                .where(
-                    User.status == "active",
-                    Role.code == "admin",
-                    User.id != user_id,
-                )
-                .limit(1)
-            )
-            if other is None:
-                raise HTTPException(409, "Phải giữ ít nhất một quản trị viên hoạt động")
-
-        is_held, hold_reason = await self.check_legal_hold(user_id)
-        if is_held:
-            raise HTTPException(
-                409,
-                f"Tài khoản đang bị tạm giữ pháp lý hoặc có phiên sạc chưa kết thúc: {hold_reason}",
-            )
-
+    async def create_request(
+        self, user_id: UUID, password: str, reason: str
+    ) -> PrivacyReceipt:
+        user = await self._lock_user(user_id)
         now = datetime.now(UTC)
-        original_email = user.email
-        domain = original_email.split("@")[-1] if "@" in original_email else "local"
-        anonymized_email = f"anonymized_{user.id.hex[:12]}@deleted.local"
-
-        user.email = anonymized_email
-        user.password_hash = "ANONYMIZED_DISABLED_PASSWORD_HASH"
-        user.status = "anonymized"
+        if user.status != "active" or (user.locked_until and user.locked_until > now):
+            raise HTTPException(403, "Xác thực lại không thành công")
+        if not verify_password(user.password_hash, password):
+            user.failed_login_count += 1
+            if user.failed_login_count >= settings.auth_max_failed_attempts:
+                user.locked_until = now + timedelta(seconds=settings.auth_lock_seconds)
+            await self.db.commit()
+            raise HTTPException(403, "Xác thực lại không thành công")
         user.failed_login_count = 0
         user.locked_until = None
-        user.updated_at = now
-
-        # Revoke all active web sessions
-        await self.db.execute(
-            update(Session)
-            .where(Session.user_id == user_id, Session.revoked_at.is_(None))
-            .values(revoked_at=now)
-        )
-
-        # Remove role assignments
-        await self.db.execute(delete(UserRole).where(UserRole.user_id == user_id))
-
-        # Count preserved financial and charging records (preserving foreign keys & immutable audit)
-        invoices_count = (
-            await self.db.scalar(
-                select(func.count(Invoice.id)).where(Invoice.driver_id == user_id)
+        request = await self.db.scalar(
+            select(PrivacyRequest).where(
+                PrivacyRequest.user_id == user_id,
+                PrivacyRequest.status.in_(("pending", "approved")),
             )
-            or 0
         )
-        sessions_count = (
-            await self.db.scalar(
-                select(func.count(ChargingSession.id)).where(
-                    ChargingSession.driver_id == user_id
-                )
+        if request is None:
+            request = PrivacyRequest(user_id=user_id, reason=reason, status="pending")
+            self.db.add(request)
+            await self.db.flush()
+            await ghi_nhat_ky(
+                self.db,
+                actor_id=user_id,
+                action="privacy.request_created",
+                object_type="privacy_request",
+                object_id=str(request.id),
+                data={"status": "pending"},
+                permission="driver.privacy.request",
+                actor_roles=["driver"],
             )
-            or 0
-        )
-        ledger_count = (
-            await self.db.scalar(
-                select(func.count(WalletLedger.id))
-                .join(Wallet, Wallet.id == WalletLedger.wallet_id)
-                .where(Wallet.driver_id == user_id)
-            )
-            or 0
-        )
+        receipt = await self._receipt(request)
+        await self.db.commit()
+        return receipt
 
-        preserved = {
-            "invoices": invoices_count,
-            "charging_sessions": sessions_count,
-            "wallet_ledger_entries": ledger_count,
-        }
+    async def list_requests(self, user_id: UUID | None = None) -> list[PrivacyReceipt]:
+        query = (
+            select(PrivacyRequest)
+            .order_by(PrivacyRequest.created_at.desc(), PrivacyRequest.id.desc())
+            .limit(100)
+        )
+        if user_id is not None:
+            query = query.where(PrivacyRequest.user_id == user_id)
+        rows = (await self.db.scalars(query)).all()
+        return [await self._receipt(row) for row in rows]
 
+    async def review_request(
+        self,
+        request_id: UUID,
+        payload: PrivacyDecision,
+        actor_id: UUID,
+        authorization: AuthorizationEvidence,
+    ) -> PrivacyReceipt:
+        request = await self.db.scalar(
+            select(PrivacyRequest)
+            .where(PrivacyRequest.id == request_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if request is None:
+            raise HTTPException(404, "Yêu cầu không tồn tại")
+        if request.status != "pending":
+            raise HTTPException(409, "Yêu cầu đã được duyệt hoặc từ chối")
+        if request.user_id == actor_id:
+            raise HTTPException(409, "Không được tự duyệt yêu cầu của mình")
+        request.status = payload.decision
+        request.decision_reason = payload.reason
+        request.policy_version = payload.policy_version
+        request.reviewer_id = actor_id
+        request.reviewed_at = datetime.now(UTC)
         await ghi_nhat_ky(
             self.db,
             actor_id=actor_id,
-            action="privacy.anonymize",
-            object_type="user",
-            object_id=str(user_id),
-            data={
-                "reason": reason,
-                "anonymized_email": anonymized_email,
-                "original_email_domain": domain,
-                "preserved_records": preserved,
-            },
-            permission=authorization.permission
-            if authorization
-            else "admin.privacy.manage",
-            actor_roles=list(authorization.roles)
-            if authorization
-            else list(actor_roles),
+            action="privacy.request_reviewed",
+            object_type="privacy_request",
+            object_id=str(request.id),
+            data={"status": payload.decision, "policy_version": payload.policy_version},
+            permission=authorization.permission,
+            actor_roles=authorization.roles,
         )
-
+        receipt = await self._receipt(request)
         await self.db.commit()
+        return receipt
 
-        return AnonymizeUserResponse(
-            user_id=user_id,
-            anonymized_email=anonymized_email,
-            status="anonymized",
-            anonymized_at=now,
-            preserved_financial_records=preserved,
+    async def _receipt(self, request: PrivacyRequest) -> PrivacyReceipt:
+        blockers = [
+            "privacy_execution_unavailable",
+            "approved_data_class_policy_required",
+            "subject_pii_separation_required",
+            "restricted_financial_retention_required",
+            "checkpoint_executor_and_restore_tombstones_required",
+            "dispute_and_accounting_period_clearance_required",
+        ]
+        if request.status != "approved":
+            blockers.append(
+                "approval_required"
+                if request.status == "pending"
+                else "request_rejected"
+            )
+        held, _ = await self.check_legal_hold(request.user_id)
+        if held:
+            blockers.append("legal_hold_or_unsettled_charging")
+        cable = await self.db.scalar(
+            select(ChargingSession.id)
+            .where(
+                ChargingSession.driver_id == request.user_id,
+                ChargingSession.connector_released_at.is_(None),
+            )
+            .limit(1)
+        )
+        if cable is not None:
+            blockers.append("connector_release_required")
+        booking = await self.db.scalar(
+            select(Reservation.id)
+            .where(
+                Reservation.driver_id == request.user_id,
+                (
+                    Reservation.status.in_(HOLDS)
+                    | Reservation.fee_decision.in_(("pending", "review"))
+                ),
+            )
+            .limit(1)
+        )
+        if booking is not None:
+            blockers.append("reservation_or_fee_pending")
+        wallet = await self.db.scalar(
+            select(Wallet).where(Wallet.driver_id == request.user_id)
+        )
+        if wallet is not None and wallet.balance_vnd != 0:
+            blockers.append(
+                "refund_required"
+                if wallet.balance_vnd > 0
+                else "debt_resolution_required"
+            )
+        return PrivacyReceipt(
+            id=request.id,
+            user_id=request.user_id,
+            status=request.status,
+            reason=request.reason,
+            created_at=request.created_at,
+            reviewed_at=request.reviewed_at,
+            decision_reason=request.decision_reason,
+            policy_version=request.policy_version,
+            blockers=blockers,
         )

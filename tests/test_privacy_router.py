@@ -13,7 +13,6 @@ from src.modules.identity.authorization import CurrentActor
 from src.modules.identity.dependencies import get_current_actor
 from src.modules.identity.models import User
 from src.modules.privacy.schemas import (
-    AnonymizeUserResponse,
     LegalHoldResponse,
     RetentionCleanupResponse,
     RetentionPoliciesResponse,
@@ -132,36 +131,19 @@ def test_anonymize_user_validation_error(client: TestClient):
     assert response.status_code == 422
 
 
-def test_anonymize_user_success_for_admin(client: TestClient):
-    target_id = uuid4()
+def test_legacy_anonymize_for_admin_is_blocked(client: TestClient):
     admin_actor = CurrentActor(uuid4(), frozenset({"admin"}))
     app.dependency_overrides[get_current_actor] = lambda: admin_actor
-
-    mock_anonymize = AnonymizeUserResponse(
-        user_id=target_id,
-        anonymized_email=f"anonymized_{target_id.hex[:12]}@deleted.local",
-        status="anonymized",
-        anonymized_at=datetime.now(UTC),
-        preserved_financial_records={"invoices": 3, "charging_sessions": 2},
+    response = client.post(
+        f"/api/v1/admin/privacy/anonymize/{uuid4()}",
+        json={
+            "reason": "User request",
+            "confirm_phrase": "CONFIRM_ANONYMIZE",
+        },
     )
-
-    with patch(
-        "src.modules.privacy.router.PrivacyRetentionService.anonymize_user",
-        new_callable=AsyncMock,
-        return_value=mock_anonymize,
-    ):
-        response = client.post(
-            f"/api/v1/admin/privacy/anonymize/{target_id}",
-            json={
-                "reason": "Yêu cầu xóa tài khoản theo chính sách bảo mật",
-                "confirm_phrase": "CONFIRM_ANONYMIZE",
-            },
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "anonymized"
-        assert data["user_id"] == str(target_id)
-        assert data["preserved_financial_records"]["invoices"] == 3
+    assert response.status_code == 409
+    assert "privacy_execution_unavailable" in response.json()["error"]["message"]
+    assert response.headers["cache-control"] == "no-store"
 
 
 def test_get_and_update_legal_hold(client: TestClient):
@@ -206,29 +188,63 @@ def test_get_and_update_legal_hold(client: TestClient):
         assert post_resp.json()["legal_hold"] is False
 
 
-def test_driver_privacy_self_anonymize(client: TestClient):
-    driver_id = uuid4()
-    driver_actor = CurrentActor(driver_id, frozenset({"driver"}))
-    app.dependency_overrides[get_current_actor] = lambda: driver_actor
-
-    mock_anonymize = AnonymizeUserResponse(
-        user_id=driver_id,
-        anonymized_email=f"anonymized_{driver_id.hex[:12]}@deleted.local",
-        status="anonymized",
-        anonymized_at=datetime.now(UTC),
-        preserved_financial_records={"invoices": 1, "charging_sessions": 1},
-    )
-
+def test_driver_privacy_requires_reauthentication(client: TestClient):
+    actor = CurrentActor(uuid4(), frozenset({"driver"}))
+    app.dependency_overrides[get_current_actor] = lambda: actor
     with patch(
         "src.modules.privacy.router.PrivacyRetentionService.anonymize_user",
         new_callable=AsyncMock,
-        return_value=mock_anonymize,
-    ):
+    ) as destructive:
+        response = client.post("/api/v1/driver/privacy/anonymize-request", json={})
+        assert response.status_code == 422
+        assert response.headers["cache-control"] == "no-store"
+        destructive.assert_not_awaited()
+
+
+def test_driver_request_receipt_without_anonymizing(client: TestClient):
+    actor = CurrentActor(uuid4(), frozenset({"driver"}))
+    app.dependency_overrides[get_current_actor] = lambda: actor
+    from src.modules.privacy.schemas import PrivacyReceipt
+
+    receipt = PrivacyReceipt(
+        id=uuid4(),
+        user_id=actor.user_id,
+        status="pending",
+        reason="Yêu cầu",
+        created_at=datetime.now(UTC),
+        reviewed_at=None,
+        decision_reason=None,
+        policy_version=None,
+        blockers=["approval_required"],
+    )
+    with patch(
+        "src.modules.privacy.router.PrivacyRetentionService.create_request",
+        new_callable=AsyncMock,
+        return_value=receipt,
+    ) as intake:
         response = client.post(
             "/api/v1/driver/privacy/anonymize-request",
-            json={"reason": "Không dùng app nữa"},
+            json={"current_password": "reauth", "reason": "Yêu cầu"},
         )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "anonymized"
-        assert data["user_id"] == str(driver_id)
+        assert response.status_code == 202
+        assert response.json()["status"] == "pending"
+        assert response.headers["cache-control"] == "no-store"
+        assert intake.await_args.kwargs["user_id"] == actor.user_id
+
+
+def test_driver_can_only_query_own_requests(client: TestClient):
+    actor = CurrentActor(uuid4(), frozenset({"driver"}))
+    app.dependency_overrides[get_current_actor] = lambda: actor
+    with patch(
+        "src.modules.privacy.router.PrivacyRetentionService.list_requests",
+        new_callable=AsyncMock,
+        return_value=[],
+    ) as read:
+        assert (
+            client.get(
+                "/api/v1/driver/privacy/requests?user_id=" + str(uuid4())
+            ).status_code
+            == 200
+        )
+        read.assert_awaited_once_with(actor.user_id)
+        assert client.get("/api/v1/admin/privacy/requests").status_code == 403

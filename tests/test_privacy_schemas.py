@@ -119,8 +119,10 @@ def test_legal_hold_response():
 
 
 def test_driver_privacy_request():
-    req_empty = DriverPrivacyRequest()
+    req_empty = DriverPrivacyRequest(current_password="reauth")
     assert req_empty.reason is None
 
-    req_with_reason = DriverPrivacyRequest(reason="Không còn sử dụng dịch vụ")
+    req_with_reason = DriverPrivacyRequest(
+        current_password="reauth", reason="Không còn sử dụng dịch vụ"
+    )
     assert req_with_reason.reason == "Không còn sử dụng dịch vụ"

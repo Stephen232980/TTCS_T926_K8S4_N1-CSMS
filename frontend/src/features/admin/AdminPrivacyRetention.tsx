@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react'
 import { dateTime, numberText } from './adminApi'
 import { ErrorNotice } from './AdminShared'
+import { PrivacyRequestReview } from './PrivacyRequestReview'
 import {
   fetchLegalHold,
   fetchRetentionPolicies,
-  submitAnonymizeUser,
   submitLegalHold,
   triggerRetentionCleanup,
-  type AnonymizeUserResponse,
   type LegalHoldResponse,
   type RetentionCleanupResponse,
   type RetentionPoliciesResponse,
@@ -15,7 +14,7 @@ import {
 
 export function AdminPrivacyRetention() {
   const [policiesData, setPoliciesData] = useState<RetentionPoliciesResponse | null>(null)
-  const [loadingPolicies, setLoadingPolicies] = useState(false)
+  const [loadingPolicies, setLoadingPolicies] = useState(true)
   const [policiesError, setPoliciesError] = useState<unknown>(null)
 
   // Cleanup state
@@ -35,20 +34,12 @@ export function AdminPrivacyRetention() {
   const [holdActionMessage, setHoldActionMessage] = useState('')
   const [holdActionError, setHoldActionError] = useState<unknown>(null)
 
-  // Anonymization state
-  const [anonUserId, setAnonUserId] = useState('')
-  const [anonReason, setAnonReason] = useState('')
-  const [anonConfirm, setAnonConfirm] = useState('')
-  const [anonLoading, setAnonLoading] = useState(false)
-  const [anonResult, setAnonResult] = useState<AnonymizeUserResponse | null>(null)
-  const [anonError, setAnonError] = useState<unknown>(null)
-
   const loadPolicies = async (signal?: AbortSignal) => {
     setLoadingPolicies(true)
     setPoliciesError(null)
     try {
       const data = await fetchRetentionPolicies(signal)
-      setPoliciesData(data)
+      if (!signal?.aborted) setPoliciesData(data)
     } catch (err) {
       if (!signal?.aborted) setPoliciesError(err)
     } finally {
@@ -58,7 +49,13 @@ export function AdminPrivacyRetention() {
 
   useEffect(() => {
     const controller = new AbortController()
-    loadPolicies(controller.signal)
+    void fetchRetentionPolicies(controller.signal).then(data => {
+      if (!controller.signal.aborted) setPoliciesData(data)
+    }).catch(err => {
+      if (!controller.signal.aborted) setPoliciesError(err)
+    }).finally(() => {
+      if (!controller.signal.aborted) setLoadingPolicies(false)
+    })
     return () => controller.abort()
   }, [])
 
@@ -115,33 +112,14 @@ export function AdminPrivacyRetention() {
     }
   }
 
-  const handleAnonymize = async () => {
-    if (!anonUserId.trim() || !anonReason.trim() || anonConfirm.trim() !== 'CONFIRM_ANONYMIZE') {
-      return
-    }
-    setAnonLoading(true)
-    setAnonError(null)
-    setAnonResult(null)
-    try {
-      const res = await submitAnonymizeUser(anonUserId.trim(), anonReason.trim(), anonConfirm.trim())
-      setAnonResult(res)
-      setAnonReason('')
-      setAnonConfirm('')
-    } catch (err) {
-      setAnonError(err)
-    } finally {
-      setAnonLoading(false)
-    }
-  }
-
   return (
     <div className="admin-privacy-container">
       <header className="admin-page-header">
         <div>
           <h1>Lưu trữ dữ liệu & Quyền riêng tư</h1>
           <p className="admin-page-description">
-            Quản lý chính sách vòng đời dữ liệu tạm, thực hiện dọn dẹp định kỳ và ẩn danh hóa tài
-            khoản tuân thủ pháp luật (bảo toàn hóa đơn tài chính và lịch sử sạc).
+            Xem chính sách lưu trữ, quản lý tạm giữ và duyệt yêu cầu dữ liệu cá nhân.
+            Thực thi xóa đang bị chặn cho tới khi đủ policy và cơ chế bảo vệ dữ liệu.
           </p>
         </div>
       </header>
@@ -171,19 +149,20 @@ export function AdminPrivacyRetention() {
               type="button"
               className="admin-button primary"
               onClick={() => setShowCleanupConfirm(true)}
-              disabled={cleaning}
+              disabled={cleaning || !policiesData?.cleanup_enabled}
             >
               {cleaning ? 'Đang dọn dẹp…' : 'Chạy dọn dẹp ngay'}
             </button>
           </div>
         </div>
 
+        {policiesData?.blocked_reason && <p role="status">{policiesData.blocked_reason}. Chưa xóa bản ghi nào.</p>}
         <ErrorNotice error={policiesError} onRetry={() => loadPolicies()} />
 
         {/* Cleanup Result Banner */}
         {cleanupResult && (
           <div className="admin-banner success" role="status">
-            <h3>Dọn dẹp dữ liệu hoàn tất!</h3>
+            <h3>Dọn dẹp bị chặn: chưa có policy được phê duyệt</h3>
             <p>
               Thời gian thực hiện: {dateTime(cleanupResult.executed_at)} ·{' '}
               <strong>Tổng số bản ghi đã xóa an toàn: {numberText(cleanupResult.total_deleted)}</strong>
@@ -380,107 +359,7 @@ export function AdminPrivacyRetention() {
         </div>
       </section>
 
-      {/* SECTION 3: Account Soft Anonymization */}
-      <section className="admin-section" aria-labelledby="anonymize-title">
-        <div className="admin-section-header">
-          <div>
-            <h2 id="anonymize-title">Ẩn danh hóa tài khoản (Quyền được quên)</h2>
-            <p className="admin-section-meta">
-              Ẩn danh hóa thông tin định danh cá nhân (PII), vô hiệu hóa đăng nhập và thu hồi phiên.
-              Toàn bộ dữ liệu hóa đơn tài chính, sổ cái ví tiền và phiên sạc được bảo toàn nguyên vẹn
-              phục vụ kế toán và kiểm toán.
-            </p>
-          </div>
-        </div>
-
-        <div className="admin-card">
-          <div className="admin-form-group" style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600 }}>
-              User ID cần ẩn danh (UUID):
-            </label>
-            <input
-              type="text"
-              placeholder="ví dụ: a1b2c3d4-e5f6-7890-abcd-ef1234567890"
-              value={anonUserId}
-              onChange={(e) => setAnonUserId(e.target.value)}
-              style={{ width: '100%' }}
-            />
-          </div>
-
-          <div className="admin-form-group" style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600 }}>
-              Lý do ẩn danh hóa:
-            </label>
-            <textarea
-              rows={3}
-              placeholder="Nhập lý do ẩn danh hóa (ví dụ: Yêu cầu của người dùng theo GDPR / Chính sách quyền riêng tư)…"
-              value={anonReason}
-              onChange={(e) => setAnonReason(e.target.value)}
-              style={{ width: '100%' }}
-            />
-          </div>
-
-          <div className="admin-form-group" style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', marginBottom: '6px', fontWeight: 600, color: '#b91c1c' }}>
-              Xác nhận thao tác (Nhập chính xác &quot;CONFIRM_ANONYMIZE&quot;):
-            </label>
-            <input
-              type="text"
-              placeholder="CONFIRM_ANONYMIZE"
-              value={anonConfirm}
-              onChange={(e) => setAnonConfirm(e.target.value)}
-              style={{ width: '100%' }}
-            />
-          </div>
-
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <button
-              type="button"
-              className="admin-button danger"
-              onClick={handleAnonymize}
-              disabled={
-                anonLoading ||
-                !anonUserId.trim() ||
-                !anonReason.trim() ||
-                anonConfirm.trim() !== 'CONFIRM_ANONYMIZE'
-              }
-            >
-              {anonLoading ? 'Đang thực hiện…' : 'Xác nhận ẩn danh hóa tài khoản'}
-            </button>
-            <span style={{ fontSize: '0.85rem', color: '#64748b' }}>
-              Thao tác này là không thể hoàn tác.
-            </span>
-          </div>
-
-          <ErrorNotice error={anonError} />
-
-          {anonResult && (
-            <div className="admin-banner success" style={{ marginTop: '16px' }}>
-              <h3>Ẩn danh hóa tài khoản thành công!</h3>
-              <p>
-                User ID: <code>{anonResult.user_id}</code>
-              </p>
-              <p>
-                Email ẩn danh mới: <code>{anonResult.anonymized_email}</code>
-              </p>
-              <p>Trạng thái: {anonResult.status}</p>
-              <p>Thời điểm thực hiện: {dateTime(anonResult.anonymized_at)}</p>
-              <h4 style={{ marginTop: '12px' }}>Dữ liệu tài chính & lịch sử được bảo toàn:</h4>
-              <ul>
-                <li>Hóa đơn: {numberText(anonResult.preserved_financial_records.invoices)}</li>
-                <li>
-                  Phiên sạc:{' '}
-                  {numberText(anonResult.preserved_financial_records.charging_sessions)}
-                </li>
-                <li>
-                  Giao dịch sổ cái ví:{' '}
-                  {numberText(anonResult.preserved_financial_records.wallet_ledger_entries)}
-                </li>
-              </ul>
-            </div>
-          )}
-        </div>
-      </section>
+      <PrivacyRequestReview />
     </div>
   )
 }
