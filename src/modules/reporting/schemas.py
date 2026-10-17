@@ -33,9 +33,17 @@ class RevenueSummary(BaseModel):
     idle_amount_vnd: int
     total_invoice_vnd: int
     debited_vnd: int
+    invoice_cohort_settled_vnd: int = 0
     awaiting_settlement_vnd: int
+    awaiting_settlement_sessions: int = 0
+    legacy_exempt_sessions: int = 0
+    legacy_exempt_vnd: int = 0
+    free_sessions: int = 0
+    reservation_fee_vnd: int = 0
+    reservation_count: int = 0
     unbilled_sessions: int
     unbilled_operating_kwh: Decimal
+    unbilled_missing_meter_sessions: int = 0
 
 
 class ChargePointRevenueItem(BaseModel):
@@ -49,9 +57,17 @@ class ChargePointRevenueItem(BaseModel):
     idle_amount_vnd: int
     total_invoice_vnd: int
     debited_vnd: int
+    invoice_cohort_settled_vnd: int = 0
     awaiting_settlement_vnd: int
+    awaiting_settlement_sessions: int = 0
+    legacy_exempt_sessions: int = 0
+    legacy_exempt_vnd: int = 0
+    free_sessions: int = 0
+    reservation_fee_vnd: int = 0
+    reservation_count: int = 0
     unbilled_sessions: int
     unbilled_operating_kwh: Decimal
+    unbilled_missing_meter_sessions: int = 0
 
 
 class DailyRevenueItem(BaseModel):
@@ -60,6 +76,7 @@ class DailyRevenueItem(BaseModel):
     kwh: Decimal
     invoice_vnd: int
     debited_vnd: int
+    reservation_fee_vnd: int = 0
 
 
 class PaginationMeta(BaseModel):

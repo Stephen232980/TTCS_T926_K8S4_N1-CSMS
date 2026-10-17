@@ -19,9 +19,17 @@ export interface RevenueSummary {
   idle_amount_vnd: number
   total_invoice_vnd: number
   debited_vnd: number
+  invoice_cohort_settled_vnd?: number
   awaiting_settlement_vnd: number
+  awaiting_settlement_sessions?: number
+  legacy_exempt_sessions?: number
+  legacy_exempt_vnd?: number
+  free_sessions?: number
+  reservation_fee_vnd?: number
+  reservation_count?: number
   unbilled_sessions: number
   unbilled_operating_kwh: string | number
+  unbilled_missing_meter_sessions?: number
 }
 
 export interface ChargePointRevenueItem {
@@ -35,9 +43,17 @@ export interface ChargePointRevenueItem {
   idle_amount_vnd: number
   total_invoice_vnd: number
   debited_vnd: number
+  invoice_cohort_settled_vnd?: number
   awaiting_settlement_vnd: number
+  awaiting_settlement_sessions?: number
+  legacy_exempt_sessions?: number
+  legacy_exempt_vnd?: number
+  free_sessions?: number
+  reservation_fee_vnd?: number
+  reservation_count?: number
   unbilled_sessions: number
   unbilled_operating_kwh: string | number
+  unbilled_missing_meter_sessions?: number
 }
 
 export interface DailyRevenueItem {
@@ -46,6 +62,7 @@ export interface DailyRevenueItem {
   kwh: string | number
   invoice_vnd: number
   debited_vnd: number
+  reservation_fee_vnd?: number
 }
 
 export interface PaginationMeta {

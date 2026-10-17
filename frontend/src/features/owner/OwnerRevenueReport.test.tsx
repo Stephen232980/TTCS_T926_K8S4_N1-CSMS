@@ -15,9 +15,17 @@ const mockReport: RevenueReportResponse = {
     idle_amount_vnd: 30000,
     total_invoice_vnd: 450000,
     debited_vnd: 350000,
+    invoice_cohort_settled_vnd: 350000,
     awaiting_settlement_vnd: 100000,
+    awaiting_settlement_sessions: 1,
+    legacy_exempt_sessions: 1,
+    legacy_exempt_vnd: 38500,
+    free_sessions: 1,
+    reservation_fee_vnd: 50000,
+    reservation_count: 1,
     unbilled_sessions: 1,
     unbilled_operating_kwh: '25.0',
+    unbilled_missing_meter_sessions: 1,
   },
   charge_points: [
     {
@@ -31,9 +39,17 @@ const mockReport: RevenueReportResponse = {
       idle_amount_vnd: 25000,
       total_invoice_vnd: 340000,
       debited_vnd: 340000,
+      invoice_cohort_settled_vnd: 340000,
       awaiting_settlement_vnd: 0,
+      awaiting_settlement_sessions: 0,
+      legacy_exempt_sessions: 0,
+      legacy_exempt_vnd: 0,
+      free_sessions: 0,
+      reservation_fee_vnd: 0,
+      reservation_count: 0,
       unbilled_sessions: 0,
       unbilled_operating_kwh: '0',
+      unbilled_missing_meter_sessions: 0,
     },
     {
       station_id: 'sta-1',
@@ -46,9 +62,17 @@ const mockReport: RevenueReportResponse = {
       idle_amount_vnd: 5000,
       total_invoice_vnd: 110000,
       debited_vnd: 10000,
+      invoice_cohort_settled_vnd: 10000,
       awaiting_settlement_vnd: 100000,
+      awaiting_settlement_sessions: 1,
+      legacy_exempt_sessions: 1,
+      legacy_exempt_vnd: 38500,
+      free_sessions: 1,
+      reservation_fee_vnd: 50000,
+      reservation_count: 1,
       unbilled_sessions: 1,
       unbilled_operating_kwh: '25.0',
+      unbilled_missing_meter_sessions: 1,
     },
   ],
   daily_timeline: [
@@ -58,6 +82,7 @@ const mockReport: RevenueReportResponse = {
       kwh: '30.0',
       invoice_vnd: 110000,
       debited_vnd: 10000,
+      reservation_fee_vnd: 50000,
     },
     {
       date: '2026-11-02',
@@ -104,6 +129,14 @@ it('renders default monthly revenue report with summary cards, chart and table',
   // Energy & Sessions check
   expect(screen.getByText(/120,5 kWh/)).toBeInTheDocument()
   expect(screen.getByText(/4 phiên/)).toBeInTheDocument()
+
+  // New classifications & badges check
+  expect(screen.getByText('Đã trừ ví kỳ này')).toBeInTheDocument()
+  expect(screen.getByText('Chờ settlement')).toBeInTheDocument()
+  expect(screen.getByText('Miễn trừ cũ')).toBeInTheDocument()
+  expect(screen.getByText('Phiên miễn phí')).toBeInTheDocument()
+  expect(screen.getByText(/Phí giữ chỗ \(No-show\):/)).toBeInTheDocument()
+  expect(screen.getByText(/Thiếu số đo: 1 phiên/)).toBeInTheDocument()
 
   // Unbilled operating kWh check
   expect(screen.getAllByText(/25,0 kWh/).length).toBeGreaterThanOrEqual(1)
