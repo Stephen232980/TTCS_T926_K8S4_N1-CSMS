@@ -134,7 +134,7 @@ class PrivacyRetentionService:
             ),
             RetentionPolicyItem(
                 table_name="charging_pending_messages",
-                policy_type="Tin nhắn OCPP chờ xử lý mồ côi",
+                policy_type="Tin nhắn OCPP chờ xử lý",
                 retention_threshold=f"{settings.retention_pending_messages_days} ngày",
                 description="Giữ lại để phục hồi/đối soát; chưa có policy xác nhận mồ côi",
                 eligible_count=count_pending,

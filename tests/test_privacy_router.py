@@ -25,17 +25,20 @@ from src.platform.database.session import get_db_session
 def client() -> Iterator[TestClient]:
     app.dependency_overrides[get_db_session] = lambda: object()
 
-    with TestClient(
+    # Route contract tests do not start charger/billing/network workers.
+    test_client = TestClient(
         app,
         backend_options={
             "loop_factory": lambda: asyncio.SelectorEventLoop(
                 selectors.SelectSelector()
             )
         },
-    ) as test_client:
+    )
+    try:
         yield test_client
-
-    app.dependency_overrides.clear()
+    finally:
+        test_client.close()
+        app.dependency_overrides.clear()
 
 
 def test_retention_policies_requires_auth(client: TestClient):

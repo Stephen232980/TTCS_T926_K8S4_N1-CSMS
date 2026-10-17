@@ -87,7 +87,7 @@ như một cách hoàn tác xử lý dữ liệu. Round-trip chỉ xác minh tr�
 | Nhóm comment PR | Bản sửa / bằng chứng | Khoảng trống |
 | --- | --- | --- |
 | 1: request/approval | Receipt + reauth + own read + decision + audit; PostgreSQL concurrent intake/rollback/restart by new session | Chưa checkpoint execution |
-| 2: nghĩa vụ | Committed PostgreSQL +1.000.000 / -5.000 / 0; balance/ledger giữ nguyên; hold sau approval được đọc lại | Chưa clearance dispute/period; chưa concurrent execution vì executor bị chặn |
+| 2: nghĩa vụ | Committed PostgreSQL +1.000.000 / -5.000 / 0; balance/ledger giữ nguyên; hold sau approval được đọc lại; cáp/settlement/booking/fee và pending cũ | Chưa clearance dispute/period; chưa concurrent execution vì executor bị chặn |
 | 3: nối lại danh tính | Legacy execution fail-closed; UI không còn báo anonymized thành công | Chưa tách PII/migration redaction hoặc revoke sau execution |
 | 4: bảo toàn và hạn chế | Không sửa dữ liệu tài chính; inventory/giới hạn hiển thị rõ | Chưa restriction reports, invariant toàn bộ invoice/kWh/period hoặc backup replay |
 | 5: cleanup | Không DELETE khi policy chưa có; pending giữ nguyên; response/audit blocked | Chưa hold-aware approved batch cleanup |

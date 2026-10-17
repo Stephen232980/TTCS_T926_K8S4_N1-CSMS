@@ -1,6 +1,8 @@
 """Committed database regression probes; never point these at a shared database."""
 
 import asyncio
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -8,13 +10,19 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy import func, select
 
-from src.modules.charging.models import ChargingCard
+from src.modules.charging.models import (
+    ChargingCard,
+    ChargingSession,
+    PendingChargingMessage,
+)
 from src.modules.identity.authorization import AuthorizationEvidence
 from src.modules.identity.models import User
 from src.modules.identity.security import hash_password
 from src.modules.privacy.models import PrivacyRequest
 from src.modules.privacy.schemas import PrivacyDecision
 from src.modules.privacy.service import PrivacyRetentionService
+from src.modules.reservations.models import Reservation
+from src.modules.stations.models import ChargePoint, Connector, Station
 from src.modules.wallet.models import Wallet, WalletLedger
 from src.platform.database.session import SessionFactory
 
@@ -232,3 +240,92 @@ async def test_hold_after_approval_is_visible_and_cleanup_deletes_nothing():
         )
         assert (await service.run_retention_cleanup(admin)).total_deleted == 0
         assert (await db.get(User, uid)).status == "active"
+
+
+@pytest.mark.parametrize(
+    "kind,expected",
+    [
+        ("cable", "connector_release_required"),
+        ("settlement", "legal_hold_or_unsettled_charging"),
+        ("booking", "reservation_or_fee_pending"),
+        ("fee", "reservation_or_fee_pending"),
+    ],
+)
+async def test_committed_activity_blockers_and_old_pending_evidence(kind, expected):
+    uid, admin = await seed()
+    now = datetime.now(UTC)
+    pending_id = uuid4()
+    async with SessionFactory() as db:
+        station = Station(
+            owner_id=admin,
+            name="Privacy test",
+            address="Test",
+            latitude=Decimal(0),
+            longitude=Decimal(0),
+        )
+        db.add(station)
+        await db.flush()
+        cp = ChargePoint(station_id=station.id, code=f"privacy-{uuid4().hex}")
+        db.add(cp)
+        await db.flush()
+        connector = Connector(charge_point_id=cp.id, connector_number=1)
+        db.add(connector)
+        await db.flush()
+        db.add(
+            PendingChargingMessage(
+                id=pending_id,
+                charge_point_id=cp.id,
+                action="MeterValues",
+                message_id=str(uuid4()),
+                reason="transaction_missing",
+                payload={},
+                received_at=now - timedelta(days=30),
+            )
+        )
+        if kind in {"cable", "settlement"}:
+            db.add(
+                ChargingSession(
+                    charge_point_id=cp.id,
+                    connector_id=connector.id,
+                    driver_id=uid,
+                    tag_tail="1234",
+                    authorization_status="Accepted",
+                    started_at=now - timedelta(hours=1),
+                    ended_at=now,
+                    meter_start_wh=Decimal(0),
+                    meter_stop_wh=Decimal(1000),
+                    energy_kwh=Decimal(1),
+                    connector_released_at=None if kind == "cable" else now,
+                    settlement_completed_at=now if kind == "cable" else None,
+                    settlement_reason="zero_invoice" if kind == "cable" else None,
+                )
+            )
+        else:
+            card = await db.scalar(
+                select(ChargingCard).where(ChargingCard.driver_id == uid)
+            )
+            db.add(
+                Reservation(
+                    id=uuid4(),
+                    driver_id=uid,
+                    station_id=station.id,
+                    charge_point_id=cp.id,
+                    connector_id=connector.id,
+                    card_id=card.id,
+                    request_hash="a" * 64,
+                    status="active" if kind == "booking" else "cancelled",
+                    fee_decision="waived" if kind == "booking" else "review",
+                    created_at=now,
+                    updated_at=now,
+                    arrival_at=now + timedelta(minutes=1),
+                    expires_at=now + timedelta(minutes=10),
+                )
+            )
+        await db.commit()
+    async with SessionFactory() as db:
+        service = PrivacyRetentionService(db)
+        receipt = await service.create_request(uid, "privacy-test-password", "Request")
+        assert expected in receipt.blockers
+        assert (await service.run_retention_cleanup(admin)).total_deleted == 0
+    async with SessionFactory() as db:
+        assert await db.get(PendingChargingMessage, pending_id) is not None

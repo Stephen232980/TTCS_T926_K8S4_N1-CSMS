@@ -226,7 +226,7 @@ export function AdminPrivacyRetention() {
                 <th>Phân loại</th>
                 <th>Thời hạn lưu trữ</th>
                 <th>Mô tả dọn dẹp</th>
-                <th style={{ textAlign: 'right' }}>Bản ghi đủ điều kiện</th>
+                <th style={{ textAlign: 'right' }}>Ứng viên theo ngưỡng</th>
               </tr>
             </thead>
             <tbody>

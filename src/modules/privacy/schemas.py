@@ -11,7 +11,7 @@ class RetentionPolicyItem(BaseModel):
     retention_threshold: str = Field(description="Ngưỡng lưu trữ tối đa")
     description: str = Field(description="Mô tả chính sách dọn dẹp")
     eligible_count: int = Field(
-        default=0, ge=0, description="Số lượng bản ghi đủ điều kiện dọn"
+        default=0, ge=0, description="Số bản ghi vượt ngưỡng, chưa được phép xóa"
     )
 
 

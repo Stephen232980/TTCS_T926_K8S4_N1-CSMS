@@ -122,7 +122,9 @@ async def execute_retention_cleanup(
     )
 
 
-@router.post("/anonymize/{user_id}", response_model=AnonymizeUserResponse)
+@router.post(
+    "/anonymize/{user_id}", response_model=AnonymizeUserResponse, deprecated=True
+)
 @user_policy("admin.privacy.manage", "all", "admin")
 async def anonymize_user_account(
     user_id: UUID,
