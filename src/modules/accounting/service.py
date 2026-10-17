@@ -4,6 +4,7 @@ import hashlib
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
+from typing import cast as type_cast
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
@@ -494,8 +495,11 @@ async def list_reconciliation_runs(
 async def get_reconciliation_run(
     db: AsyncSession, run_id: UUID
 ) -> ReconciliationRun | None:
-    return await db.scalar(
-        select(ReconciliationRun).where(ReconciliationRun.id == run_id)
+    return type_cast(
+        ReconciliationRun | None,
+        await db.scalar(
+            select(ReconciliationRun).where(ReconciliationRun.id == run_id)
+        ),
     )
 
 

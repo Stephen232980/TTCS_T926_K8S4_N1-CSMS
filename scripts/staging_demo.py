@@ -331,6 +331,24 @@ class Charger:
         self.telemetry = {}
         self.awaiting_unplug = {}
         self.reservations = {}
+        self.remote_configuration = {
+            "HeartbeatInterval": 30,
+            "MeterValueSampleInterval": 10,
+        }
+        path = ROOT / (self.config["code"] + ".configuration.json")
+        if path.exists():
+            try:
+                saved = json.loads(path.read_text())
+            except (OSError, ValueError):
+                saved = {}
+            if not isinstance(saved, dict):
+                saved = {}
+            for key, (low, high) in {
+                "HeartbeatInterval": (30, 600),
+                "MeterValueSampleInterval": (5, 300),
+            }.items():
+                if type(saved.get(key)) is int and low <= saved[key] <= high:
+                    self.remote_configuration[key] = saved[key]
 
     def power_state(self, number):
         from scripts.ocpp_control_simulator import ConnectorState
@@ -617,17 +635,52 @@ class Charger:
         task.add_done_callback(self.tasks.discard)
 
     def reservation_command(self, action, payload):
+        if action == "ChangeConfiguration":
+            key, value = payload.get("key"), payload.get("value")
+            limits = {
+                "HeartbeatInterval": (30, 600),
+                "MeterValueSampleInterval": (5, 300),
+            }
+            if key not in limits:
+                return {"status": "NotSupported"}
+            if (
+                not isinstance(value, str)
+                or len(value) > 3
+                or not value.isascii()
+                or not value.isdigit()
+            ):
+                return {"status": "Rejected"}
+            number = int(value)
+            low, high = limits[key]
+            if not low <= number <= high:
+                return {"status": "Rejected"}
+            updated = {**self.remote_configuration, key: number}
+            path = ROOT / (self.config["code"] + ".configuration.json")
+            tmp = path.with_suffix(".tmp")
+            try:
+                tmp.write_text(json.dumps(updated))
+                tmp.chmod(0o600)
+                tmp.replace(path)
+            except OSError:
+                return {"status": "Rejected"}
+            self.remote_configuration = updated
+            return {"status": "Accepted"}
         if action == "GetConfiguration":
             values = {
                 "SupportedFeatureProfiles": "Core,Reservation,SmartCharging",
                 "ReserveConnectorZeroSupported": "false",
                 "ChargingScheduleAllowedChargingRateUnit": "Power",
                 "ChargeProfileMaxStackLevel": "1",
+                **{key: str(value) for key, value in self.remote_configuration.items()},
             }
             keys = payload.get("key") or list(values)
             return {
                 "configurationKey": [
-                    {"key": key, "readonly": True, "value": values[key]}
+                    {
+                        "key": key,
+                        "readonly": key not in self.remote_configuration,
+                        "value": values[key],
+                    }
                     for key in keys
                     if key in values
                 ],
@@ -833,7 +886,12 @@ class Charger:
                     response = self.power_command(action, payload)
                     await self.socket.send(json.dumps([3, frame[1], response]))
                     continue
-                if action in {"GetConfiguration", "ReserveNow", "CancelReservation"}:
+                if action in {
+                    "GetConfiguration",
+                    "ChangeConfiguration",
+                    "ReserveNow",
+                    "CancelReservation",
+                }:
                     response = self.reservation_command(action, payload)
                     await self.socket.send(json.dumps([3, frame[1], response]))
                     continue
@@ -997,16 +1055,25 @@ class Charger:
                     f"{self.config['code']} online; transactions {self.transactions or '-'}",
                     flush=True,
                 )
+                heartbeat_at = meter_at = 0.0
                 while not STOP.exists():
-                    await self.call("Heartbeat", {})
-                    await self.meter_values()
-                    for _ in range(10):
-                        if STOP.exists():
-                            break
-                        for number in list(self.reservations):
-                            if self.reservation_for(number) is None:
-                                await self.status(number, "Available")
-                        await asyncio.sleep(1)
+                    tick = monotonic()
+                    if (
+                        tick - heartbeat_at
+                        >= self.remote_configuration["HeartbeatInterval"]
+                    ):
+                        await self.call("Heartbeat", {})
+                        heartbeat_at = tick
+                    if (
+                        tick - meter_at
+                        >= self.remote_configuration["MeterValueSampleInterval"]
+                    ):
+                        await self.meter_values()
+                        meter_at = tick
+                    for number in list(self.reservations):
+                        if self.reservation_for(number) is None:
+                            await self.status(number, "Available")
+                    await asyncio.sleep(1)
                 if self.tasks:
                     await asyncio.gather(*self.tasks)
                 await self.stop()

@@ -119,6 +119,7 @@ export function OperatorWorkspace({
       <main className="owner-main">
         {area === "monitor" ? (
           <OperatorMonitoring
+            canConfigure={currentUser.roles.includes('operator')}
             onOpenSession={(id) => {
               navigate("sessions");
               window.history.replaceState(window.history.state, "", `#ops-sessions?session=${id}`);
