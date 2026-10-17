@@ -54,6 +54,10 @@ async def authorize(
     *,
     reservation_context: bool = False,
 ) -> tuple[str, ChargingCard | None, ChargingEligibility | None]:
+    from src.modules.ocpp.configuration_gate import reset_pending
+
+    if await reset_pending(session, charger.id):
+        return "Blocked", None, None
     row = (
         await session.execute(
             select(ChargingCard, User.status)

@@ -23,6 +23,7 @@ from src.modules.identity.policy_routing import PolicyRoute, require_policy_decl
 from src.modules.identity.router import router as identity_router
 from src.modules.identity.scoped_routes import scoped_routes
 from src.modules.ocpp.admin_health_router import router as health_router
+from src.modules.ocpp.configuration_router import router as configuration_router
 from src.modules.ocpp.control_router import router as control_router
 from src.modules.ocpp.monitor_router import router as monitor_router
 from src.modules.ocpp.router import router as ocpp_router
@@ -90,6 +91,7 @@ app.include_router(admin_wallet_router)
 app.include_router(wallet_audit_router)
 app.include_router(wallet_administration_router)
 app.include_router(control_router)
+app.include_router(configuration_router)
 app.include_router(health_router)
 app.include_router(admin_alert_router)
 app.include_router(ops_alert_router)

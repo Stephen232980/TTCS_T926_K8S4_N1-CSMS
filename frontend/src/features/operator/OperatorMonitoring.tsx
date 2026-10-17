@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { AlertsPanel } from "../alerts/AlertsPanel";
 import { notifySessionUnauthorized } from "../auth/sessionEvents";
 import { ControlAction } from "../ocpp/ControlAction";
+import { ChargerConfiguration } from './ChargerConfiguration';
 import {
   ChargerDrawing,
   ConnectionSymbol,
@@ -229,8 +230,10 @@ function ConnectorSession({
 }
 export function OperatorMonitoring({
   onOpenSession,
+  canConfigure = false,
 }: {
   onOpenSession: (id: number) => void;
+  canConfigure?: boolean;
 }) {
   const [result, setResult] = useState<Result | null>(null);
   const [page, setPage] = useState(1);
@@ -558,6 +561,7 @@ export function OperatorMonitoring({
                 chargerId={selected.id}
                 label={selected.code}
               />
+              <ChargerConfiguration key={selected.id} chargerId={selected.id} allowed={canConfigure} />
               <details>
                 <summary>Thông tin trụ và kết nối</summary>
                 <p>

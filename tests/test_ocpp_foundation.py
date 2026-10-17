@@ -393,7 +393,8 @@ async def test_unsupported_action_is_logged_at_default_level_after_boot(
         status_updated_at=None,
     )
     session = AsyncMock(spec=AsyncSession)
-    cast(AsyncMock, session.scalar).side_effect = [station, None]
+    # Station, verified heartbeat, pending heartbeat, then power configuration.
+    cast(AsyncMock, session.scalar).side_effect = [station, None, None, None]
     cast(AsyncMock, session.get).return_value = None
     conn = connection(charge_point_id, station_id)
     conn.charge_point_code = charge_point_code

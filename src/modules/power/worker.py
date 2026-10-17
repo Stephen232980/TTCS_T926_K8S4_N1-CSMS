@@ -107,6 +107,16 @@ async def wire(
     payload: dict[str, object],
     request_id: UUID,
 ) -> tuple[str, dict[str, object]]:
+    if action == "GetConfiguration":
+        from src.modules.ocpp.configuration_adapter import configuration_call
+
+        return await configuration_call(
+            connection,
+            action,
+            payload,
+            request_id,
+            timeout=settings.power_command_timeout_seconds,
+        )
     try:
         reply = await connection.call(
             action,
@@ -116,8 +126,6 @@ async def wire(
         )
         if reply.kind != 3:
             return "ProtocolError", {}
-        if action == "GetConfiguration":
-            return "Accepted", reply.payload
         status = reply.payload.get("status")
         if not isinstance(status, str) or status not in {
             "Accepted",
