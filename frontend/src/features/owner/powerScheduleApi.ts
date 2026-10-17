@@ -26,6 +26,15 @@ export interface CurrentPowerLimitResponse {
   local_date: string
   power_limit_w: number | null
   power_limit_kw: string | null
+  scheduled_limit_w?: number | null
+  scheduled_limit_kw?: string | null
+  applied_limit_w?: number | null
+  applied_limit_kw?: string | null
+  confirmed_limit_w?: number | null
+  confirmed_limit_kw?: string | null
+  compliance_status?: 'confirmed' | 'applying' | 'degraded' | 'disabled' | 'unconfigured'
+  state?: string | null
+  issue?: string | null
 }
 
 export async function fetchPowerSchedule(
