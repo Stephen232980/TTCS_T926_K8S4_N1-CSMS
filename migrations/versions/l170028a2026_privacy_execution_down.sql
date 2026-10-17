@@ -1,3 +1,8 @@
+DROP TRIGGER privacy_update_guard ON invoices;
+DROP TRIGGER privacy_update_guard ON wallet_ledger;
+DROP TRIGGER privacy_update_guard ON wallet_audits;
+DROP TRIGGER privacy_update_guard ON audit_logs;
+DROP TRIGGER privacy_update_guard ON ocpp_control_requests;
 DROP TRIGGER privacy_driver_fence ON charging_cards;
 DROP TRIGGER privacy_driver_fence ON charging_sessions;
 DROP TRIGGER privacy_driver_fence ON driver_start_requests;

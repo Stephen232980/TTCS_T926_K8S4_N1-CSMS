@@ -101,6 +101,28 @@ REVOKE ALL ON FUNCTION privacy_private.scrub(jsonb,text,text) FROM PUBLIC;
 
 -- Replace statement-only UPDATE guards with per-row, column-allowlisted guards.
 -- DELETE/TRUNCATE remain unconditionally forbidden, including for the executor.
+-- Reject ordinary UPDATE statements even when they match no rows. The row
+-- guard below still validates every changed column during privileged redaction.
+CREATE FUNCTION privacy_private.guard_redaction_statement() RETURNS trigger
+LANGUAGE plpgsql SET search_path=pg_catalog,public AS $$
+BEGIN
+ IF current_user=pg_get_userbyid((SELECT proowner FROM pg_proc WHERE proname='execute_stage' AND pronamespace=(SELECT oid FROM pg_namespace WHERE nspname='privacy_private'))) THEN
+  IF privacy_private.redaction_context() THEN RETURN NULL; END IF;
+ END IF;
+ CASE TG_TABLE_NAME
+ WHEN 'invoices' THEN RAISE EXCEPTION 'invoice evidence is append-only';
+ WHEN 'wallet_ledger','wallet_audits' THEN RAISE EXCEPTION 'wallet ledger is append-only';
+ WHEN 'audit_logs' THEN RAISE EXCEPTION 'audit log is append-only';
+ ELSE RAISE EXCEPTION 'control audit is append-only';
+ END CASE;
+END $$;
+REVOKE ALL ON FUNCTION privacy_private.guard_redaction_statement() FROM PUBLIC;
+CREATE TRIGGER privacy_update_guard BEFORE UPDATE ON invoices FOR EACH STATEMENT EXECUTE FUNCTION privacy_private.guard_redaction_statement();
+CREATE TRIGGER privacy_update_guard BEFORE UPDATE ON wallet_ledger FOR EACH STATEMENT EXECUTE FUNCTION privacy_private.guard_redaction_statement();
+CREATE TRIGGER privacy_update_guard BEFORE UPDATE ON wallet_audits FOR EACH STATEMENT EXECUTE FUNCTION privacy_private.guard_redaction_statement();
+CREATE TRIGGER privacy_update_guard BEFORE UPDATE ON audit_logs FOR EACH STATEMENT EXECUTE FUNCTION privacy_private.guard_redaction_statement();
+CREATE TRIGGER privacy_update_guard BEFORE UPDATE ON ocpp_control_requests FOR EACH STATEMENT EXECUTE FUNCTION privacy_private.guard_redaction_statement();
+
 CREATE FUNCTION privacy_private.guard_redaction() RETURNS trigger
 LANGUAGE plpgsql SET search_path=pg_catalog,public AS $$
 DECLARE allowed text[]; uid uuid; sid uuid; email text;
