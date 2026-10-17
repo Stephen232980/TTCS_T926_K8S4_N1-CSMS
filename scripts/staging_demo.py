@@ -133,7 +133,11 @@ async def seed():
                         admin,
                         "POST",
                         f"/admin/drivers/{row['id']}/wallet/manual-topups",
-                        json={"amount_vnd": 500000, "receipt_code": receipt},
+                        json={
+                            "amount_vnd": 500000,
+                            "reason": "Staging demo funding",
+                            "receipt_code": receipt,
+                        },
                     )
     chargers = []
     stations = []
