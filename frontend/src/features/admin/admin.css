@@ -306,6 +306,19 @@
   min-height: 0;
   min-width: 0;
 }
+.admin-wallet-audit {
+  overflow: auto;
+  flex: 1;
+}
+.admin-wallet-audit-row {
+  padding: 14px 18px;
+  border-bottom: 1px solid #dce7eb;
+}
+.admin-wallet-audit-row summary {
+  cursor: pointer;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
 .admin-split {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 330px;

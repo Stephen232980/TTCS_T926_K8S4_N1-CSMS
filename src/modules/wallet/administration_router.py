@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_vali
 
 from src.modules.identity.authorization import user_policy
 from src.modules.identity.dependencies import RequestScope, authorize_request
-from src.modules.identity.policy_routing import PolicyRoute
+from src.modules.wallet.admin_route import WalletCommandRoute
 from src.modules.wallet.admin_router import Database
 from src.modules.wallet.administration import dieu_chinh_vi, mo_khoa_vi, sua_so_du_cache
 from src.modules.wallet.exceptions import (
@@ -24,7 +24,7 @@ from src.modules.wallet.service import MAX_VND, MIN_VND
 router = APIRouter(
     prefix="/api/v1/admin/wallets",
     tags=["admin-wallet"],
-    route_class=PolicyRoute,
+    route_class=WalletCommandRoute,
     dependencies=[Depends(authorize_request)],
 )
 
@@ -100,9 +100,13 @@ async def repair_cache(
 
 @router.post("/{wallet_id}/unlock", response_model=WalletState)
 @user_policy("admin.wallet.unlock", "all", "admin")
-async def unlock(wallet_id: UUID, scope: RequestScope, db: Database) -> WalletState:
+async def unlock(
+    wallet_id: UUID, body: RepairRequest, scope: RequestScope, db: Database
+) -> WalletState:
     async with command_errors():
-        wallet = await mo_khoa_vi(db, wallet_id=wallet_id, actor_id=scope.actor_id)
+        wallet = await mo_khoa_vi(
+            db, wallet_id=wallet_id, actor_id=scope.actor_id, reason=body.reason
+        )
         await db.commit()
         return WalletState(
             wallet_id=wallet.id, balance_vnd=wallet.balance_vnd, status=wallet.status

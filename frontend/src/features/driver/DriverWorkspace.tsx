@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Icon } from '../../components/icons/Icon'
 import type { MapStation } from '../../components/maps/StationMap'
 import type { AuthenticatedUser } from '../auth/model/auth'
+import { DriverPrivacy } from './DriverPrivacy'
 import { DriverCharging } from './DriverCharging'
 import { DriverMapPage } from './DriverMapPage'
 import { DriverReservations } from '../reservations/DriverReservations'
@@ -13,10 +14,11 @@ import { createWalletTopUp, getWalletTopUp, refreshDriverWallet, type TopUpResul
 import { readTopUpReturn } from './walletTopUpReturnUrl'
 import './driver.css'
 
-type Area = 'session' | 'stations' | 'wallet'
+type Area = 'session' | 'stations' | 'wallet' | 'privacy'
 const hashArea = (): Area => {
   if (readTopUpReturn(window.location).isReturn) return 'wallet'
   if (window.location.hash.startsWith('#driver-invoice')) return 'wallet'
+  if (window.location.hash === '#driver-privacy') return 'privacy'
   if (window.location.hash === '#driver-wallet') return 'wallet'
   if (window.location.hash === '#driver-stations') return 'stations'
   return 'session'
@@ -142,6 +144,7 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
           { key: 'session', label: 'Phiên sạc của bạn', icon: 'session' },
           { key: 'stations', label: 'Tìm trạm', icon: 'station' },
           { key: 'wallet', label: 'Ví của bạn', icon: 'wallet' },
+          { key: 'privacy', label: 'Dữ liệu cá nhân', icon: 'settings' },
         ] as const).map(item => <a key={item.key} href={`#driver-${item.key}`} aria-current={area === item.key ? 'page' : undefined} onClick={event => { event.preventDefault(); navigate(item.key) }}><Icon name={item.icon} /><span>{item.label}</span></a>)}
       </nav>
       <footer className="driver-account">
@@ -151,7 +154,7 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
     <main className="driver-main">
       <header className="driver-heading">
         <h1>
-          {area === 'session'
+          {area === 'privacy' ? 'Dữ liệu cá nhân' : area === 'session'
             ? reservationFocus ? 'Chi tiết đặt chỗ' : 'Phiên sạc của bạn'
             : area === 'wallet'
               ? invoiceView ? 'Hóa đơn của bạn' : showingReturn ? 'Trạng thái nạp tiền' : 'Ví tiền của bạn'
@@ -160,7 +163,7 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
                 : 'Tìm trạm sạc'}
         </h1>
         <p>
-          {area === 'session'
+          {area === 'privacy' ? 'Gửi yêu cầu và theo dõi kết quả xem xét.' : area === 'session'
             ? reservationFocus ? 'Mức phí đã xác nhận và kết quả xử lý đặt chỗ.' : 'Theo dõi điện năng và thời gian từ trụ đang sạc.'
             : area === 'wallet'
               ? invoiceView
@@ -174,7 +177,7 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
         </p>
       </header>
       {area === 'wallet' && invoiceView && <div className="driver-wallet-stack">
-        <button className="secondary-button driver-wallet-back" onClick={() => { setInvoiceView(false); window.history.pushState(null, '', '#driver-wallet') }}><Icon name="chevronLeft" />Quay lại ví</button>
+        <button className="navigation-link secondary-button driver-wallet-back" onClick={() => { setInvoiceView(false); window.history.pushState(null, '', '#driver-wallet') }}><Icon name="chevronLeft" />Quay lại ví</button>
         <DriverInvoicePage sessionId={invoiceSessionId} onOpen={openInvoice} onBack={() => openInvoice()} />
       </div>}
       <div hidden={area !== 'wallet' || invoiceView}>
@@ -197,10 +200,11 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
           <button className="secondary-button" onClick={() => openInvoice()}>Xem hóa đơn phiên sạc</button>
         </div>}
       </div>
-      {area !== 'wallet' && (
+      {area === 'privacy' && <DriverPrivacy />}
+      {(area === 'session' || area === 'stations') && (
         <>
+          <div className="driver-return" hidden={!showStart || area !== 'stations'}><button className="navigation-link secondary-button" onClick={() => setShowStart(false)}><Icon name="chevronLeft" />Quay lại bản đồ và danh sách</button></div>
           <DriverReservations key={reservationFocus ?? 'list'} ownerId={currentUser.id} focusedId={reservationFocus} />
-          <div className="driver-return" hidden={!showStart || area !== 'stations'}><button className="secondary-button" onClick={() => setShowStart(false)}><Icon name="chevronLeft" />Quay lại bản đồ và danh sách</button></div>
           <DriverCharging ownerId={currentUser.id} stationId={station?.id} stationName={station?.name} showSession={area === 'session'} showConnectors={area === 'stations' && showStart} onFindStations={showStations} onSessionStarted={sessionStarted} />
           {mapOpened && <div className="driver-map-container" hidden={area !== 'stations' || showStart}><DriverMapPage selectedStationId={station?.id} onOpenStation={selected => { setStation(selected); setShowStart(true) }} /></div>}
         </>

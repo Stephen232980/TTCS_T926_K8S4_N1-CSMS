@@ -4,7 +4,8 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from uuid import UUID, uuid4
+from decimal import Decimal
+from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from fastapi import WebSocketDisconnect
 from sqlalchemy import func, select, text
@@ -13,9 +14,14 @@ from sqlalchemy.exc import SQLAlchemyError
 from src.config import settings
 from src.modules.charging.models import ChargingSession
 from src.modules.ocpp.connection_registry import OcppConnection, ocpp_connections
-from src.modules.power.allocation import allocate_watts
 from src.modules.power.models import ConnectorPower, PowerCommand, StationPower
 from src.modules.stations.models import ChargePoint, Connector
+from src.modules.stations.power_allocation_engine import (
+    SessionDemand,
+    phan_bo_cong_suat,
+)
+from src.modules.stations.power_schedule_service import get_current_power_limit_w
+from src.platform.audit.service import ghi_nhat_ky
 from src.platform.database.session import SessionFactory, engine
 
 logger = logging.getLogger("csms.power")
@@ -37,6 +43,28 @@ class Device:
     transaction_id: int | None
     needs_power: bool
     online: bool
+    authorized: bool = True
+    started_at: datetime | None = None
+    min_w: int = 1380
+
+
+def resolve_min_w(connector: Connector, rated_w: int) -> int:
+    min_w_attr = getattr(connector, "min_w", None)
+    if min_w_attr is not None:
+        return int(min_w_attr)
+    min_pw_attr = getattr(connector, "min_power_w", None)
+    if min_pw_attr is not None:
+        return int(min_pw_attr)
+    if connector.voltage is not None and connector.amperage is not None:
+        amp = min(Decimal(6), connector.amperage)
+        return int(connector.voltage * amp)
+    if connector.voltage is not None:
+        if connector.voltage >= Decimal(500):
+            return 6000
+        if connector.voltage >= Decimal(380):
+            return 4150
+        return int(connector.voltage * Decimal(6))
+    return 1380
 
 
 async def devices(station_id: UUID) -> list[Device]:
@@ -44,7 +72,7 @@ async def devices(station_id: UUID) -> list[Device]:
     sockets = await ocpp_connections.snapshot()
     async with SessionFactory() as db:
         active = {
-            row.connector_id: row.id
+            row.connector_id: row
             for row in await db.scalars(
                 select(ChargingSession)
                 .join(ChargePoint, ChargePoint.id == ChargingSession.charge_point_id)
@@ -75,6 +103,7 @@ async def devices(station_id: UUID) -> list[Device]:
                 and connector.archived_at is None
                 and charger.archived_at is None
             )
+            sess = active.get(connector.id)
             result.append(
                 Device(
                     cap.connector_id,
@@ -88,9 +117,14 @@ async def devices(station_id: UUID) -> list[Device]:
                     cap.confirmed_w,
                     cap.baseline_boot_at,
                     cap.pending_command_id,
-                    active.get(connector.id),
-                    connector.raw_ocpp_status == "Charging" and connector.id in active,
+                    sess.id if sess else None,
+                    connector.raw_ocpp_status in {"Charging", "SuspendedEVSE"}
+                    and sess is not None
+                    and sess.authorization_status == "Accepted",
                     live,
+                    sess is None or sess.authorization_status == "Accepted",
+                    sess.started_at if sess else None,
+                    resolve_min_w(connector, cap.rated_w),
                 )
             )
         return result
@@ -102,6 +136,16 @@ async def wire(
     payload: dict[str, object],
     request_id: UUID,
 ) -> tuple[str, dict[str, object]]:
+    if action == "GetConfiguration":
+        from src.modules.ocpp.configuration_adapter import configuration_call
+
+        return await configuration_call(
+            connection,
+            action,
+            payload,
+            request_id,
+            timeout=settings.power_command_timeout_seconds,
+        )
     try:
         reply = await connection.call(
             action,
@@ -111,10 +155,12 @@ async def wire(
         )
         if reply.kind != 3:
             return "ProtocolError", {}
-        if action == "GetConfiguration":
-            return "Accepted", reply.payload
         status = reply.payload.get("status")
-        if status not in {"Accepted", "Rejected", "Unknown"}:
+        if not isinstance(status, str) or status not in {
+            "Accepted",
+            "Rejected",
+            "Unknown",
+        }:
             return "ProtocolError", {}
         return str(status), reply.payload
     except TimeoutError:
@@ -178,11 +224,14 @@ async def capabilities(device: Device, station_id: UUID, generation: int) -> boo
     values = payload.get("configurationKey")
     if status != "Accepted" or not isinstance(values, list):
         return False
-    config = {
-        entry.get("key"): entry.get("value")
-        for entry in values
-        if isinstance(entry, dict)
-    }
+    config: dict[str, str] = {}
+    for entry in values:
+        if not isinstance(entry, dict):
+            return False
+        key, value = entry.get("key"), entry.get("value")
+        if not isinstance(key, str) or not isinstance(value, str) or key in config:
+            return False
+        config[key] = value
     try:
         return (
             "SmartCharging"
@@ -204,7 +253,7 @@ async def capabilities(device: Device, station_id: UUID, generation: int) -> boo
 def profile(device: Device, watts: int, baseline: bool = False) -> dict[str, object]:
     charging: dict[str, object] = {
         "chargingProfileId": device.profile_id * 2 + (0 if baseline else 1),
-        "stackLevel": 0 if baseline else 1,
+        "stackLevel": 0 if baseline or device.transaction_id is None else 1,
         "chargingProfilePurpose": "TxDefaultProfile"
         if baseline or device.transaction_id is None
         else "TxProfile",
@@ -232,24 +281,50 @@ async def verify_limit(
     schedule = payload.get("chargingSchedule")
     if (
         outcome != "Accepted"
+        or type(payload.get("connectorId")) is not int
         or payload.get("connectorId") != device.number
         or not isinstance(schedule, dict)
         or schedule.get("chargingRateUnit") != "W"
+        or type(schedule.get("duration")) is not int
+        or schedule["duration"] < 60
     ):
+        return False
+    start = payload.get("scheduleStart")
+    if not isinstance(start, str):
+        return False
+    try:
+        scheduled_at = datetime.fromisoformat(start)
+        now = datetime.now(UTC)
+        if (
+            scheduled_at.tzinfo is None
+            or scheduled_at > now
+            or now - scheduled_at
+            > timedelta(seconds=settings.power_command_timeout_seconds + 1)
+        ):
+            return False
+    except ValueError:
         return False
     periods = schedule.get("chargingSchedulePeriod")
     if not isinstance(periods, list) or not periods:
         return False
     # No future increase is permitted within the readback horizon.
-    return (
-        all(
-            isinstance(p, dict)
-            and type(p.get("limit")) in {int, float}
-            and 0 <= p["limit"] <= watts
-            for p in periods
-        )
-        and periods[0].get("startPeriod") == 0
-    )
+    previous = -1
+    for period in periods:
+        if not isinstance(period, dict):
+            return False
+        start, limit = period.get("startPeriod"), period.get("limit")
+        if (
+            not isinstance(start, int)
+            or isinstance(start, bool)
+            or start <= previous
+            or start >= schedule["duration"]
+            or not isinstance(limit, (int, float))
+            or isinstance(limit, bool)
+            or not 0 <= limit <= watts
+        ):
+            return False
+        previous = start
+    return bool(periods[0]["startPeriod"] == 0)
 
 
 async def set_limit(
@@ -312,6 +387,22 @@ async def set_limit(
     ):
         return False
     async with SessionFactory() as db, db.begin():
+        # Serialize with StartTransaction's confirmation invalidation. A late
+        # readback for the previous car must not restore its confirmed watts.
+        await db.scalar(
+            select(StationPower)
+            .where(StationPower.station_id == station_id)
+            .with_for_update()
+        )
+        if not baseline:
+            current_transaction = await db.scalar(
+                select(ChargingSession.id).where(
+                    ChargingSession.connector_id == device.connector_id,
+                    ChargingSession.ended_at.is_(None),
+                )
+            )
+            if current_transaction != device.transaction_id:
+                return False
         cap = await db.get(ConnectorPower, device.connector_id)
         assert cap is not None
         cap.confirmed_w = watts
@@ -342,6 +433,9 @@ async def degrade(
             generation,
             "RemoteStopTransaction",
             {"transactionId": failed.transaction_id},
+            uuid5(
+                NAMESPACE_URL, f"csms:power:stop:{station_id}:{failed.transaction_id}"
+            ),
         )
     logger.warning("power_degraded station=%s reason=%s", station_id, issue)
 
@@ -398,8 +492,12 @@ async def reconcile_station(station_id: UUID) -> None:
             await lock.commit()
 
 
+def get_now() -> datetime:
+    return datetime.now(UTC)
+
+
 async def _reconcile(station_id: UUID) -> None:
-    now = datetime.now(UTC)
+    now = get_now()
     async with SessionFactory() as db, db.begin():
         config = await db.scalar(
             select(StationPower)
@@ -408,13 +506,29 @@ async def _reconcile(station_id: UUID) -> None:
         )
         if config is None or not config.enabled:
             return
-        if config.last_plan_at and now - config.last_plan_at < timedelta(seconds=5):
-            return
-        if config.dirty_at and now - config.dirty_at < timedelta(seconds=2):
-            return
+        scheduled_limit = await get_current_power_limit_w(db, station_id, now)
+        target_limit = (
+            scheduled_limit if scheduled_limit is not None else config.limit_w
+        )
+        boundary_changed = (config.limit_w != target_limit) or (
+            scheduled_limit is not None
+            and config.applied_limit_w != target_limit
+            and config.state == "ready"
+        )
+        if boundary_changed:
+            config.limit_w = target_limit
+            config.generation += 1
+            config.dirty_at = None
+            config.last_plan_at = now
+        else:
+            if config.last_plan_at and now - config.last_plan_at < timedelta(seconds=5):
+                return
+            if config.dirty_at and now - config.dirty_at < timedelta(seconds=2):
+                return
+            config.last_plan_at = now
+
         generation, limit = config.generation, config.limit_w
         disabling = not config.target_enabled
-        config.last_plan_at = now
     inputs = await devices(station_id)
     if not inputs:
         await degrade(station_id, generation, "power_configuration_incomplete")
@@ -437,6 +551,13 @@ async def _reconcile(station_id: UUID) -> None:
     if count != len(inputs):
         await degrade(station_id, generation, "power_configuration_incomplete")
         return
+    unauthorized = [
+        d for d in inputs if d.transaction_id is not None and not d.authorized
+    ]
+    if unauthorized:
+        for device in unauthorized:
+            await degrade(station_id, generation, "power_unauthorized_session", device)
+        return
     if disabling:
         for device in inputs:
             if device.transaction_id is not None or not device.online:
@@ -447,6 +568,11 @@ async def _reconcile(station_id: UUID) -> None:
             # First install zero limits; only then clear CSMS-owned profiles at idle connectors.
             if not await set_limit(device, station_id, generation, 0, baseline=True):
                 await degrade(station_id, generation, "power_disable_failed", device)
+                return
+        async with SessionFactory() as db:
+            config = await db.get(StationPower, station_id)
+            assert config is not None
+            if config.generation != generation:
                 return
         for device in inputs:
             for baseline in (False, True):
@@ -464,11 +590,16 @@ async def _reconcile(station_id: UUID) -> None:
                     )
                     return
         async with SessionFactory() as db, db.begin():
-            config = await db.get(StationPower, station_id)
+            config = await db.scalar(
+                select(StationPower)
+                .where(StationPower.station_id == station_id)
+                .with_for_update()
+            )
             assert config is not None
-            config.enabled = False
-            config.state = "disabled"
-            config.issue = None
+            if config.generation == generation and not config.target_enabled:
+                config.enabled = False
+                config.state = "disabled"
+                config.issue = None
         return
     for device in inputs:
         if device.baseline_boot_at != device.boot_at or device.baseline_boot_at is None:
@@ -487,12 +618,87 @@ async def _reconcile(station_id: UUID) -> None:
     if pinned > limit:
         await degrade(station_id, generation, "offline_budget_exceeds_requested_limit")
         return
-    demands = {
-        device.connector_id: device.rated_w if device.needs_power else 0
-        for device in inputs
-        if device.online
+
+    budget = limit - pinned
+
+    charging_devices = [
+        d for d in inputs if d.online and d.needs_power and d.transaction_id is not None
+    ]
+    session_demands = [
+        SessionDemand(
+            session_id=d.transaction_id,
+            started_at=d.started_at or now,
+            current_w=d.confirmed_w,
+            nominal_w=d.rated_w,
+            min_w=d.min_w,
+        )
+        for d in charging_devices
+        if d.transaction_id is not None
+    ]
+    device_by_tx: dict[UUID | int, Device] = {
+        d.transaction_id: d for d in charging_devices if d.transaction_id is not None
     }
-    targets = allocate_watts(limit - pinned, demands)
+
+    alloc_res = phan_bo_cong_suat(budget, session_demands)
+
+    if alloc_res.to_preempt:
+        for preempt_tx_id in alloc_res.to_preempt:
+            preempt_dev = device_by_tx.get(preempt_tx_id)
+            if preempt_dev and preempt_dev.transaction_id is not None:
+                await command(
+                    preempt_dev,
+                    station_id,
+                    generation,
+                    "RemoteStopTransaction",
+                    {"transactionId": preempt_dev.transaction_id},
+                    uuid5(
+                        NAMESPACE_URL,
+                        f"csms:power:preempt:{station_id}:{preempt_dev.transaction_id}",
+                    ),
+                )
+                async with SessionFactory() as db, db.begin():
+                    cs = await db.get(ChargingSession, preempt_dev.transaction_id)
+                    if cs:
+                        cs.stop_reason = "power_schedule_preempted"
+                    await ghi_nhat_ky(
+                        db,
+                        actor_id=None,
+                        action="power.session_preempted",
+                        object_type="charging_session",
+                        object_id=str(preempt_dev.transaction_id),
+                        data={
+                            "reason": alloc_res.preemption_reason
+                            or "Dừng phiên do hạ hạn mức công suất giờ cao điểm (LIFO)",
+                            "station_id": str(station_id),
+                            "limit_w": limit,
+                            "connector_id": str(preempt_dev.connector_id),
+                        },
+                    )
+
+    if alloc_res.is_degraded:
+        await degrade(station_id, generation, "insufficient_power_limit")
+        return
+
+    targets: dict[UUID, int] = {}
+    for d in inputs:
+        if not d.online:
+            continue
+        if (
+            d.transaction_id in alloc_res.to_preempt
+            or not d.needs_power
+            or d.transaction_id is None
+        ):
+            targets[d.connector_id] = 0
+        else:
+            tx_id = d.transaction_id
+            targets[d.connector_id] = alloc_res.to_decrease.get(
+                tx_id,
+                alloc_res.to_increase.get(
+                    tx_id,
+                    alloc_res.unchanged.get(tx_id, 0),
+                ),
+            )
+
     changes = [
         device
         for device in inputs

@@ -63,7 +63,11 @@ async def api_db(isolated_wallet_db):  # noqa: F811
 
 
 def payload(**overrides):
-    return {"amount_vnd": 500_000, "receipt_code": "PT-001"} | overrides
+    return {
+        "reason": "Checked receipt",
+        "amount_vnd": 500_000,
+        "receipt_code": "PT-001",
+    } | overrides
 
 
 @pytest.mark.parametrize(
@@ -129,6 +133,12 @@ async def test_credit_receipt_replay_and_audit(api_db, request_api):
             and audit.actor_roles == ["admin"]
         )
         assert audit.data == {
+            "audit_version": 1,
+            "wallet_id": str(wallet_id),
+            "driver_id": str(driver_id),
+            "reason": "Checked receipt",
+            "before_balance_vnd": 0,
+            "after_balance_vnd": 500_000,
             "ledger_id": response.json()["ledger_id"],
             "amount_vnd": 500_000,
             "receipt_code": "PT-001",
@@ -237,7 +247,12 @@ async def test_audit_failure_rolls_back_credit(
         raise RuntimeError("audit unavailable")
 
     body = (
-        {"amount_vnd": 100000, "request_id": str(uuid4()), "payment_received": True}
+        {
+            "reason": "Checked receipt",
+            "amount_vnd": 100000,
+            "request_id": str(uuid4()),
+            "payment_received": True,
+        }
         if generated
         else payload()
     )
@@ -305,6 +320,7 @@ async def test_generated_receipt_retries_and_conflicting_payloads(api_db, reques
     factory, actor, driver_id, wallet_id = api_db
     body = {
         "amount_vnd": 100000,
+        "reason": "Checked receipt",
         "request_id": str(uuid4()),
         "payment_received": True,
         "external_reference": "BANK-TEST-001",
@@ -321,7 +337,11 @@ async def test_generated_receipt_retries_and_conflicting_payloads(api_db, reques
     before = await counts(factory)
     replay = await request_api(driver_id, body, actor)
     assert replay.status_code == 201 and replay.json() == data
-    for change in [{"amount_vnd": 100001}, {"external_reference": "BANK-TEST-002"}]:
+    for change in [
+        {"amount_vnd": 100001},
+        {"external_reference": "BANK-TEST-002"},
+        {"reason": "Different reason"},
+    ]:
         conflict = await request_api(driver_id, body | change, actor)
         assert conflict.status_code == 409
         assert conflict.json()["detail"] == "manual_topup_request_conflict"
@@ -335,13 +355,24 @@ async def test_generated_receipt_retries_and_conflicting_payloads(api_db, reques
     "body",
     [
         {"amount_vnd": 100000},
-        {"amount_vnd": 100000, "request_id": str(uuid4())},
-        {"amount_vnd": 100000, "request_id": str(uuid4()), "payment_received": False},
-        {"amount_vnd": 100000, "request_id": str(uuid4()), "payment_received": "true"},
+        {"reason": "Checked receipt", "amount_vnd": 100000, "request_id": str(uuid4())},
+        {
+            "reason": "Checked receipt",
+            "amount_vnd": 100000,
+            "request_id": str(uuid4()),
+            "payment_received": False,
+        },
+        {
+            "reason": "Checked receipt",
+            "amount_vnd": 100000,
+            "request_id": str(uuid4()),
+            "payment_received": "true",
+        },
         {"amount_vnd": 100000, "receipt_code": "PT-AUTO-forged"},
         {"amount_vnd": 100000, "receipt_code": "PT-001", "request_id": str(uuid4())},
         {
             "amount_vnd": 100000,
+            "reason": "Checked receipt",
             "request_id": str(uuid4()),
             "payment_received": True,
             "external_reference": " ",
@@ -361,7 +392,12 @@ async def test_generated_receipt_key_cannot_move_to_another_driver_or_admin(
     api_db, request_api
 ):
     factory, actor, driver_id, _ = api_db
-    body = {"amount_vnd": 100000, "request_id": str(uuid4()), "payment_received": True}
+    body = {
+        "reason": "Checked receipt",
+        "amount_vnd": 100000,
+        "request_id": str(uuid4()),
+        "payment_received": True,
+    }
     assert (await request_api(driver_id, body, actor)).status_code == 201
     async with factory() as db:
         other, _ = await setup_wallet(db)
@@ -379,7 +415,10 @@ async def test_generated_receipt_concurrent_retry_commits_once(api_db):
 
     factory, actor, driver_id, wallet_id = api_db
     body = ManualTopupRequest(
-        amount_vnd=100000, request_id=uuid4(), payment_received=True
+        amount_vnd=100000,
+        reason="Checked receipt",
+        request_id=uuid4(),
+        payment_received=True,
     )
 
     async def post():

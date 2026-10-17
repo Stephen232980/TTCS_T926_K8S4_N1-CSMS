@@ -316,6 +316,7 @@ it('reopens a malformed stream and waits for a valid recovery snapshot', async (
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
 
+<<<<<<< HEAD
 it('emits an in-app toast and browser notification when an active session transitions to idle waiting for unplug', async () => {
   vi.useFakeTimers()
   vi.stubGlobal('EventSource', FakeDriverStream)
@@ -430,4 +431,37 @@ it('allows requesting notification permission and auto-dismisses toast after 8 s
   // Advance time by 8000ms -> toast auto-dismisses
   await act(async () => { await vi.advanceTimersByTimeAsync(8000) })
   expect(screen.queryByText('Đã dừng sạc — Vui lòng rút súng')).not.toBeInTheDocument()
+=======
+it('switches the driver selection but requires a fresh booking confirmation and request identity', async () => {
+  let posts = 0
+  const fetchMock=vi.fn().mockImplementation(async (url:string,options?:RequestInit)=> {
+    if(options?.method==='POST') {
+      posts++
+      return posts===1 ? {ok:false,status:409,json:async()=>({detail:{reason:'connector_reserved',alternatives:[{connector_id:'second',charge_point_code:'CP-2',connector_number:2}]}})}
+        : {ok:true,json:async()=>({status:'pending',expires_at:new Date().toISOString()})}
+    }
+    return {ok:true,json:async()=>url.includes('/connectors') ? {items:['first','second'].map((id,index)=>({id,charge_point_code:`CP-${index+1}`,connector_number:index+1,status:'Available',available:true,can_start:true,reservation_capability:'supported'}))}
+      : url.includes('/policy') ? {fee_vnd:10000,version:1} : empty}
+  })
+  vi.stubGlobal('fetch',fetchMock)
+  render(<DriverCharging stationId="station" ownerId="owner" />)
+  const select=await screen.findByLabelText('Trụ và đầu nối')
+  await userEvent.selectOptions(select,'first')
+  await userEvent.click(screen.getByRole('button',{name:'Đặt trước đầu nối'}))
+  await userEvent.click(await screen.findByLabelText('Tôi đồng ý.'))
+  await userEvent.click(screen.getByRole('button',{name:'Xác nhận đặt chỗ'}))
+  await userEvent.click(await screen.findByRole('button',{name:'Chọn CP-2 · Đầu nối 2'}))
+  expect(select).toHaveValue('second')
+  expect(posts).toBe(1)
+  await userEvent.click(screen.getByRole('button',{name:'Đặt trước đầu nối'}))
+  expect(await screen.findByLabelText('Tôi đồng ý.')).not.toBeChecked()
+  expect(screen.getByRole('button',{name:'Xác nhận đặt chỗ'})).toBeDisabled()
+  await userEvent.click(screen.getByLabelText('Tôi đồng ý.'))
+  await userEvent.click(screen.getByRole('button',{name:'Xác nhận đặt chỗ'}))
+  await waitFor(()=>expect(posts).toBe(2))
+  const bodies=fetchMock.mock.calls.filter(([,options])=>options?.method==='POST').map(([,options])=>JSON.parse(options.body))
+  expect(bodies[0].request_id).not.toBe(bodies[1].request_id)
+  expect(bodies[1].connector_id).toBe('second')
+  sessionStorage.clear()
+>>>>>>> origin/develop
 })

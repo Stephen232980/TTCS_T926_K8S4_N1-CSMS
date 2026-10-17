@@ -5,7 +5,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.charging.models import ChargingSession
@@ -86,6 +86,7 @@ async def power_snapshot(db: AsyncSession, station_id: UUID) -> dict[str, object
     return {
         "station_id": str(station_id),
         "version": config.version if config else 0,
+        "generation": config.generation if config else 0,
         "limit_kw": str(Decimal(config.limit_w) / 1000) if config else None,
         "applied_limit_w": config.applied_limit_w
         if config
@@ -226,6 +227,11 @@ async def change_control(
     )
     if {c.id for c, _ in rows} != {c.connector_id for c in caps} or not rows:
         raise HTTPException(409, "power_configuration_incomplete")
+    if enable:
+        # A previous disable may have cleared profiles after its zero readback.
+        # Every enable/retry must establish defaults again before admitting cars.
+        for cap in caps:
+            cap.baseline_boot_at = None
     config.version += 1
     config.generation += 1
     config.enabled = True  # Disable remains guarded until device profiles are cleared.
@@ -245,7 +251,9 @@ async def change_control(
     )
 
 
-async def power_start_allowed(db: AsyncSession, station_id: UUID) -> bool:
+async def power_start_allowed(
+    db: AsyncSession, station_id: UUID, at_time: datetime | None = None
+) -> bool:
     config = await db.scalar(
         select(StationPower)
         .where(StationPower.station_id == station_id)
@@ -259,6 +267,31 @@ async def power_start_allowed(db: AsyncSession, station_id: UUID) -> bool:
         or not config.target_enabled
     ):
         return False
+
+    from src.modules.stations.power_schedule_service import (
+        get_current_power_limit_w,
+    )
+
+    scheduled_limit = await get_current_power_limit_w(
+        db, station_id, at_time or datetime.now(UTC)
+    )
+    if scheduled_limit is not None:
+        if (
+            config.applied_limit_w is not None
+            and config.applied_limit_w > scheduled_limit
+        ):
+            return False
+        total_reserved = (
+            await db.scalar(
+                select(func.sum(ConnectorPower.reserved_w)).where(
+                    ConnectorPower.station_id == station_id
+                )
+            )
+            or 0
+        )
+        if total_reserved + 1380 > scheduled_limit:
+            return False
+
     rows = await registered_connectors(db, station_id)
     caps = {
         c.connector_id: c
@@ -272,6 +305,23 @@ async def power_start_allowed(db: AsyncSession, station_id: UUID) -> bool:
         and caps[c.id].baseline_boot_at == charger.last_boot_at
         for c, charger in rows
     )
+
+
+async def note_power_start(
+    db: AsyncSession, station_id: UUID, connector_id: UUID
+) -> None:
+    """A previous transaction's readback cannot confirm power for a new car."""
+    config = await db.scalar(
+        select(StationPower)
+        .where(StationPower.station_id == station_id)
+        .with_for_update()
+    )
+    if config and config.enabled:
+        cap = await db.get(ConnectorPower, connector_id)
+        if cap is not None:
+            # The verified default profile is zero. Keep the old reservation
+            # until the worker verifies the profile bound to this transaction.
+            cap.confirmed_w = 0
 
 
 async def note_power_event(db: AsyncSession, station_id: UUID) -> None:

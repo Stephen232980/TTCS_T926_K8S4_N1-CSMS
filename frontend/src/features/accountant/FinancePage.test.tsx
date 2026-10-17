@@ -164,3 +164,27 @@ it('denies API access explicitly and handles unauthorized sessions',async()=>{
   vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response('{}',{status:401})))
   await act(async()=>{await expect(financeRequest('/finance/sessions')).rejects.toThrow()})
 })
+
+it('triggers accountant revenue CSV export when button is clicked', async () => {
+  const fetcher = mockApi()
+  const user = userEvent.setup()
+  window.URL.createObjectURL = vi.fn(() => 'blob:mock-url')
+  window.URL.revokeObjectURL = vi.fn()
+
+  render(<FinancePage area="sessions" />)
+  await screen.findByRole('link', { name: 'Phiên #42' })
+
+  const exportBtn = screen.getByRole('button', {
+    name: 'Xuất CSV báo cáo doanh thu',
+  })
+  expect(exportBtn).toBeInTheDocument()
+  await user.click(exportBtn)
+
+  await waitFor(() => {
+    expect(fetcher).toHaveBeenCalledWith(
+      expect.stringContaining('/accounting/reports/revenue/export'),
+      expect.objectContaining({ credentials: 'include' }),
+    )
+  })
+})
+

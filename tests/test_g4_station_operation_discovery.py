@@ -21,6 +21,7 @@ from src.modules.charging.models import ChargingSession
 from src.modules.identity.authorization import CurrentActor
 from src.modules.identity.dependencies import get_current_actor
 from src.modules.identity.models import User
+from src.modules.ocpp.monitoring import database_time
 from src.modules.pricing.models import Tariff, TariffBand
 from src.modules.stations.discovery import summaries
 from src.modules.stations.models import ChargePoint, Connector, Station
@@ -31,8 +32,9 @@ from tests.test_flat_tariff_api import api_db, committed_tariff_db  # noqa: F401
 
 @pytest.fixture
 async def fleet(api_db, monkeypatch):  # noqa: F811
-    now = datetime.now(UTC)
     async with api_db() as db, db.begin():
+        # Admission compares heartbeat times against PostgreSQL, not the host clock.
+        now = await database_time(db)
         station, point, connector, driver, _card, connection, tag = await setup(db)
         point.status = "online"
         point.last_seen_at = point.last_boot_at = now

@@ -18,6 +18,7 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.use
 async function fill(mount = true, reference = ' CHUNG-TU-001 ') {
  if (mount) render(<AdminManualTopup adminId="admin-1" />)
  fireEvent.click(await screen.findByRole('radio', { name: driver.email }))
+ fireEvent.change(screen.getByLabelText('Lý do nạp tay'), { target: { value: 'Thu tiền mặt' } })
  fireEvent.change(screen.getByLabelText('Số tiền (VND)'), { target: { value: '100000' } })
  fireEvent.change(screen.getByLabelText('Tham chiếu chứng từ (không bắt buộc)'), { target: { value: reference } })
 }
@@ -36,7 +37,7 @@ it('generates a UUID only after payment confirmation and sends the new contract 
  await screen.findByText(/Đã nạp 100.000 VND/)
  expect(post).toHaveBeenCalledOnce()
  expect(post.mock.calls[0][0]).toBe('/api/v1/admin/drivers/driver-id/wallet/manual-topups')
- expect(payload()).toEqual({ amount_vnd: 100000, request_id: expect.stringMatching(/^[0-9a-f-]{36}$/), payment_received: true, external_reference: 'CHUNG-TU-001' })
+ expect(payload()).toEqual({ amount_vnd: 100000, reason: 'Thu tiền mặt', request_id: expect.stringMatching(/^[0-9a-f-]{36}$/), payment_received: true, external_reference: 'CHUNG-TU-001' })
  expect(screen.getByText(/PT-AUTO-/)).toBeInTheDocument()
  expect(screen.getByText('admin-1')).toBeInTheDocument()
  expect(screen.getByText(/Số dư trên phiếu là số dư tại thời điểm/)).toBeInTheDocument()
@@ -44,6 +45,22 @@ it('generates a UUID only after payment confirmation and sends the new contract 
 it('omits an empty optional reference', async () => {
  await fill(true, '   '); confirm(); await screen.findByText(/Đã nạp/)
  expect(payload()).not.toHaveProperty('external_reference'); expect(payload()).not.toHaveProperty('receipt_code')
+})
+it('requires a short business reason before reviewing a new topup', async () => {
+ await fill()
+ fireEvent.change(screen.getByLabelText('Lý do nạp tay'), { target: { value: '   ' } })
+ fireEvent.click(screen.getByRole('button', { name: 'Tiếp tục kiểm tra' }))
+ expect(screen.getByRole('alert')).toHaveTextContent('Nhập lý do từ 1 đến 500 ký tự.')
+ expect(post).not.toHaveBeenCalled()
+})
+it('replays a stored legacy receipt without inventing a reason', async () => {
+ const requestId = crypto.randomUUID()
+ sessionStorage.setItem('csms:manual-topup:admin-1', JSON.stringify({ driver, amount: 100000, externalReference: '', requestId }))
+ render(<AdminManualTopup adminId="admin-1" />)
+ fireEvent.click(screen.getByRole('button', { name: 'Thử lại cùng khoản thu' }))
+ await screen.findByText(/Đã nạp/)
+ expect(payload()).not.toHaveProperty('reason')
+ expect(payload().request_id).toBe(requestId)
 })
 it('rejects fractional and unsafe amounts', async () => {
  await fill()

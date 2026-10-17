@@ -5,7 +5,7 @@ import asyncio
 import os
 import subprocess
 import sys
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -19,6 +19,7 @@ from src.modules.charging.driver import remote_start
 from src.modules.charging.driver_models import DriverVirtualTag
 from src.modules.identity.authorization import CurrentActor
 from src.modules.identity.dependencies import get_current_actor
+from src.modules.ocpp.monitoring import database_time
 from src.modules.reservations import fees, worker
 from src.modules.reservations.models import (
     Reservation,
@@ -57,8 +58,8 @@ async def paid(reservation_fleet, monkeypatch):
 
 async def expire(fixture, identifier):
     factory, _, point, *_ = fixture
-    now = datetime.now(UTC)
     async with factory() as db, db.begin():
+        now = await database_time(db)
         row = await db.get(Reservation, identifier)
         row.created_at = row.arrival_at = now - timedelta(minutes=20)
         row.expires_at = now - timedelta(seconds=40)
@@ -93,6 +94,18 @@ async def test_five_scans_two_workers_one_fee_snapshot_negative_wallet(paid):
         assert ledger.reference_id == str(row.id) and stored.fee_ledger_id == ledger.id
         assert wallet.balance_vnd == -9999
         assert await db.scalar(select(func.count()).select_from(WalletLedger)) == 1
+        from src.modules.wallet.audit_router import AuditQuery, wallet_audit
+
+        projected = await wallet_audit(
+            db, AuditQuery(driver_id=driver.id, action="reservation.fee_decided")
+        )
+        assert projected.total == 1
+        evidence = projected.items[0]
+        assert evidence.actor_id is None and evidence.reservation_id == row.id
+        assert evidence.wallet_id == wallet.id and evidence.ledger_id == ledger.id
+        assert evidence.before_decision == "pending" and evidence.decision == "charged"
+        assert evidence.before_balance_vnd == 1 and evidence.after_balance_vnd == -9999
+        assert evidence.amount_vnd == -10000 and evidence.reason and not evidence.legacy
     with pytest.raises(HTTPException):
         await remote_start(driver.id, uuid4(), fixture[3].id)
     from src.modules.reservations.models import ReservationCommand
@@ -105,7 +118,7 @@ async def test_five_scans_two_workers_one_fee_snapshot_negative_wallet(paid):
                 ReservationCommand.action == "CancelReservation",
             )
         )
-        command.next_attempt_at = datetime.now(UTC)
+        command.next_attempt_at = await database_time(db)
     await worker.cycle()
     with pytest.raises(HTTPException) as denied:
         await remote_start(driver.id, uuid4(), fixture[3].id)
@@ -133,9 +146,9 @@ async def test_no_penalty_without_reliable_hold_or_after_timely_cancel(paid, fau
         if fault == "suspended":
             (await db.get(Station, station.id)).status = "suspended"
         if fault == "cancelled":
-            (await db.get(Reservation, row.id)).cancel_requested_at = datetime.now(
-                UTC
-            ) - timedelta(minutes=1)
+            (await db.get(Reservation, row.id)).cancel_requested_at = (
+                await database_time(db) - timedelta(minutes=1)
+            )
         if fault == "no_contact_after_expiry":
             stored = await db.get(Reservation, row.id)
             (await db.get(ChargePoint, point.id)).last_seen_at = (
@@ -341,9 +354,9 @@ async def test_start_source_before_expiry_arrives_within_grace_after_cancel_ack(
     factory, _, _, _, driver, _, conn, _ = fixture
     await expire(fixture, row.id)
     async with factory() as db, db.begin():
-        (await db.get(Reservation, row.id)).expires_at = datetime.now(UTC) - timedelta(
-            seconds=15
-        )
+        (await db.get(Reservation, row.id)).expires_at = await database_time(
+            db
+        ) - timedelta(seconds=15)
     await worker.cycle()
     async with factory() as db:
         assert (await db.get(Reservation, row.id)).status == "expired"

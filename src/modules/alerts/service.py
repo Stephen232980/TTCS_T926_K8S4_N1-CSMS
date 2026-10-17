@@ -13,6 +13,7 @@ from src.modules.identity.authorization import ActorScope, AuthorizationEvidence
 from src.modules.ocpp.monitoring import database_time
 from src.modules.stations.models import ChargePoint, Connector, ConnectorError, Station
 from src.platform.audit.service import ghi_nhat_ky
+from src.platform.email import smtp_enabled
 
 ACTIVE = ("open", "acknowledged")
 
@@ -185,7 +186,9 @@ async def alert_list(
         deliveries = emails.get(alert.id, [])
         delivery_state = (
             "unconfigured"
-            if not deliveries or not settings.alert_smtp_enabled
+            if not deliveries
+            or not settings.alert_smtp_enabled
+            or not smtp_enabled(settings)
             else (
                 "sent"
                 if all(email.status == "sent" for email in deliveries)
@@ -290,7 +293,7 @@ async def mutate_alert(
         alert.status, alert.closed_at, alert.closed_by = "closed", now, scope.actor_id
         alert.close_reason = reason.strip() or "recovered"
     elif action == "retry-email":
-        if not settings.alert_smtp_enabled:
+        if not settings.alert_smtp_enabled or not smtp_enabled(settings):
             raise HTTPException(409, "alert_email_not_configured")
         rows = list(
             await db.scalars(

@@ -16,6 +16,7 @@ interface PowerConnector {
 interface PowerSnapshot {
   station_id: string
   version: number
+  generation: number
   limit_kw: string | null
   applied_limit_w: number | null
   total_rated_w: number
@@ -33,6 +34,7 @@ const states: Record<string, string> = {
   applying: 'Đang cập nhật giới hạn', degraded: 'Cần kiểm tra trụ', disable_pending: 'Đang tắt chia tải',
 }
 const issues: Record<string, string> = {
+  power_unauthorized_session: 'Có phiên chưa được phép sạc. Phiên mới đang bị chặn; hệ thống đang yêu cầu dừng phiên đó.',
   power_configuration_incomplete: 'Đầu nối đã thay đổi. Hãy cập nhật lại cấu hình công suất.',
   power_capability_unverified: 'Trụ chưa xác nhận khả năng điều khiển công suất bằng W hoặc đang mất liên lạc.',
   power_baseline_failed: 'Chưa xác minh được giới hạn mặc định. Phiên mới đang bị chặn.',
@@ -142,7 +144,7 @@ export function StationPowerPage() {
       {error && <p className="owner-error" role="alert">{error} <button type="button" disabled={busy} onClick={() => { setSnapshot(null); setError(''); setNotice(''); if (!stations.length) setListRetry(value => value + 1); else setRetry(value => value + 1) }}>Tải lại</button></p>}
       {notice && <p className="owner-subtle" role="status">{notice}</p>}
       {snapshot && snapshot.station_id === stationId && <>
-        <div className="owner-power-summary"><strong>{states[snapshot.state] ?? snapshot.state}</strong><span>Hạn mức đã lưu: {snapshot.limit_kw === null ? 'Chưa khai báo' : kw(Number(snapshot.limit_kw) * 1000)}</span><span>Hạn mức đã áp dụng: {kw(snapshot.enabled ? snapshot.applied_limit_w : null)}</span><span>Tổng danh định: {kw(snapshot.total_rated_w)}</span></div>
+        <div className="owner-power-summary"><strong>{states[snapshot.state] ?? snapshot.state}</strong><span>Kế hoạch #{snapshot.generation}</span><span>Hạn mức đã lưu: {snapshot.limit_kw === null ? 'Chưa khai báo' : kw(Number(snapshot.limit_kw) * 1000)}</span><span>Hạn mức đã áp dụng: {kw(snapshot.enabled ? snapshot.applied_limit_w : null)}</span><span>Tổng danh định: {kw(snapshot.total_rated_w)}</span></div>
         {snapshot.issue && <p className="owner-error" role="status">{issues[snapshot.issue] ?? 'Trụ chưa xác nhận kế hoạch. Hãy kiểm tra kết nối và cấu hình.'}</p>}
         {snapshot.over_registered && <p className="owner-subtle">Tổng danh định vượt hạn mức. Điều này được phép; chia tải sẽ giới hạn phần cấp cho các xe.</p>}
         <form onSubmit={event => { event.preventDefault(); void act('save') }}>

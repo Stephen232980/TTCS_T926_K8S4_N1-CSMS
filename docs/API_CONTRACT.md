@@ -690,6 +690,9 @@ vòng đời incident, email outbox và mã lỗi: [S46_S63_ALERTS.md](S46_S63_A
 Owner chỉ đọc; operator đóng sau phục hồi; admin force close cần lý do và audit.
 Dashboard sức khỏe giữ metrics/biểu đồ hiện có. SMTP mặc định tắt đến khi cấu hình server.
 
+Transport SMTP dùng chung, cấu hình tương thích cũ và contract cho domain
+outbox (bao gồm S-59): [SHARED_SMTP.md](SHARED_SMTP.md).
+
 ## S-66 / S-47 — Hoạt động trạm và tìm đầu nối
 
 Owner `PATCH /api/v1/owner/stations/{id}/operation` đổi active/suspended với

@@ -198,6 +198,9 @@ async def test_real_runtime_login_insert_select_only_and_no_owner_membership(
                 "UPDATE audit_logs SET action='x'",
                 "DELETE FROM audit_logs",
                 "TRUNCATE audit_logs",
+                "UPDATE wallet_audits SET action='x'",
+                "DELETE FROM wallet_audits",
+                "TRUNCATE wallet_audits",
             ]:
                 with pytest.raises(DBAPIError) as error:
                     async with runtime.begin_nested():

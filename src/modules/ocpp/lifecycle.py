@@ -13,6 +13,7 @@ from src.modules.alerts.worker import alert_email_loop, alert_scan_loop
 from src.modules.charging.driver import driver_start_loop
 from src.modules.charging.recovery import flag_abnormal_sessions
 from src.modules.ocpp.admin_health_service import health_loop
+from src.modules.ocpp.configuration import configuration_loop
 from src.modules.ocpp.control import control_loop
 from src.modules.ocpp.dispatcher import prune_replies
 from src.modules.ocpp.monitoring import expire_chargers
@@ -49,6 +50,7 @@ async def ocpp_lifespan(app: FastAPI) -> AsyncIterator[None]:
         asyncio.create_task(offline_loop()),
         asyncio.create_task(recovery_loop()),
         asyncio.create_task(control_loop()),
+        asyncio.create_task(configuration_loop()),
         asyncio.create_task(driver_start_loop()),
         asyncio.create_task(health_loop()),
         asyncio.create_task(power_loop()),
