@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy import insert
+from sqlalchemy import insert, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.modules.billing.models import Invoice, InvoiceLine
@@ -835,6 +835,13 @@ async def test_benchmark_10k_sessions_50_chargers_p95_under_2s(
         f"[BENCHMARK] Insertion of {total_sessions} sessions took {t_insert_end - t_insert_start:.2f}s."
     )
 
+    # Refresh PostgreSQL query planner statistics after 10,000 bulk rows
+    await db_session.execute(
+        text(
+            "ANALYZE charging_sessions; ANALYZE invoices; ANALYZE invoice_lines; ANALYZE wallet_ledger;"
+        )
+    )
+
     # Benchmark query executions
     query = RevenueReportQuery(
         period="month",
@@ -843,6 +850,9 @@ async def test_benchmark_10k_sessions_50_chargers_p95_under_2s(
         page=1,
         page_size=50,
     )
+
+    # Warm-up run
+    await get_revenue_report(db_session, query, owner_id=owner.id)
 
     times = []
     for run_i in range(5):
