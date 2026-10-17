@@ -66,6 +66,10 @@ async def decide(
 ) -> None:
     if row.fee_decision == decision and row.fee_reason == reason:
         return
+    before_decision = row.fee_decision
+    wallet_id = await db.scalar(
+        select(Wallet.id).where(Wallet.driver_id == row.driver_id)
+    )
     row.fee_decision, row.fee_reason, row.fee_decided_at = decision, reason, now
     event(
         db,
@@ -84,6 +88,11 @@ async def decide(
         object_type="reservation",
         object_id=str(row.id),
         data={
+            "audit_version": 1,
+            "driver_id": str(row.driver_id),
+            "wallet_id": str(wallet_id) if wallet_id else None,
+            "reservation_id": str(row.id),
+            "before_decision": before_decision,
             "decision": decision,
             "reason": reason,
             "fee_vnd": row.fee_vnd,

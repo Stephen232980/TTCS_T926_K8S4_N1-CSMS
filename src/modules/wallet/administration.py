@@ -55,8 +55,10 @@ async def sua_so_du_cache(
 
 
 async def mo_khoa_vi(
-    session: AsyncSession, *, wallet_id: UUID, actor_id: UUID
+    session: AsyncSession, *, wallet_id: UUID, actor_id: UUID, reason: str
 ) -> Wallet:
+    if not isinstance(reason, str) or not reason.strip() or len(reason.strip()) > 500:
+        raise ValueError("A reason of 1-500 characters is required")
     evidence = await _evidence(session, actor_id, "admin.wallet.unlock")
     wallet = await _lock_wallet(session, wallet_id)
     total, issues = await wallet_issues(session, wallet)
@@ -72,7 +74,17 @@ async def mo_khoa_vi(
             action="wallet.unlocked",
             object_type="wallet",
             object_id=str(wallet.id),
-            data={"balance_vnd": wallet.balance_vnd, "ledger_total_vnd": total},
+            data={
+                "wallet_id": str(wallet.id),
+                "driver_id": str(wallet.driver_id),
+                "before_balance_vnd": wallet.balance_vnd,
+                "after_balance_vnd": wallet.balance_vnd,
+                "before_status": "locked",
+                "after_status": "active",
+                "reason": reason.strip(),
+                "ledger_total_vnd": total,
+                "audit_version": 1,
+            },
             permission=evidence.permission,
             actor_roles=evidence.roles,
         )
@@ -163,6 +175,9 @@ async def dieu_chinh_vi(
             object_id=str(audit_id),
             data={
                 "wallet_id": str(wallet_id),
+                "driver_id": str(wallet.driver_id),
+                "reason": reason.strip(),
+                "audit_version": 1,
                 "ledger_id": entry.id,
                 "amount_vnd": amount_vnd,
                 "before_balance_vnd": previous.before_balance_vnd,

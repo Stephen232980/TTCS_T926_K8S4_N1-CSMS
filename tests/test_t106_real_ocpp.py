@@ -56,7 +56,9 @@ async def test_thresholds_and_real_topup_retry(committed_tariff_db, monkeypatch)
                 driver_id=driver.id,
                 actor_id=admin_id,
                 request=ManualTopupRequest(
-                    amount_vnd=balance, receipt_code=f"t106-{driver.id}"
+                    reason="QA seed funding",
+                    amount_vnd=balance,
+                    receipt_code=f"t106-{driver.id}",
                 ),
                 authorization=AuthorizationEvidence(
                     permission="admin.wallet.manual_topup", roles=("admin",)
@@ -138,7 +140,9 @@ async def test_thresholds_and_real_topup_retry(committed_tariff_db, monkeypatch)
                             driver_id=driver_id,
                             actor_id=admin_id,
                             request=ManualTopupRequest(
-                                amount_vnd=1, receipt_code=f"t106-retry-{driver_id}"
+                                reason="QA seed funding",
+                                amount_vnd=1,
+                                receipt_code=f"t106-retry-{driver_id}",
                             ),
                             authorization=AuthorizationEvidence(
                                 permission="admin.wallet.manual_topup", roles=("admin",)

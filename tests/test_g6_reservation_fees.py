@@ -94,6 +94,18 @@ async def test_five_scans_two_workers_one_fee_snapshot_negative_wallet(paid):
         assert ledger.reference_id == str(row.id) and stored.fee_ledger_id == ledger.id
         assert wallet.balance_vnd == -9999
         assert await db.scalar(select(func.count()).select_from(WalletLedger)) == 1
+        from src.modules.wallet.audit_router import AuditQuery, wallet_audit
+
+        projected = await wallet_audit(
+            db, AuditQuery(driver_id=driver.id, action="reservation.fee_decided")
+        )
+        assert projected.total == 1
+        evidence = projected.items[0]
+        assert evidence.actor_id is None and evidence.reservation_id == row.id
+        assert evidence.wallet_id == wallet.id and evidence.ledger_id == ledger.id
+        assert evidence.before_decision == "pending" and evidence.decision == "charged"
+        assert evidence.before_balance_vnd == 1 and evidence.after_balance_vnd == -9999
+        assert evidence.amount_vnd == -10000 and evidence.reason and not evidence.legacy
     with pytest.raises(HTTPException):
         await remote_start(driver.id, uuid4(), fixture[3].id)
     from src.modules.reservations.models import ReservationCommand

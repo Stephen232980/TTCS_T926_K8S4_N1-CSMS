@@ -26,6 +26,7 @@ interface Confirmation {
   driver: Account
   amount: number
   externalReference: string
+  reason?: string
   requestId?: string
 }
 
@@ -35,6 +36,7 @@ function restoreRequest(key: string): Confirmation | null {
     return value && typeof value.driver?.id === 'string' && typeof value.driver.email === 'string'
       && Number.isSafeInteger(value.amount) && value.amount > 0
       && typeof value.externalReference === 'string' && value.externalReference.length <= 128
+      && (value.reason === undefined || (typeof value.reason === 'string' && !!value.reason.trim() && value.reason.length <= 500))
       && typeof value.requestId === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.requestId)
       ? value : null
   } catch { return null }
@@ -51,6 +53,7 @@ export function AdminManualTopup({ adminId = 'admin' }: { adminId?: string }) {
   const [driver, setDriver] = useState<Account | null>(null)
   const [amount, setAmount] = useState('')
   const [externalReference, setExternalReference] = useState('')
+  const [reason, setReason] = useState('')
   const [paymentReceived, setPaymentReceived] = useState(() => !!restoreRequest(storageKey))
   const [fields, setFields] = useState<Record<string, string>>({})
   const [confirmation, setConfirmation] = useState<Confirmation | null>(() => restoreRequest(storageKey))
@@ -106,10 +109,11 @@ export function AdminManualTopup({ adminId = 'admin' }: { adminId?: string }) {
       next.amount_vnd = 'Nhập số tiền nguyên dương bằng VND.'
     if (externalReference.trim().length > 128)
       next.external_reference = 'Tham chiếu chứng từ tối đa 128 ký tự.'
+    if (!reason.trim() || reason.trim().length > 500) next.reason = 'Nhập lý do từ 1 đến 500 ký tự.'
     setFields(next)
     setError('')
     if (!Object.keys(next).length && driver)
-      setConfirmation({ driver, amount: value, externalReference: externalReference.trim(), requestId: requestId.current })
+      setConfirmation({ driver, amount: value, externalReference: externalReference.trim(), reason: reason.trim(), requestId: requestId.current })
   }
 
   async function submit() {
@@ -133,6 +137,7 @@ export function AdminManualTopup({ adminId = 'admin' }: { adminId?: string }) {
           amount_vnd: frozen.amount,
           request_id: frozen.requestId,
           payment_received: true,
+          ...(frozen.reason ? { reason: frozen.reason } : {}),
           ...(frozen.externalReference ? { external_reference: frozen.externalReference } : {}),
         }), signal: controller.signal },
       )
@@ -146,6 +151,7 @@ export function AdminManualTopup({ adminId = 'admin' }: { adminId?: string }) {
       setDriver(null)
       setAmount('')
       setExternalReference('')
+      setReason('')
       setFields({})
     } catch (cause) {
       if (!active.current) return
@@ -246,6 +252,7 @@ export function AdminManualTopup({ adminId = 'admin' }: { adminId?: string }) {
                 <strong>{numberText(confirmation.amount)} VND</strong>
               </dd>
               <dt>Mã phiếu</dt><dd>Hệ thống tự tạo sau khi ghi nhận</dd>
+              <dt>Lý do</dt><dd>{confirmation.reason || 'Không được ghi nhận ở phiên bản cũ'}</dd>
               <dt>Tham chiếu chứng từ</dt><dd>{confirmation.externalReference || 'Không có'}</dd>
               {confirmation.requestId && <><dt>Mã yêu cầu</dt><dd>{confirmation.requestId}</dd></>}
             </dl>
@@ -363,6 +370,9 @@ export function AdminManualTopup({ adminId = 'admin' }: { adminId?: string }) {
                     {fields.amount_vnd}
                   </p>
                 )}
+                <label htmlFor="topup-reason">Lý do nạp tay</label>
+                <textarea id="topup-reason" value={reason} maxLength={500} required aria-invalid={!!fields.reason} onChange={event => setReason(event.target.value)} />
+                {fields.reason && <p role="alert" className="admin-topup-field-error">{fields.reason}</p>}
                 <label htmlFor="topup-reference">Tham chiếu chứng từ (không bắt buộc)</label>
                 <input
                   id="topup-reference"
