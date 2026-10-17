@@ -16,6 +16,7 @@ from src.modules.billing.accounting_router import router as accounting_finance_r
 from src.modules.billing.driver_router import router as driver_invoice_router
 from src.modules.charging.driver_router import router as driver_charging_router
 from src.modules.charging.router import router as charging_router
+from src.modules.driver_notifications.router import router as driver_notification_router
 from src.modules.identity.admin_audit_router import router as admin_audit_router
 from src.modules.identity.admin_router import router as admin_accounts_router
 from src.modules.identity.authorization import AccessPolicy, access_policy
@@ -88,6 +89,7 @@ app.include_router(charging_router)
 app.include_router(driver_charging_router)
 app.include_router(driver_wallet_router)
 app.include_router(driver_invoice_router)
+app.include_router(driver_notification_router)
 app.include_router(wallet_topup_router)
 app.include_router(admin_wallet_router)
 app.include_router(wallet_audit_router)

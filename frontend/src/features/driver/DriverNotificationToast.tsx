@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { Icon } from '../../components/icons/Icon'
 
 import type { DriverNotificationItem } from './driverNotificationService'
@@ -15,7 +15,7 @@ export function DriverNotificationToastContainer({
   return (
     <div className="driver-toast-container" role="region" aria-label="Thông báo phiên sạc">
       {notifications.map(item => (
-        <DriverToast key={item.id} notification={item} onDismiss={() => onDismiss(item.id)} />
+        <DriverToast key={item.id} notification={item} onDismiss={onDismiss} />
       ))}
     </div>
   )
@@ -26,12 +26,15 @@ function DriverToast({
   onDismiss,
 }: {
   notification: DriverNotificationItem
-  onDismiss: () => void
+  onDismiss: (id: string) => void
 }) {
+  const dismiss = useRef(onDismiss)
+  useEffect(() => { dismiss.current = onDismiss }, [onDismiss])
   useEffect(() => {
-    const timer = window.setTimeout(onDismiss, 8000)
+    const remaining = Math.max(0, notification.createdAt + 8000 - Date.now())
+    const timer = window.setTimeout(() => dismiss.current(notification.id), remaining)
     return () => window.clearTimeout(timer)
-  }, [onDismiss])
+  }, [notification.id, notification.createdAt])
 
   const iconName =
     notification.type === 'fault'
@@ -56,7 +59,7 @@ function DriverToast({
           <a
             href={notification.actionHref}
             className="driver-toast-action"
-            onClick={onDismiss}
+            onClick={() => onDismiss(notification.id)}
           >
             {notification.actionLabel ?? 'Xem chi tiết'}
           </a>
@@ -66,7 +69,7 @@ function DriverToast({
         type="button"
         className="driver-toast-close"
         aria-label="Đóng thông báo"
-        onClick={onDismiss}
+        onClick={() => onDismiss(notification.id)}
       >
         <Icon name="close" />
       </button>

@@ -1,125 +1,80 @@
-# Tài liệu bàn giao Story S-59: Tối ưu thông báo khi phiên sạc kết thúc hoặc bị dừng
+# S-59 — thông báo phiên sạc theo AC gốc
 
-- **Mã Story**: `S-59`
-- **Tiêu đề**: Tối ưu màn thông báo khi phiên sạc kết thúc hoặc bị dừng
-- **Nhánh triển khai**: `feature/S-59-driver-charging-notification`
-- **Tài liệu tham chiếu**: `.local/project-inputs/Backlog CSMS.xlsx`, `docs/BACKLOG_DELIVERY_GUIDE.md`
+Nguồn: Backlog CSMS.xlsx, sheet Backlog CSMS, K67:N67. Khi phiên kết thúc,
+bị dừng từ xa hoặc thực sự bắt đầu tính phí chiếm trụ, tài xế nhận thông báo
+trong ứng dụng và email kèm kWh đã quan sát và tiền tạm tính.
+Browser Notification là bổ sung tùy quyền trình duyệt, không phải điều kiện AC.
 
----
+## Luồng và dữ liệu
 
-## 1. Mục tiêu và phạm vi
+- StopTransaction hợp lệ ghi notification `stop` trong cùng transaction cập nhật phiên.
+  RemoteStop Accepted chưa phát thông báo đã dừng; dữ liệu meter/tariff chưa đủ thì
+  hiển thị đang đối chiếu, không thay số thiếu bằng 0. Tiền trước hóa đơn ghi rõ chưa chốt.
+- Worker kiểm tra occupation interval đã confirmed; dùng chính `_daily_tariffs` và
+  `_idle_lines` của billing với ân hạn, biểu giá theo ngày địa phương, làm tròn phút.
+  Chỉ khi đã có một đoạn phí dương mới phát `idle`, với thời điểm bắt đầu đoạn đó.
+  Rút súng trước/đúng ân hạn hoặc pause rồi sạc lại không có thông báo idle.
+  Nếu worker khởi động muộn, interval đã đóng vẫn được kiểm tra theo thời gian thực tế.
+- `lap_hoa_don` ghi `invoice` khi có snapshot hóa đơn trong cùng transaction.
+  Lỗi settlement rollback cả invoice và notification mới. Không suy hóa đơn sẵn sàng
+  từ phiên biến mất khỏi `/charging/current`; tổng tiền lấy từ invoice đã lưu.
+- `driver_notifications` vừa là inbox vừa là email intent. Unique
+  `(driver_id,event_type,event_id)` chống trùng ở DB. Stop/invoice dùng session ID;
+  idle dùng occupation interval ID. Không dùng Set React thay DB constraint.
+- Worker SMTP claim intent với lease/token, commit rồi mới gọi transport SMTP dùng chung.
+  Retry giữ nguyên Message-ID; khi restart nhận lại lease hết hạn. Không tuyên bố SMTP
+  giao tới hộp thư hoặc exactly-once; crash sau SMTP acceptance có thể phải gửi lại.
+- Scanner và SMTP chạy trong hai loop độc lập: SMTP chậm không giữ transaction hay chặn
+  phát hiện idle. Loop scan/email nghỉ 1 giây, UI đọc inbox mỗi 2 giây khi đang đăng nhập.
+  Đây là nhịp xử lý danh định, không phải chứng nhận tải lớn/SMTP bên ngoài.
 
-Story S-59 tập trung nâng cao trải nghiệm tài xế khi sạc xe, đảm bảo tài xế nhận biết kịp thời các thay đổi trạng thái quan trọng của phiên sạc mà không cần phải nhìn chằm chằm vào màn hình điện thoại:
-1. **Thông báo dừng sạc / Chờ rút súng (Stop / Idle)**: Phát thông báo khi phiên sạc dừng và chuyển sang trạng thái chờ rút cáp sạc (`awaiting_unplug`), cảnh báo tránh phát sinh phí đỗ xe / phí chiếm chỗ quá giờ.
-2. **Thông báo sự cố phiên sạc (Fault / Anomaly)**: Phát hiện cờ `needs_attention: true` trong phiên sạc, cảnh báo người dùng kiểm tra trụ/súng sạc hoặc liên hệ hỗ trợ kỹ thuật.
-3. **Thông báo hoàn tất sạc & xuất hóa đơn (Invoice / Released)**: Khi rút súng sạc thành công, phiên kết thúc hoàn toàn, thông báo hoàn tất phiên sạc kèm nút điều hướng nhanh `#driver-invoice-${sessionId}` tới trang chi tiết hóa đơn.
-4. **Hỗ trợ Web Notification trình duyệt**: Cung cấp banner xin quyền nhận thông báo trình duyệt để tài xế vẫn nhận được thông báo khi chuyển sang ứng dụng hoặc tab khác.
-5. **Chống trùng lặp (Deduplication) & Tự đóng (Auto-dismiss)**: Thông báo tự biến mất sau 8 giây, có nút đóng thủ công và không gửi thông báo trùng lặp cho cùng một trạng thái phiên.
+## Giao diện, API và quyền
 
-*Phạm vi loại trừ (Out-of-scope)*: Gửi tin nhắn SMS / Push Notification từ server qua nhà mạng / cổng ngoài (thuộc các backlog cổng thông báo 67 riêng).
+Toast/CSS/Browser Notification của thành viên được giữ và kết nối với dữ liệu backend.
+`DriverNotificationCenter` tồn tại ở workspace, kể cả khi đang mở Ví. Inbox được khôi phục
+khi reload/login; chỉ sự kiện mới/chưa đọc tạo toast. Toast tự đóng theo deadline 8 giây,
+không bị reset bởi callback mới hoặc polling. Đóng toast không đánh dấu inbox đã đọc.
+Browser Notification chỉ gửi khi đã được người dùng cấp quyền; không triển khai Web Push.
 
----
+- `GET /api/v1/driver/notifications?limit=50&before=<id>`: inbox của driver hiện tại,
+  mới nhất trước, tối đa 100 mỗi trang; trả items và next_cursor.
+- `POST /api/v1/driver/notifications/{id}/read`: đánh dấu đã đọc, idempotent.
+  ID của tài khoản khác trả 404; role khác driver bị 403. Không nhận driver_id từ client.
+- Worker bật mặc định qua `DRIVER_NOTIFICATIONS_ENABLED=true`.
+- `DRIVER_NOTIFICATION_RETENTION_DAYS=90`, cho phép 1–90. API ẩn item hết hạn;
+  scanner xóa bản ghi hết hạn. Replay sự kiện cũ hơn thời hạn không tái tạo inbox.
+- S-57 freeze user xóa inbox/email intent cùng transaction trước khi unlink định danh,
+  tránh giữ liên kết tài xế–trạm–thời điểm trong nội dung notification. Không xóa dữ liệu
+  tài chính hoặc thay logic billing. SMTP đang được máy chủ ngoài chấp nhận không thể thu hồi.
+- SMTP dùng cấu hình SMTP_* hiện có theo `docs/SHARED_SMTP.md`; disabled giữ pending.
+  Không gửi email thật trong tests. Không ghi địa chỉ/nội dung nhạy cảm vào log lỗi.
 
-## 2. Coverage Matrix
+## Ma trận AC / kiểm thử
 
-| AC/NFR | Hành vi cần có | Backend | Frontend | Kiểm chứng / Test | Trạng thái |
-|---|---|:---:|:---:|---|:---:|
-| **AC-1: Thông báo dừng sạc (Stop/Idle)** | Khi phiên sạc chuyển từ đang sạc (`session`) sang chờ rút súng (`awaiting_unplug`), hiển thị Toast và Browser Notification thông báo dừng sạc, cảnh báo phí chiếm chỗ | Có sẵn (SSE `awaiting_unplug`) | Đã triển khai | `DriverCharging.test.tsx` test 1: Hiển thị toast "Đã dừng sạc — Vui lòng rút súng" | `PASS` |
-| **AC-2: Thông báo sự cố bất thường (Fault)** | Khi phiên sạc có `needs_attention: true`, hiển thị Toast cảnh báo đỏ và Browser Notification với mức cảnh báo khẩn | Có sẵn (`needs_attention`) | Đã triển khai | `DriverCharging.test.tsx` test 2: Hiển thị toast "Phiên sạc gặp sự cố bất thường" | `PASS` |
-| **AC-3: Thông báo hoàn tất & hóa đơn (Invoice)** | Khi rút súng thành công (`awaiting_unplug` -> null), hiển thị thông báo hoàn tất kèm link `#driver-invoice-${id}` tới hóa đơn | Có sẵn (Session kết thúc) | Đã triển khai | `DriverCharging.test.tsx` test 3: Toast "Phiên sạc hoàn tất" + link hóa đơn | `PASS` |
-| **AC-4: Web Notification API** | Hiển thị banner cho phép tài xế bật quyền nhận thông báo trình duyệt, gọi `Notification` khi có quyền | N/A | Đã triển khai | `DriverCharging.test.tsx` test 3: Kiểm tra mock `Notification` được khởi tạo đúng payload | `PASS` |
-| **AC-5: Tự đóng & Accessibility** | Toast có nút đóng tay, tự đóng sau 8s, hỗ trợ ARIA live regions (`polite` / `assertive`), role `status` / `alert` | N/A | Đã triển khai | `DriverCharging.test.tsx` test 4: `advanceTimersByTimeAsync(8000)` xóa toast tự động | `PASS` |
-| **NFR: Trải nghiệm & Độ trơn tru** | CSS animation trượt nhẹ, màu sắc thương hiệu hài hòa, responsive trên mobile/desktop | N/A | Đã triển khai | `frontend/src/features/driver/driver.css` | `PASS` |
+| Điều kiện | Bằng chứng |
+| --- | --- |
+| Dừng phiên có in-app/email intent, kWh/tiền tạm tính | StopTransaction thực tế, committed PostgreSQL, stop intent pending + nội dung |
+| Ba mốc stop / idle / invoice khác nhau | Test committed DB và invoice service, replay 5 lần không thêm item |
+| Rút súng trước/đúng ân hạn không báo idle | Test interval 0/3/5 phút, ân hạn 5 phút |
+| Email retry/restart | SMTP mock lỗi rồi phục hồi, lease hết hạn, Message-ID ổn định; loop production gửi intent đã commit |
+| Không báo invoice sớm | Invoice pending không tạo thông báo; ready lấy tổng tiền snapshot |
+| Bền vững / đúng quyền | Đọc inbox bằng session DB mới, own/other driver/operator, read receipt persisted |
+| Không mất thông báo ở khu vực khác | Center đặt ngoài nhánh session/wallet, frontend remount recovery + workspace tests |
+| Timer và chống lặp hiển thị | Poll/re-render theo từng giây, deadline 8 giây; dismiss không POST read |
+| Thiếu số liệu / retention / S-57 | Unknown không thành 0; expiry và freeze purge tests |
 
----
+Chạy trên database PostgreSQL dùng riêng, đã `alembic upgrade head`:
 
-## 3. Kiến trúc và các file thay đổi
-
-### 3.1. Dịch vụ thông báo và Helper
-- **`frontend/src/features/driver/driverNotificationService.ts`**:
-  - Định nghĩa kiểu dữ liệu `DriverNotificationType` (`stop` | `idle` | `fault` | `invoice`).
-  - Định nghĩa cấu trúc `DriverNotificationItem`.
-  - Cung cấp hàm `emitBrowserNotification(title, options)` an toàn với SSR và trình duyệt không hỗ trợ.
-
-### 3.2. Thành phần Toast thông báo
-- **`frontend/src/features/driver/DriverNotificationToast.tsx`**:
-  - `DriverNotificationToastContainer`: Vùng chứa nổi (`fixed`) cố định ở góc trên màn hình, hỗ trợ hiển thị danh sách thông báo nổi mà không che khuất thao tác người dùng.
-  - `DriverToast`: Thẻ thông báo cụ thể kèm icon trực quan (`Icon name="charger" | "settings" | "report"`), tiêu đề, nội dung, nút hành động (ví dụ: "Xem hóa đơn") và nút đóng (`close`). Tích hợp `setTimeout` 8.000ms tự động dọn dẹp.
-
-### 3.3. Tích hợp màn hình theo dõi phiên sạc tài xế
-- **`frontend/src/features/driver/DriverCharging.tsx`**:
-  - Quản lý state danh sách `notifications`.
-  - Theo dõi biến động phiên sạc qua `previousSessionRef`:
-    - `live -> awaiting`: Kích hoạt thông báo dừng sạc & nhắc rút cáp.
-    - `live/awaiting -> cleared`: Kích hoạt thông báo hoàn tất phiên sạc & xuất hóa đơn.
-    - `needs_attention: false -> true`: Kích hoạt cảnh báo bất thường / lỗi sạc.
-  - Banner xin cấp quyền `Notification.requestPermission()` khi trạng thái là `default`.
-  - Hiển thị `DriverNotificationToastContainer` trên đầu màn hình.
-
-### 3.4. Định kiểu giao diện CSS
-- **`frontend/src/features/driver/driver.css`**:
-  - `.driver-toast-container`: Vị trí neo `top: 16px`, căn giữa trên mobile hoặc góc phải trên desktop, `z-index: 1000`.
-  - `.driver-toast`: Glassmorphism nhẹ, bo góc 12px, bóng đổ mềm mại, animation `driver-toast-in`.
-  - Các biến thể màu sắc:
-    - `.driver-toast-stop`: Accent xanh dương (#0e7490).
-    - `.driver-toast-idle`: Cảnh báo vàng hổ phách (#b45309).
-    - `.driver-toast-fault`: Lỗi đỏ tươi (#b91c1c).
-    - `.driver-toast-invoice`: Hoàn tất xanh lục (#15803d).
-  - `.driver-notification-bar`: Thanh banner xin quyền trang nhã.
-
-### 3.5. Kiểm thử tự động Vitest
-- **`frontend/src/features/driver/DriverCharging.test.tsx`**:
-  - 4 test cases kiểm tra độc lập các luồng thông báo, chuyển đổi SSE, quyền Web Notification và cơ chế auto-dismiss.
-
----
-
-## 4. Kết quả kiểm tra Quality Gates
-
-### 4.1. Linter (`npm run lint --prefix frontend`)
 ```text
-> frontend@0.0.0 lint
-> eslint .
-
-(0 errors, 0 warnings)
+pytest tests/test_s59_notifications.py tests/test_t80_invoicing.py tests/test_t81_closure.py tests/test_t102_closure_settlement.py tests/test_s28_occupation_lifecycle.py tests/test_privacy_execution.py tests/test_endpoint_policy_inventory.py tests/test_charge_points_migration.py
+ruff check .
+ruff format --check .
+mypy src
+npm test --prefix frontend -- --maxWorkers=2
+npm run lint --prefix frontend
+npm run build --prefix frontend
 ```
 
-### 4.2. Build & TypeScript (`npm run build --prefix frontend`)
-```text
-> frontend@0.0.0 build
-> tsc -b && vite build
-
-✓ 117 modules transformed.
-dist/index.html                                 0.58 kB │ gzip:   0.36 kB
-dist/assets/DriverWorkspace-Byyiw8K0.css       29.40 kB │ gzip:   6.20 kB
-dist/assets/DriverWorkspace-Nn8xJSNA.js        74.23 kB │ gzip:  20.21 kB
-✓ built in 266ms
-```
-
-### 4.3. Test tự động (`npm test --prefix frontend`)
-- Toàn bộ frontend test suite: **62/62 files passed, 386/386 tests passed**.
-- Riêng `DriverCharging.test.tsx`: **24/24 tests passed** (gồm 4 tests mới cho S-59).
-
-### 4.4. Kiểm tra định dạng Git (`git diff --check`)
-- Mã thoát: `0` (không có khoảng trắng thừa hay dòng trống ở cuối file).
-
----
-
-## 5. Hướng dẫn kiểm thử thủ công (Manual Verification)
-
-1. **Khởi động ứng dụng**:
-   - Chạy backend CSMS và frontend dev server: `npm run dev --prefix frontend`.
-   - Đăng nhập tài khoản tài xế (`driver`).
-2. **Cấp quyền thông báo**:
-   - Tại trang Sạc xe của tài xế, nếu trình duyệt chưa cấp quyền, thanh thông báo *"Nhận thông báo khi phiên sạc dừng hoặc hoàn tất"* sẽ xuất hiện.
-   - Nhấn **"Bật thông báo"** -> Trình duyệt hiển thị popup xin quyền -> Chọn **Allow**.
-   - Thanh thông báo chuyển sang huy hiệu xanh *"Đã bật thông báo trình duyệt"*.
-3. **Mô phỏng dừng phiên sạc (Stop/Idle)**:
-   - Khi phiên sạc đang chạy được bấm nút dừng hoặc trụ gửi StopTransaction:
-   - Quan sát toast thông báo màu cam xuất hiện góc trên: *"Đã dừng sạc — Vui lòng rút súng"*.
-   - Browser notification xuất hiện thông báo tới hệ điều hành.
-4. **Mô phỏng rút súng sạc (Unplug -> Invoice)**:
-   - Khi súng sạc được rút ra (hoặc bấm nút demo "Đã rút súng sạc"):
-   - Quan sát toast thông báo màu xanh lá: *"Phiên sạc hoàn tất"*.
-   - Bấm vào nút *"Xem hóa đơn"* trên toast -> Ứng dụng điều hướng ngay lập tức đến trang chi tiết hóa đơn `#driver-invoice-${id}`.
-5. **Kiểm tra tự đóng**:
-   - Không bấm nút đóng, sau 8 giây thông báo tự động mờ dần và biến mất khỏi DOM.
+Migration `m170029a2026` sau `l170028a2026`; downgrade gỡ riêng inbox/intent/trigger của S-59.
+Kiểm thử local/CI không thay thế nghiệm thu gửi email thật, staging hoặc cập nhật Jira.
+Lịch sử commit gốc `9e6a307` của thành viên được giữ nguyên qua merge commit.

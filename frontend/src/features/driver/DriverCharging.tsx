@@ -4,12 +4,6 @@ import { ChargerDrawing, ConnectorSymbol } from '../owner/OwnerVisuals'
 import { DriverSessionControls } from './DriverSessionControls'
 import { Icon } from '../../components/icons/Icon'
 import { ReservationForm } from '../reservations/ReservationForm'
-import { DriverNotificationToastContainer } from './DriverNotificationToast'
-import {
-  emitBrowserNotification,
-  type DriverNotificationItem,
-} from './driverNotificationService'
-
 interface StartResult { id: string; status: string; deadline: string | null; session_id?: number | null; connector_id?: string; rejection_reason?: string | null; balance_vnd?: number | null; minimum_balance_vnd?: number | null }
 interface Session { id: number; station_name: string; charge_point_code: string; connector_number: number; started_at: string; ended_at?: string | null; demo_unplug_available?: boolean; energy_kwh: string | number; elapsed_seconds: number; latest_meter_at: string | null; needs_attention: boolean }
 interface Current { awaiting_unplug?: Session | null; session: Session | null; start_request: StartResult | null }
@@ -81,35 +75,6 @@ export function DriverCharging({ ownerId = 'session', stationId, stationName, sh
   const [clock, setClock] = useState(() => Date.now())
   const [receivedAt, setReceivedAt] = useState(() => Date.now())
   const notifiedRequest = useRef<string | null>(null)
-  const [notifications, setNotifications] = useState<DriverNotificationItem[]>([])
-  const [browserNotifPermission, setBrowserNotifPermission] = useState<NotificationPermission>(() => {
-    return typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'default'
-  })
-  const notifiedSessionEvents = useRef<Set<string>>(new Set())
-  const previousActiveSession = useRef<Session | null>(null)
-
-  const addNotification = (item: Omit<DriverNotificationItem, 'id' | 'createdAt'>) => {
-    const newNotif: DriverNotificationItem = {
-      ...item,
-      id: crypto.randomUUID(),
-      createdAt: Date.now(),
-    }
-    setNotifications(prev => [newNotif, ...prev.slice(0, 4)])
-  }
-  const dismissNotification = (id: string) => {
-    setNotifications(prev => prev.filter(n => n.id !== id))
-  }
-  async function requestNotificationPermission() {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      try {
-        const perm = await Notification.requestPermission()
-        setBrowserNotifPermission(perm)
-      } catch {
-        // ignore
-      }
-    }
-  }
-
   useEffect(() => {
     const controller = new AbortController()
     let source: EventSource | undefined
@@ -120,69 +85,13 @@ export function DriverCharging({ ownerId = 'session', stationId, stationName, sh
     const stale = 'Không cập nhật được phiên sạc. Dữ liệu bên dưới có thể đã cũ; đang kết nối lại.'
     const accept = (data: Current, clearError = true) => {
       const occupied = data.session ?? data.awaiting_unplug
-      const active = data.session
-      const waiting = data.awaiting_unplug
-
-      // 1. Session stopped / idle fee warning
-      if (previousActiveSession.current && !active && waiting) {
-        const key = `${waiting.id}:idle`
-        if (!notifiedSessionEvents.current.has(key)) {
-          notifiedSessionEvents.current.add(key)
-          addNotification({
-            sessionId: waiting.id,
-            type: 'idle',
-            title: 'Đã dừng sạc — Vui lòng rút súng',
-            message: `Phiên sạc #${waiting.id} tại ${waiting.charge_point_code} đã dừng. Vui lòng rút súng để tránh phát sinh phí chiếm trụ.`,
-          })
-          emitBrowserNotification(`Phiên sạc #${waiting.id} đã dừng`, {
-            body: `Vui lòng rút súng tại ${waiting.charge_point_code} để tránh phát sinh phí chiếm trụ.`,
-          })
-        }
-      }
-
-      // 2. Fault alert during session
-      if (active && active.needs_attention && (!previousActiveSession.current || !previousActiveSession.current.needs_attention)) {
-        const key = `${active.id}:fault`
-        if (!notifiedSessionEvents.current.has(key)) {
-          notifiedSessionEvents.current.add(key)
-          addNotification({
-            sessionId: active.id,
-            type: 'fault',
-            title: 'Cảnh báo sự cố sạc',
-            message: `Phiên sạc #${active.id} gặp sự cố hoặc cần kiểm tra tại trụ. Vui lòng kiểm tra xe và súng sạc.`,
-          })
-          emitBrowserNotification(`Cảnh báo phiên sạc #${active.id}`, {
-            body: `Phiên sạc gặp sự cố hoặc cần kiểm tra tại trụ ${active.charge_point_code}.`,
-          })
-        }
-      }
-
-      // 3. Released / Invoice ready
       if (occupied) {
         lastOccupiedSession.current = occupied.id
         setReleasedSession(null)
       } else if (lastOccupiedSession.current !== null) {
-        const releasedId = lastOccupiedSession.current
-        setReleasedSession(releasedId)
+        setReleasedSession(lastOccupiedSession.current)
         lastOccupiedSession.current = null
-        const key = `${releasedId}:invoice`
-        if (!notifiedSessionEvents.current.has(key)) {
-          notifiedSessionEvents.current.add(key)
-          addNotification({
-            sessionId: releasedId,
-            type: 'invoice',
-            title: 'Phiên sạc hoàn tất',
-            message: `Trụ đã xác nhận giải phóng đầu nối. Hóa đơn phiên #${releasedId} đã được lập.`,
-            actionHref: `#driver-invoice-${releasedId}`,
-            actionLabel: `Xem hóa đơn phiên #${releasedId}`,
-          })
-          emitBrowserNotification(`Phiên sạc #${releasedId} hoàn tất`, {
-            body: `Trụ đã giải phóng đầu nối. Hóa đơn phiên #${releasedId} đã được lập.`,
-          })
-        }
       }
-
-      previousActiveSession.current = active
       setCurrent(data)
       setClock(Date.now())
       setReceivedAt(Date.now())
@@ -305,20 +214,7 @@ export function DriverCharging({ ownerId = 'session', stationId, stationName, sh
   function chooseConnector(id: string) { setSelected(id); setPlugged(false); setRequestKey(null); setWalletFailure(null); setDismissedRequest(request?.id ?? null) }
   const findStations = <a className="driver-primary-link" href="#driver-stations" onClick={event => { if (onFindStations) { event.preventDefault(); onFindStations() } }}>Tìm trạm để bắt đầu sạc</a>
   return <>
-    <DriverNotificationToastContainer notifications={notifications} onDismiss={dismissNotification} />
     <div className="driver-session-layout" hidden={!showSession}>
-    {typeof window !== 'undefined' && 'Notification' in window && (
-      <div className="driver-notification-bar">
-        <span>{browserNotifPermission === 'granted' ? 'Đã bật thông báo khi phiên sạc kết thúc hoặc có sự cố.' : 'Bật thông báo trình duyệt để nhận tin khi dừng/xong sạc.'}</span>
-        {browserNotifPermission === 'default' ? (
-          <button type="button" className="driver-notification-btn" onClick={() => { void requestNotificationPermission() }}>
-            <Icon name="bolt" /> Bật thông báo
-          </button>
-        ) : browserNotifPermission === 'granted' ? (
-          <span className="driver-notification-badge"><Icon name="bolt" /> Đang nhận thông báo</span>
-        ) : null}
-      </div>
-    )}
     <section className="driver-charging" aria-label="Phiên hiện tại">
       {error && <p role="alert">{error}</p>}
       {!current && !error && <p role="status">Đang kiểm tra phiên sạc…</p>}

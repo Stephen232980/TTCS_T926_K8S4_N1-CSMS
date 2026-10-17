@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Icon } from '../../components/icons/Icon'
 import type { MapStation } from '../../components/maps/StationMap'
 import type { AuthenticatedUser } from '../auth/model/auth'
+import { DriverNotificationCenter } from './DriverNotificationCenter'
 import { DriverPrivacy } from './DriverPrivacy'
 import { DriverCharging } from './DriverCharging'
 import { DriverMapPage } from './DriverMapPage'
@@ -152,6 +153,7 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
       </footer>
     </aside>
     <main className="driver-main">
+      <DriverNotificationCenter key={currentUser.id} ownerId={currentUser.id} />
       <header className="driver-heading">
         <h1>
           {area === 'privacy' ? 'Dữ liệu cá nhân' : area === 'session'

@@ -13,6 +13,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    driver_notifications_enabled: bool = True
+    driver_notification_retention_days: int = Field(default=90, ge=1, le=90)
+
     # None selects the legacy ALERT_SMTP_* connection as a complete profile.
     smtp_enabled: bool | None = None
     smtp_host: str = ""
