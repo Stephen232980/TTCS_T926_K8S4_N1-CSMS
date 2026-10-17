@@ -16,6 +16,7 @@ from src.modules.charging import models as charging_models  # noqa: F401
 from src.modules.identity import models  # noqa: F401
 from src.modules.ocpp import (
     admin_health_models,  # noqa: F401
+    configuration_models,  # noqa: F401
     control_models,  # noqa: F401
 )
 from src.modules.ocpp import models as ocpp_models  # noqa: F401

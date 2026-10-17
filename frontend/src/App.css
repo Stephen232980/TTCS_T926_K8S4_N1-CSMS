@@ -454,3 +454,13 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round
 .control-audit .pagination button { width: auto; height: auto; min-height: 44px; padding: 10px 16px; }
 @media (max-width: 680px) { .remote-control__confirmation { padding: 16px; } .remote-control__buttons button { flex: 1 1 100%; } }
 @media (max-width: 680px) { .charging-close-form { padding: 16px; } .charging-close-form .ocpp-facts { grid-template-columns: 1fr; } .charging-close-form .charging-session-actions button { flex: 1 1 100%; padding: 10px 16px; } }
+
+/* Text navigation stays visibly actionable before hover. */
+.text-button:not([aria-pressed]):not([aria-expanded]),
+button.back-button,
+button.navigation-link,
+a.navigation-link {
+  text-decoration-line: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { AlertsPanel } from "../alerts/AlertsPanel";
 import { notifySessionUnauthorized } from "../auth/sessionEvents";
 import { ControlAction } from "../ocpp/ControlAction";
+import { ChargerConfiguration } from './ChargerConfiguration';
 import {
   ChargerDrawing,
   ConnectionSymbol,
@@ -229,8 +230,10 @@ function ConnectorSession({
 }
 export function OperatorMonitoring({
   onOpenSession,
+  canConfigure = false,
 }: {
   onOpenSession: (id: number) => void;
+  canConfigure?: boolean;
 }) {
   const [result, setResult] = useState<Result | null>(null);
   const [page, setPage] = useState(1);
@@ -387,7 +390,6 @@ export function OperatorMonitoring({
       <header className="owner-heading">
         <div>
           <h1>Giám sát trụ</h1>
-          <p>Toàn hệ thống · ưu tiên trụ cần chú ý.</p>
         </div>
         <button
           className="secondary-button"
@@ -424,7 +426,7 @@ export function OperatorMonitoring({
           {visible.length} / {result?.total ?? 0} trụ
         </span>
       </div>
-      <p className="operator-filter-scope">Nhóm ưu tiên và bộ lọc chỉ áp dụng cho các trụ trong trang này. Xem trang khác nếu chưa thấy trụ cần tìm.</p>
+      <p className="operator-filter-scope">Bộ lọc áp dụng trong trang hiện tại.</p>
       {error && (
         <p role="alert" className="owner-error">
           {error} {result && "Dữ liệu có thể đã cũ."}
@@ -516,7 +518,7 @@ export function OperatorMonitoring({
           {selected ? (
             <>
               <button
-                className="text-button operator-detail-back"
+                className="navigation-link text-button operator-detail-back"
                 onClick={() => setSelection(null)}
               >
                 Quay lại trụ
@@ -559,6 +561,7 @@ export function OperatorMonitoring({
                 chargerId={selected.id}
                 label={selected.code}
               />
+              <ChargerConfiguration key={selected.id} chargerId={selected.id} allowed={canConfigure} />
               <details>
                 <summary>Thông tin trụ và kết nối</summary>
                 <p>

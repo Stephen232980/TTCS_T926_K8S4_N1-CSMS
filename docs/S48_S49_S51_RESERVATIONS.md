@@ -1,5 +1,39 @@
 # S-48 / S-49 / S-51 — G5 đặt và hủy chỗ
 
+## Cập nhật S-48: giao diện và simulator demo
+
+Ở màn đầu nối của tài xế, nút Quay lại bản đồ và danh sách đứng trước mục
+Đặt chỗ của bạn. Mục này khi đóng cao 44px. Dưới nút Bắt đầu sạc là nút
+Đặt trước đầu nối có chiều rộng bằng nút bắt đầu sạc; khi bấm mở popup chọn giờ/phí,
+có nút Xác nhận đặt chỗ và Hủy. Popup giữ focus, hỗ trợ Escape, trả focus về nút
+khi đóng; hủy trước khi gửi không tạo booking. Nếu kết quả gửi trước đó chưa rõ,
+đóng popup vẫn giữ UUID để thử lại an toàn. Chưa xác minh capability
+thì nút này tự gửi yêu cầu kiểm tra. Nếu sau 20 giây chưa có kết quả, UI báo
+chưa nhận phản hồi và cho thử lại; không báo đã đặt thành công hoặc tự bỏ hold.
+Retry capability có thể kiểm lại kết quả unsupported/lỗi trên cùng boot,
+nhưng không chiếm lease của một probe đang chạy.
+
+Thông báo popup chỉ gồm ba gạch đầu dòng: Phí không đến (giá trị từ policy hoặc
+snapshot đã gửi), Không thu phí đặt trước, Có hiệu lực trong 15 phút. Checkbox
+ghi Tôi đồng ý. Giữ kiểm tra đồng ý phí, ngày đến và idempotency hiện có.
+
+`scripts/ocpp_control_simulator.py` hỗ trợ Core,SmartCharging,Reservation:
+ReserveNow giữ đúng đầu nối/thẻ/hạn; CancelReservation và hết hạn phát
+StatusNotification tương ứng; RemoteStart chỉ dùng đúng thẻ giữ chỗ và
+StartTransaction gửi reservationId để backend consume. State giữ chỗ được lưu
+cùng file profile để phục hồi khi restart; file chứa thẻ riêng, cần giữ trong
+thư mục riêng của tài khoản chạy simulator, không đưa vào Git hay log.
+
+Sau khi cập nhật code, phải restart các tiến trình simulator demo đang kết nối
+để chúng dùng bản mới, rồi kiểm tra lại hỗ trợ ở giao diện. Chỉ triển khai backend/
+frontend không tự cập nhật script đã được nạp vào tiến trình simulator cũ.
+Không bật capability Reservation giả trên trụ không hỗ trợ.
+
+`tests/test_s48_demo_reservations.py` chạy chính script simulator qua TCP tới
+CSMS và kiểm API probe → đặt → hủy → đặt lại → RemoteStart → reservation consumed.
+Đây là bằng chứng local; vẫn cần nghiệm thu trên staging sau triển khai và restart
+simulator. Các kiểm thử unique/recovery/fee hiện có của G5/G6 được giữ nguyên.
+
 G5 bổ sung giữ ngay một đầu nối cụ thể. Driver chọn đến ngay hoặc trong hai giờ tới; hạn giữ là giờ đến + 15 phút. Mỗi driver và mỗi đầu nối chỉ có một hold chưa được giải phóng. Không thu phí đặt trước; phí no-show S-50 thuộc G6.
 
 ## API và quyền
@@ -43,3 +77,35 @@ Triển khai kế thừa một OCPP gateway process của hệ thống. DB locks
 `tests/test_g5_reservations.py`: PostgreSQL thật, migration downgrade/upgrade giữ dữ liệu nền, 20 yêu cầu từ hai process chỉ một hold/outbox, toàn bộ ReserveNow enums, timeout/disconnect/restart, miễn trừ hủy trước hạn, ví kiểm tra lại, consume/replay, suspended, expiry nguồn mới và WebSocket TCP thật GetConfiguration → ReserveNow → CancelReservation → ReserveNow → StartTransaction → StopTransaction(EVDisconnected) → ClosureRunner.worker tự chốt hóa đơn và trừ ví đúng một lần.
 
 `frontend/src/features/reservations/reservations.test.tsx`: capability pending, retry UUID/body sau timeout và remount, ngày lưu lỗi, Cancel pending không báo đã hủy. CI/CD, SMTP và hardware/staging không được coi là đã xác minh bởi các kiểm thử local này.
+
+## Cập nhật S-49: đầu nối thay thế khi đặt trùng
+
+`POST /api/v1/driver/reservations` trả 409 với `detail` dạng
+`{reason: "connector_reserved", alternatives: [{connector_id, charge_point_code,
+connector_number}], generated_at}` khi đầu nối đã bị giữ chỗ. Các lỗi khác giữ
+nguyên hợp đồng. Danh sách tối đa 3, sắp theo mã trụ/số đầu nối/id, chỉ cùng trạm,
+cùng loại đầu nối và AC/DC, trạm hoạt động, trụ trực tuyến có heartbeat hợp lệ,
+đầu nối Available, chưa lưu trữ, không phiên sạc/chờ rút súng/start intent/hold,
+và đã xác minh Reservation trên boot hiện tại. Không có ứng viên thì trả `[]`.
+
+Đây là gợi ý tại thời điểm đọc, không phải giữ chỗ. Tài xế bấm gợi ý để đổi
+lựa chọn; popup đóng, focus về bộ chọn đầu nối. Lần đặt tiếp theo kiểm tra lại
+trạng thái, tải phí và yêu cầu đồng ý/xác nhận lại với UUID mới. Không tự đặt
+chỗ hoặc chuyển yêu cầu chưa rõ kết quả sang đầu nối khác. UI vẫn đọc được
+lỗi `connector_reserved` dạng chuỗi từ backend cũ và bỏ qua gợi ý sai cấu trúc.
+
+### Coverage Matrix cho phần bổ sung
+
+| Điều kiện | Bằng chứng |
+|---|---|
+| Một người thắng khi đặt đồng thời; người thua 409 | `test_g5_reservations.py` (20 yêu cầu, hai process); khóa/unique index không đổi |
+| 409 có tối đa 3 gợi ý cùng trạm, thứ tự ổn định, không thêm hold/outbox | `test_s49_alternatives.py` |
+| Loại sai chuẩn/AC-DC, lỗi, offline, heartbeat cũ, archive, capability cũ/không hỗ trợ, hold | `test_s49_alternatives.py`; các phiên/start intent dùng chung predicate với discovery đã có kiểm thử G4 |
+| Không có gợi ý; payload cũ/sai cấu trúc | API test S-49 và `reservations.test.tsx` |
+| Chọn gợi ý không tự gửi; UUID/đồng ý phí mới | `reservations.test.tsx`, `DriverCharging.test.tsx` |
+| Giao diện 1366px/360px, tên trụ dài, không tràn ngang, chọn và xác nhận lại | Kiểm tra trình duyệt local với dữ liệu mô phỏng; không thay thế nghiệm thu staging |
+
+Không có migration. Triển khai backend trước hoặc cùng frontend; frontend cũ
+đọc được `detail.reason`, frontend mới chấp nhận lỗi dạng chuỗi cũ. Sau khi
+merge/deploy cần nghiệm thu hai tài xế tranh một đầu nối và bấm gợi ý trên staging
+trước khi chuyển S-49 sang Done.

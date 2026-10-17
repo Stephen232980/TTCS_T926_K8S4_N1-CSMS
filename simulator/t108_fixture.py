@@ -266,6 +266,7 @@ async def seed_manifest(
                 driver_id=driver.id,
                 actor_id=admin.id,
                 request=ManualTopupRequest(
+                    reason="T-108 acceptance fixture funding",
                     amount_vnd=manifest.seed_amount_vnd,
                     receipt_code=participant.seed_receipt_code,
                 ),

@@ -163,6 +163,15 @@ async def process_call(
             )
             connection.boot_accepted = accepted
             now = datetime.now(UTC)
+            from src.modules.ocpp.configuration_gate import (
+                reboot_heartbeat,
+                verified_heartbeat,
+            )
+
+            interval = await verified_heartbeat(
+                session, charge_point.id, settings.ocpp_heartbeat_interval_seconds
+            )
+            pending_interval = await reboot_heartbeat(session, charge_point.id)
             if accepted:
                 if not boot_was_accepted:
                     await note_reconnection(session, charge_point.id)
@@ -171,9 +180,8 @@ async def process_call(
                 if "firmwareVersion" in frame.payload:
                     charge_point.firmware_version = boot.firmwareVersion
                 charge_point.last_boot_at = now
-                charge_point.heartbeat_interval_seconds = (
-                    settings.ocpp_heartbeat_interval_seconds
-                )
+                if pending_interval is None:
+                    charge_point.heartbeat_interval_seconds = interval
                 charge_point.status = "online"
                 charge_point.status_updated_at = now
             else:
@@ -185,7 +193,9 @@ async def process_call(
                     {
                         "status": "Accepted" if accepted else "Rejected",
                         "currentTime": now.isoformat(),
-                        "interval": settings.ocpp_heartbeat_interval_seconds,
+                        "interval": pending_interval
+                        if pending_interval is not None
+                        else interval,
                     },
                 )
             )

@@ -1,4 +1,6 @@
 import { notifySessionUnauthorized } from '../auth/sessionEvents'
+import { downloadCsvFile } from '../owner/ownerRevenueApi'
+
 
 export const financialLabels = {
   in_progress: 'Đang sạc', awaiting_unplug: 'Chờ rút súng', needs_review: 'Cần kiểm tra',
@@ -24,7 +26,7 @@ export interface FinancialDetail extends FinancialSession {
     energy_kwh: string; rate_vnd: string; band_label: string; interpolated: boolean; amount_vnd: string; tariff_id: string }[];
 }
 export type StationOption = { id: string; name: string }
-export type FinanceArea = 'sessions' | 'invoices' | 'reconciliation'
+export type FinanceArea = 'sessions' | 'invoices' | 'reconciliation' | 'runs'
 export const ageLabels: Record<string,string> = {under_hour:'Dưới 1 giờ',under_day:'1–24 giờ',under_week:'1–7 ngày',over_week:'Từ 7 ngày'}
 export interface FinanceInsightsData {
   grain: 'day' | 'month'; generated_at: string;
@@ -35,7 +37,83 @@ export interface FinanceInsightsData {
   fees: {type:string; amount_vnd:string}[];
 }
 export const financeTitles: Record<FinanceArea, string> = {
-  sessions: 'Phiên sạc & thanh toán', invoices: 'Hóa đơn phí sạc', reconciliation: 'Cần đối chiếu',
+  sessions: 'Phiên sạc & thanh toán',
+  invoices: 'Hóa đơn phí sạc',
+  reconciliation: 'Cần đối chiếu',
+  runs: 'Đợt đối soát tổng kWh & tiền thu (S-53)',
+}
+
+export interface ReconciliationRunItem {
+  id: string
+  cutoff_at: string
+  date_from: string
+  date_to: string
+  station_id: string | null
+  status: 'completed' | 'failed' | 'in_progress'
+  total_sessions: number
+  matched_sessions: number
+  mismatch_sessions: number
+  missing_data_sessions: number
+  exempt_sessions: number
+  total_billed_vnd: string
+  total_recomputed_vnd: string
+  total_debited_vnd: string
+  money_discrepancy_vnd: string
+  total_meter_kwh: string
+  total_billed_kwh: string
+  kwh_discrepancy: string
+  input_hash: string
+  summary_counts: Record<string, number>
+  executed_by_actor_id: string | null
+  created_at: string
+}
+
+export interface ReconciliationRunListResponse {
+  items: ReconciliationRunItem[]
+  total: number
+  page: number
+  page_size: number
+  total_pages: number
+}
+
+export interface ReconciliationIssueItem {
+  id: string
+  run_id: string
+  session_id: number
+  station_id: string | null
+  station_name: string | null
+  issue_category: string
+  severity: 'critical' | 'warning' | 'info'
+  discrepancy_amount_vnd: string
+  discrepancy_kwh: string
+  description: string
+  evidence: Record<string, unknown>
+  created_at: string
+}
+
+export interface ReconciliationIssueListResponse {
+  items: ReconciliationIssueItem[]
+  total: number
+  page: number
+  page_size: number
+  total_pages: number
+}
+
+export interface CreateReconciliationRunPayload {
+  date_from: string
+  date_to: string
+  station_id?: string | null
+}
+
+export const issueCategoryLabels: Record<string, string> = {
+  missing_invoice: 'Thiếu hóa đơn',
+  missing_ledger: 'Thiếu ghi nợ ví',
+  ledger_mismatch: 'Lệch sổ cái ví',
+  pricing_mismatch: 'Lệch đơn giá (tính lại)',
+  meter_decreased: 'Số đo giảm bất thường',
+  meter_missing: 'Thiếu số đo công tơ',
+  meter_wh_discrepancy: 'Lệch kWh đo vs tính tiền',
+  legacy_exempt: 'Miễn trừ dữ liệu cũ',
 }
 export const financeHints: Record<FinancialStatus, string> = {
   in_progress: 'Phiên chưa kết thúc. Số tiền chỉ được xác nhận khi có hóa đơn.',
@@ -85,3 +163,116 @@ export function navigateFinance(area: FinanceArea, params: URLSearchParams) {
   window.history.pushState(window.history.state, '', financeLink(area, params))
   window.dispatchEvent(new HashChangeEvent('hashchange'))
 }
+
+export async function getReconciliationRuns(
+  params?: URLSearchParams,
+  signal?: AbortSignal
+): Promise<ReconciliationRunListResponse> {
+  const base = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''
+  const q = params && params.toString() ? `?${params.toString()}` : ''
+  const response = await fetch(`${base}/api/v1/accounting/reconciliation-runs${q}`, {
+    credentials: 'include',
+    signal,
+  })
+  if (response.status === 401) notifySessionUnauthorized()
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as { detail?: unknown }
+    throw new Error(typeof body.detail === 'string' ? body.detail : 'Không tải được danh sách đợt đối soát.')
+  }
+  return response.json()
+}
+
+export async function createReconciliationRun(
+  payload: CreateReconciliationRunPayload
+): Promise<ReconciliationRunItem> {
+  const base = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''
+  const response = await fetch(`${base}/api/v1/accounting/reconciliation-runs`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(payload),
+  })
+  if (response.status === 401) notifySessionUnauthorized()
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as { detail?: unknown }
+    throw new Error(typeof body.detail === 'string' ? body.detail : 'Không thể thực hiện đợt đối soát mới.')
+  }
+  return response.json()
+}
+
+export async function getReconciliationRunDetail(
+  runId: string,
+  signal?: AbortSignal
+): Promise<ReconciliationRunItem> {
+  const base = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''
+  const response = await fetch(`${base}/api/v1/accounting/reconciliation-runs/${encodeURIComponent(runId)}`, {
+    credentials: 'include',
+    signal,
+  })
+  if (response.status === 401) notifySessionUnauthorized()
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as { detail?: unknown }
+    throw new Error(typeof body.detail === 'string' ? body.detail : 'Không tải được chi tiết đợt đối soát.')
+  }
+  return response.json()
+}
+
+export async function getReconciliationRunIssues(
+  runId: string,
+  category?: string,
+  page = 1,
+  pageSize = 50,
+  signal?: AbortSignal
+): Promise<ReconciliationIssueListResponse> {
+  const base = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''
+  const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) })
+  if (category) params.set('issue_category', category)
+  const response = await fetch(
+    `${base}/api/v1/accounting/reconciliation-runs/${encodeURIComponent(runId)}/issues?${params}`,
+    {
+      credentials: 'include',
+      signal,
+    }
+  )
+  if (response.status === 401) notifySessionUnauthorized()
+  if (!response.ok) {
+    const body = (await response.json().catch(() => ({}))) as { detail?: unknown }
+    throw new Error(typeof body.detail === 'string' ? body.detail : 'Không tải được danh sách sai lệch đối soát.')
+  }
+  return response.json()
+}
+
+export async function exportAccountantRevenueCsv(
+  params: {
+    period?: string
+    date_from?: string
+    date_to?: string
+    station_id?: string
+  } = {}
+): Promise<void> {
+  const query = new URLSearchParams()
+  if (params.period) query.set('period', params.period)
+  if (params.date_from) query.set('date_from', params.date_from)
+  if (params.date_to) query.set('date_to', params.date_to)
+  if (params.station_id) query.set('station_id', params.station_id)
+
+  const qs = query.toString()
+  const path = `/accounting/reports/revenue/export${qs ? `?${qs}` : ''}`
+  await downloadCsvFile(path, 'revenue_report.csv')
+}
+
+export async function exportReconciliationIssuesCsv(
+  runId: string,
+  severity?: string,
+  issueType?: string
+): Promise<void> {
+  const params = new URLSearchParams()
+  if (severity) params.set('severity', severity)
+  if (issueType) params.set('issue_type', issueType)
+
+  const qs = params.toString()
+  const path = `/accounting/reconciliation-runs/${encodeURIComponent(runId)}/issues/export${qs ? `?${qs}` : ''}`
+  await downloadCsvFile(path, `reconciliation_issues_${runId}.csv`)
+}
+
+

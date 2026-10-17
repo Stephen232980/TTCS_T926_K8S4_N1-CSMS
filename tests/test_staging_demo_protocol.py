@@ -3,15 +3,63 @@ import json
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
+import pytest
 from websockets.asyncio.server import serve
 
 from scripts import ocpp_control_simulator, staging_demo
 from scripts.ocpp_control_simulator import ConnectorState
 
 
+@pytest.mark.parametrize(
+    "contents",
+    ["{invalid", "[]", '{"HeartbeatInterval": 1, "MeterValueSampleInterval": true}'],
+)
+def test_invalid_saved_remote_configuration_does_not_crash_simulator(
+    tmp_path, monkeypatch, contents
+):
+    monkeypatch.setattr(staging_demo, "ROOT", tmp_path)
+    (tmp_path / "S60-QA.configuration.json").write_text(contents)
+    charger = staging_demo.Charger({"code": "S60-QA", "fault_connector": None})
+    assert charger.remote_configuration == {
+        "HeartbeatInterval": 30,
+        "MeterValueSampleInterval": 10,
+    }
+
+
+def test_configuration_persistence_failure_does_not_change_live_value(
+    tmp_path, monkeypatch
+):
+    from pathlib import Path
+
+    monkeypatch.setattr(staging_demo, "ROOT", tmp_path)
+    charger = staging_demo.Charger({"code": "S60-QA", "fault_connector": None})
+
+    def fail(*args, **kwargs):
+        raise OSError("Disk unavailable")
+
+    monkeypatch.setattr(Path, "replace", fail)
+    assert charger.reservation_command(
+        "ChangeConfiguration", {"key": "HeartbeatInterval", "value": "60"}
+    ) == {"status": "Rejected"}
+    assert charger.remote_configuration["HeartbeatInterval"] == 30
+
+
+@pytest.mark.parametrize("value", ["9" * 5000, "٦٠", True, "-60", "60.0"])
+def test_invalid_configuration_value_does_not_crash_simulator(
+    tmp_path, monkeypatch, value
+):
+    monkeypatch.setattr(staging_demo, "ROOT", tmp_path)
+    charger = staging_demo.Charger({"code": "S60-QA", "fault_connector": None})
+    assert charger.reservation_command(
+        "ChangeConfiguration", {"key": "HeartbeatInterval", "value": value}
+    ) == {"status": "Rejected"}
+    assert charger.remote_configuration["HeartbeatInterval"] == 30
+
+
 async def test_remote_stop_waits_for_separate_simulated_unplug(tmp_path, monkeypatch):
     """Local sockets only: no staging API, database, accounts or financial writes."""
     monkeypatch.setattr(staging_demo, "STOP", tmp_path / "stop.request")
+    monkeypatch.setattr(staging_demo, "ROOT", tmp_path)
     monkeypatch.setattr(
         ocpp_control_simulator,
         "load_connectors",

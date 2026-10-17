@@ -31,7 +31,7 @@ export function ReservationPolicy({ stationId }: { stationId: string }) {
     finally { sending.current = false; if (mounted.current) setBusy(false) }
   }
   return <section className="owner-operation" aria-label="Phí không đến">
-    <h3>Phí không đến</h3><p>Phí cố định khi đặt chỗ đã xác nhận nhưng khách không tới. Mặc định 0đ; tối đa 1.000.000đ. Đặt chỗ cũ giữ mức phí đã chấp nhận.</p>
+    <p>Áp dụng cho đặt chỗ mới. Tối đa 1.000.000đ.</p>
     <form onSubmit={event => {event.preventDefault(); void save()}}>
       <label>Phí không đến (đ)<input type="number" min={0} max={1000000} step={1} required value={fee} disabled={busy || !policy || !!error} onChange={event => setFee(event.target.value)} /></label>
       <button className="primary-button" disabled={busy || !policy || !!error}>{busy ? 'Đang lưu…' : 'Lưu phí không đến'}</button>

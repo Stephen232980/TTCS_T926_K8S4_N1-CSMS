@@ -27,7 +27,7 @@ acceptance = ["openpyxl>=3.1,<4", "websockets>=14,<17"]
 dev = [
     "pytest",
     "pytest-asyncio",
-    "ruff",
+    "ruff==0.17.0",
     "mypy",
 ]
 
@@ -36,6 +36,7 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 
 [tool.ruff]
+required-version = "==0.17.0"
 target-version = "py312"
 line-length = 88
 

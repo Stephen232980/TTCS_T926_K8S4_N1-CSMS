@@ -31,10 +31,20 @@ from src.platform.audit.models import AuditLog
 from src.platform.audit.service import ghi_nhat_ky
 
 
+class ManualTopupReasonError(ValueError):
+    pass
+
+
 class ManualTopupRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     amount_vnd: Annotated[int, Field(strict=True, gt=0, le=MAX_VND)]
+    reason: Annotated[
+        str | None,
+        StringConstraints(
+            strict=True, strip_whitespace=True, min_length=1, max_length=500
+        ),
+    ] = None
     receipt_code: Annotated[
         str | None,
         StringConstraints(
@@ -141,11 +151,15 @@ async def nap_tay(
             or audit.data.get("request_id") != str(request.request_id)
             or audit.data.get("external_reference") != request.external_reference
             or audit.data.get("payment_received") is not True
+            or audit.data.get("reason") != request.reason
         ):
             raise ManualTopupRequestConflictError(
                 "Generated receipt request conflicts with original"
             )
         return _response(existing, driver_id, request)
+
+    if request.reason is None:
+        raise ManualTopupReasonError("A reason of 1-500 characters is required")
 
     async with session.begin_nested():
         entry = await ghi_so_cai(
@@ -165,6 +179,12 @@ async def nap_tay(
             object_id=str(wallet.id),
             data={
                 "ledger_id": entry.id,
+                "driver_id": str(driver_id),
+                "wallet_id": str(wallet.id),
+                "reason": request.reason,
+                "before_balance_vnd": entry.balance_after_vnd - entry.amount_vnd,
+                "after_balance_vnd": entry.balance_after_vnd,
+                "audit_version": 1,
                 "amount_vnd": entry.amount_vnd,
                 "receipt_code": entry.reference_id,
                 **(

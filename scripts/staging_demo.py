@@ -133,7 +133,11 @@ async def seed():
                         admin,
                         "POST",
                         f"/admin/drivers/{row['id']}/wallet/manual-topups",
-                        json={"amount_vnd": 500000, "receipt_code": receipt},
+                        json={
+                            "amount_vnd": 500000,
+                            "reason": "Staging demo funding",
+                            "receipt_code": receipt,
+                        },
                     )
     chargers = []
     stations = []
@@ -326,6 +330,409 @@ class Charger:
         self.counter = 0
         self.telemetry = {}
         self.awaiting_unplug = {}
+        self.reservations = {}
+        self.remote_configuration = {
+            "HeartbeatInterval": 30,
+            "MeterValueSampleInterval": 10,
+        }
+        path = ROOT / (self.config["code"] + ".configuration.json")
+        if path.exists():
+            try:
+                saved = json.loads(path.read_text())
+            except (OSError, ValueError):
+                saved = {}
+            if not isinstance(saved, dict):
+                saved = {}
+            for key, (low, high) in {
+                "HeartbeatInterval": (30, 600),
+                "MeterValueSampleInterval": (5, 300),
+            }.items():
+                if type(saved.get(key)) is int and low <= saved[key] <= high:
+                    self.remote_configuration[key] = saved[key]
+
+    def power_state(self, number):
+        from scripts.ocpp_control_simulator import ConnectorState
+
+        state = self.telemetry.setdefault(
+            number, ConnectorState(meter_wh=self.meters[number])
+        )
+        state.transaction_id = self.transactions.get(number)
+        return state
+
+    def integrate_power(self, number):
+        from scripts.ocpp_control_simulator import meter_samples
+
+        state = self.power_state(number)
+        if state.transaction_id is not None and state.last_meter_at is not None:
+            tick = monotonic()
+            meter_samples(state, max(0, tick - state.last_meter_at))
+            state.last_meter_at = tick
+            self.meters[number] = state.meter_wh
+
+    def save_power_profiles(self):
+        path = ROOT / (self.config["code"] + ".power.private.json")
+        data = {
+            str(n): {
+                key: getattr(self.power_state(n), key)
+                for key in (
+                    "default_limit_w",
+                    "default_profile_id",
+                    "transaction_id",
+                    "transaction_limit_w",
+                    "transaction_profile_id",
+                )
+            }
+            for n in self.meters
+        }
+        temporary = path.with_suffix(".tmp")
+        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf8") as stream:
+            os.chmod(temporary, 0o600)
+            json.dump({"version": 1, "connectors": data}, stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.replace(path)
+
+    def load_power_profiles(self):
+        path = ROOT / (self.config["code"] + ".power.private.json")
+        if not path.exists():
+            if self.transactions:
+                raise RuntimeError(
+                    "Missing profiles for open demo sessions; refusing to boot"
+                )
+            return
+        try:
+            stored = json.loads(path.read_text(encoding="utf8"))
+        except (ValueError, UnicodeError) as error:
+            raise RuntimeError(
+                "Invalid persisted demo power profiles; refusing to boot"
+            ) from error
+        if (
+            not isinstance(stored, dict)
+            or type(stored.get("version")) is not int
+            or stored.get("version") != 1
+            or not isinstance(stored.get("connectors"), dict)
+        ):
+            raise RuntimeError(
+                "Invalid persisted demo power profiles; refusing to boot"
+            )
+        if set(stored["connectors"]) != {str(n) for n in self.meters}:
+            raise RuntimeError("Incomplete persisted demo connectors; refusing to boot")
+        for key, prior in stored["connectors"].items():
+            number = int(key)
+            if number not in self.meters or not isinstance(prior, dict):
+                raise RuntimeError(
+                    "Persisted power connectors changed; refusing to boot"
+                )
+            if set(prior) != {
+                "default_limit_w",
+                "default_profile_id",
+                "transaction_id",
+                "transaction_limit_w",
+                "transaction_profile_id",
+            }:
+                raise RuntimeError(
+                    "Incomplete persisted demo power fields; refusing to boot"
+                )
+            for field in (
+                "default_limit_w",
+                "default_profile_id",
+                "transaction_id",
+                "transaction_limit_w",
+                "transaction_profile_id",
+            ):
+                value = prior.get(field)
+                if value is not None and (type(value) is not int or value < 0):
+                    raise RuntimeError(
+                        "Invalid persisted demo power value; refusing to boot"
+                    )
+            for prefix in ("default", "transaction"):
+                if (prior.get(prefix + "_limit_w") is None) != (
+                    prior.get(prefix + "_profile_id") is None
+                ):
+                    raise RuntimeError(
+                        "Incomplete persisted demo power profile; refusing to boot"
+                    )
+            state = self.power_state(number)
+            state.default_limit_w = prior.get("default_limit_w")
+            state.default_profile_id = prior.get("default_profile_id")
+            if (
+                state.transaction_id is not None
+                and prior.get("transaction_id") == state.transaction_id
+            ):
+                state.transaction_limit_w = prior.get("transaction_limit_w")
+                state.transaction_profile_id = prior.get("transaction_profile_id")
+
+    def power_command(self, action, payload):
+        """Only the constant, indefinite W profiles emitted by the CSMS worker."""
+        if not isinstance(payload, dict):
+            return {"status": "Rejected"}
+        number = payload.get("connectorId")
+        if action == "GetCompositeSchedule":
+            duration = payload.get("duration")
+            if (
+                type(number) is not int
+                or number not in self.meters
+                or type(duration) is not int
+                or not 0 < duration <= 86400
+                or payload.get("chargingRateUnit", "W") != "W"
+            ):
+                return {"status": "Rejected"}
+            limit = self.power_state(number).offered_watts
+            return {
+                "status": "Accepted",
+                "connectorId": number,
+                "scheduleStart": datetime.now(UTC).isoformat(),
+                "chargingSchedule": {
+                    "duration": duration,
+                    "chargingRateUnit": "W",
+                    "chargingSchedulePeriod": [
+                        {
+                            "startPeriod": 0,
+                            "limit": limit if limit is not None else 7920,
+                        }
+                    ],
+                },
+            }
+        updates = []
+        if action == "SetChargingProfile":
+            details = payload.get("csChargingProfiles")
+            if (
+                type(number) is not int
+                or number not in self.meters
+                or not isinstance(details, dict)
+            ):
+                return {"status": "Rejected"}
+            schedule = details.get("chargingSchedule")
+            if not isinstance(schedule, dict):
+                return {"status": "Rejected"}
+            periods = schedule.get("chargingSchedulePeriod")
+            if (
+                not isinstance(periods, list)
+                or len(periods) != 1
+                or not isinstance(periods[0], dict)
+                or type(periods[0].get("startPeriod")) is not int
+                or periods[0]["startPeriod"] != 0
+                or type(periods[0].get("limit")) is not int
+                or periods[0]["limit"] < 0
+                or schedule.get("chargingRateUnit") != "W"
+                or any(
+                    key in schedule
+                    for key in ("duration", "startSchedule", "minChargingRate")
+                )
+                or details.get("chargingProfileKind") != "Absolute"
+                or any(
+                    key in details for key in ("validFrom", "validTo", "recurrencyKind")
+                )
+                or type(details.get("chargingProfileId")) is not int
+                or details["chargingProfileId"] < 0
+                or type(details.get("stackLevel")) is not int
+            ):
+                return {"status": "Rejected"}
+            state = self.power_state(number)
+            purpose = details.get("chargingProfilePurpose")
+            if (
+                purpose == "TxDefaultProfile"
+                and details["stackLevel"] == 0
+                and "transactionId" not in details
+            ):
+                prefix = "default"
+            elif (
+                purpose == "TxProfile"
+                and details["stackLevel"] == 1
+                and type(details.get("transactionId")) is int
+                and state.transaction_id is not None
+                and details["transactionId"] == state.transaction_id
+            ):
+                prefix = "transaction"
+            else:
+                return {"status": "Rejected"}
+            updates = [
+                (number, prefix, periods[0]["limit"], details["chargingProfileId"])
+            ]
+        elif action == "ClearChargingProfile":
+            for key in ("id", "connectorId", "stackLevel"):
+                if key in payload and (
+                    type(payload[key]) is not int or payload[key] < 0
+                ):
+                    return {"status": "Unknown"}
+            if "chargingProfilePurpose" in payload and payload[
+                "chargingProfilePurpose"
+            ] not in {"TxDefaultProfile", "TxProfile"}:
+                return {"status": "Unknown"}
+            for n in self.meters:
+                if "connectorId" in payload and payload["connectorId"] != n:
+                    continue
+                state = self.power_state(n)
+                for prefix, purpose, stack in (
+                    ("default", "TxDefaultProfile", 0),
+                    ("transaction", "TxProfile", 1),
+                ):
+                    profile_id = getattr(state, prefix + "_profile_id")
+                    if (
+                        profile_id is not None
+                        and ("id" not in payload or payload["id"] == profile_id)
+                        and (
+                            "stackLevel" not in payload
+                            or payload["stackLevel"] == stack
+                        )
+                        and (
+                            "chargingProfilePurpose" not in payload
+                            or payload["chargingProfilePurpose"] == purpose
+                        )
+                    ):
+                        updates.append((n, prefix, None, None))
+            if not updates:
+                return {"status": "Unknown"}
+        else:
+            return {"status": "Rejected"}
+        before = []
+        for n, prefix, limit, profile_id in updates:
+            self.integrate_power(n)
+            state = self.power_state(n)
+            before.append(
+                (
+                    state,
+                    prefix,
+                    getattr(state, prefix + "_limit_w"),
+                    getattr(state, prefix + "_profile_id"),
+                )
+            )
+            setattr(state, prefix + "_limit_w", limit)
+            setattr(state, prefix + "_profile_id", profile_id)
+        try:
+            self.save_power_profiles()
+        except OSError:
+            for state, prefix, limit, profile_id in before:
+                setattr(state, prefix + "_limit_w", limit)
+                setattr(state, prefix + "_profile_id", profile_id)
+            return {
+                "status": "Rejected" if action == "SetChargingProfile" else "Unknown"
+            }
+        return {"status": "Accepted"}
+
+    def save_reservations(self):
+        path = ROOT / (self.config["code"] + ".reservations.private.json")
+        temporary = path.with_suffix(".tmp")
+        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            json.dump(self.reservations, stream)
+        temporary.replace(path)
+
+    def reservation_for(self, connector):
+        reservation = self.reservations.get(connector)
+        if reservation and datetime.fromisoformat(
+            reservation["expiryDate"]
+        ) <= datetime.now(UTC):
+            del self.reservations[connector]
+            self.save_reservations()
+            return None
+        return reservation
+
+    def schedule_status(self, connector, status):
+        task = asyncio.create_task(self.status(connector, status))
+        self.tasks.add(task)
+        task.add_done_callback(self.tasks.discard)
+
+    def reservation_command(self, action, payload):
+        if action == "ChangeConfiguration":
+            key, value = payload.get("key"), payload.get("value")
+            limits = {
+                "HeartbeatInterval": (30, 600),
+                "MeterValueSampleInterval": (5, 300),
+            }
+            if key not in limits:
+                return {"status": "NotSupported"}
+            if (
+                not isinstance(value, str)
+                or len(value) > 3
+                or not value.isascii()
+                or not value.isdigit()
+            ):
+                return {"status": "Rejected"}
+            number = int(value)
+            low, high = limits[key]
+            if not low <= number <= high:
+                return {"status": "Rejected"}
+            updated = {**self.remote_configuration, key: number}
+            path = ROOT / (self.config["code"] + ".configuration.json")
+            tmp = path.with_suffix(".tmp")
+            try:
+                tmp.write_text(json.dumps(updated))
+                tmp.chmod(0o600)
+                tmp.replace(path)
+            except OSError:
+                return {"status": "Rejected"}
+            self.remote_configuration = updated
+            return {"status": "Accepted"}
+        if action == "GetConfiguration":
+            values = {
+                "SupportedFeatureProfiles": "Core,Reservation,SmartCharging",
+                "ReserveConnectorZeroSupported": "false",
+                "ChargingScheduleAllowedChargingRateUnit": "Power",
+                "ChargeProfileMaxStackLevel": "1",
+                **{key: str(value) for key, value in self.remote_configuration.items()},
+            }
+            keys = payload.get("key") or list(values)
+            return {
+                "configurationKey": [
+                    {
+                        "key": key,
+                        "readonly": key not in self.remote_configuration,
+                        "value": values[key],
+                    }
+                    for key in keys
+                    if key in values
+                ],
+                "unknownKey": [key for key in keys if key not in values],
+            }
+        if action == "CancelReservation":
+            target = next(
+                (
+                    n
+                    for n, r in self.reservations.items()
+                    if r["reservationId"] == payload.get("reservationId")
+                ),
+                None,
+            )
+            if target is None:
+                return {"status": "Rejected"}
+            del self.reservations[target]
+            self.save_reservations()
+            self.schedule_status(target, "Available")
+            return {"status": "Accepted"}
+        number = payload.get("connectorId")
+        if type(number) is not int or number not in self.meters:
+            return {"status": "Rejected"}
+        if number == self.config["fault_connector"]:
+            return {"status": "Faulted"}
+        if (
+            number in self.transactions
+            or number in self.starting
+            or number in self.awaiting_unplug
+            or self.reservation_for(number)
+        ):
+            return {"status": "Occupied"}
+        try:
+            expiry = datetime.fromisoformat(payload["expiryDate"])
+            valid = (
+                expiry.tzinfo is not None
+                and expiry > datetime.now(UTC)
+                and type(payload.get("reservationId")) is int
+                and payload["reservationId"] > 0
+                and isinstance(payload.get("idTag"), str)
+                and 0 < len(payload["idTag"]) <= 20
+            )
+        except (KeyError, TypeError, ValueError):
+            valid = False
+        if not valid:
+            return {"status": "Rejected"}
+        self.reservations[number] = {
+            key: payload[key] for key in ("reservationId", "idTag", "expiryDate")
+        }
+        self.save_reservations()
+        self.schedule_status(number, "Reserved")
+        return {"status": "Accepted"}
 
     async def call(self, action, payload):
         uid = str(uuid4())
@@ -356,12 +763,22 @@ class Charger:
                     or connector == self.config["fault_connector"]
                 ):
                     return
+                reservation = self.reservation_for(connector)
+                if connector in self.awaiting_unplug or (
+                    reservation and reservation["idTag"] != tag
+                ):
+                    return
                 result = await self.call(
                     "StartTransaction",
                     {
                         "connectorId": connector,
                         "idTag": tag,
                         "meterStart": self.meters[connector],
+                        **(
+                            {"reservationId": reservation["reservationId"]}
+                            if reservation
+                            else {}
+                        ),
                         "timestamp": datetime.now(UTC).isoformat(),
                     },
                 )
@@ -369,7 +786,14 @@ class Charger:
                 if result.get("idTagInfo", {}).get("status") != "Accepted":
                     await self.stop_connector(connector, "DeAuthorized")
                     return
-                self.telemetry.pop(connector, None)
+                if reservation:
+                    self.reservations.pop(connector, None)
+                    self.save_reservations()
+                state = self.power_state(connector)
+                state.status = "Charging"
+                state.transaction_limit_w = state.transaction_profile_id = None
+                state.last_meter_at = monotonic()
+                self.save_power_profiles()
                 await self.status(connector, "Charging")
         finally:
             self.starting.discard(connector)
@@ -378,6 +802,7 @@ class Charger:
         transaction = self.transactions.get(connector)
         if transaction is None:
             return
+        self.integrate_power(connector)
         await self.call(
             "StopTransaction",
             {
@@ -388,6 +813,10 @@ class Charger:
             },
         )
         del self.transactions[connector]
+        state = self.power_state(connector)
+        state.transaction_limit_w = state.transaction_profile_id = None
+        state.last_meter_at = None
+        self.save_power_profiles()
         if reason == "Remote":
             self.awaiting_unplug[connector] = transaction
             await self.status(connector, "Finishing")
@@ -449,6 +878,23 @@ class Charger:
                         )
             elif frame[0] == 2:
                 action, payload = frame[2:4]
+                if action in {
+                    "SetChargingProfile",
+                    "GetCompositeSchedule",
+                    "ClearChargingProfile",
+                }:
+                    response = self.power_command(action, payload)
+                    await self.socket.send(json.dumps([3, frame[1], response]))
+                    continue
+                if action in {
+                    "GetConfiguration",
+                    "ChangeConfiguration",
+                    "ReserveNow",
+                    "CancelReservation",
+                }:
+                    response = self.reservation_command(action, payload)
+                    await self.socket.send(json.dumps([3, frame[1], response]))
+                    continue
                 connector = payload.get("connectorId")
                 stop_connector = next(
                     (
@@ -470,6 +916,12 @@ class Charger:
                         and connector != self.config["fault_connector"]
                         and connector not in self.transactions
                         and connector not in self.starting
+                        and connector not in self.awaiting_unplug
+                        and (
+                            not self.reservation_for(connector)
+                            or self.reservations[connector]["idTag"]
+                            == payload.get("idTag")
+                        )
                     )
                 )
                 if accepted and action == "RemoteStartTransaction":
@@ -507,11 +959,9 @@ class Charger:
     async def meter_values(self):
         async with self.lock:
             for connector, transaction in list(self.transactions.items()):
-                from scripts.ocpp_control_simulator import ConnectorState, meter_samples
+                from scripts.ocpp_control_simulator import meter_samples
 
-                state = self.telemetry.setdefault(
-                    connector, ConnectorState(meter_wh=self.meters[connector])
-                )
+                state = self.power_state(connector)
                 now = monotonic()
                 elapsed = (
                     now - state.last_meter_at if state.last_meter_at is not None else 10
@@ -537,6 +987,13 @@ class Charger:
     async def run(self):
         from scripts.ocpp_control_simulator import load_connectors
 
+        path = ROOT / (self.config["code"] + ".reservations.private.json")
+        if path.exists():
+            self.reservations = {
+                int(n): r for n, r in json.loads(path.read_text()).items()
+            }
+        for number in list(self.reservations):
+            self.reservation_for(number)
         registered = await load_connectors(self.config["code"], dispose_engine=False)
         self.meters = {n: state.meter_wh for n, state in registered.items()}
         self.transactions = {
@@ -544,6 +1001,10 @@ class Charger:
             for n, state in registered.items()
             if state.transaction_id is not None
         }
+        self.telemetry = registered
+        self.load_power_profiles()
+        for number in self.transactions:
+            self.power_state(number).last_meter_at = monotonic()
         async with SessionFactory() as db:
             waiting = (
                 await db.execute(
@@ -568,7 +1029,7 @@ class Charger:
                     {
                         "chargePointVendor": "CSMS Demo",
                         "chargePointModel": "Live UI Demo",
-                        "firmwareVersion": "demo-1",
+                        "firmwareVersion": "demo-3-smart-charging",
                     },
                 )
                 if result.get("status") != "Accepted":
@@ -583,6 +1044,8 @@ class Charger:
                         if c in self.transactions
                         else "Finishing"
                         if c in self.awaiting_unplug
+                        else "Reserved"
+                        if self.reservation_for(c)
                         else "Available",
                     )
                 if receiver.done():
@@ -592,13 +1055,25 @@ class Charger:
                     f"{self.config['code']} online; transactions {self.transactions or '-'}",
                     flush=True,
                 )
+                heartbeat_at = meter_at = 0.0
                 while not STOP.exists():
-                    await self.call("Heartbeat", {})
-                    await self.meter_values()
-                    for _ in range(10):
-                        if STOP.exists():
-                            break
-                        await asyncio.sleep(1)
+                    tick = monotonic()
+                    if (
+                        tick - heartbeat_at
+                        >= self.remote_configuration["HeartbeatInterval"]
+                    ):
+                        await self.call("Heartbeat", {})
+                        heartbeat_at = tick
+                    if (
+                        tick - meter_at
+                        >= self.remote_configuration["MeterValueSampleInterval"]
+                    ):
+                        await self.meter_values()
+                        meter_at = tick
+                    for number in list(self.reservations):
+                        if self.reservation_for(number) is None:
+                            await self.status(number, "Available")
+                    await asyncio.sleep(1)
                 if self.tasks:
                     await asyncio.gather(*self.tasks)
                 await self.stop()

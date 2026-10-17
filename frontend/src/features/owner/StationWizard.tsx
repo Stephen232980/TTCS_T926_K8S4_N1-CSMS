@@ -262,7 +262,7 @@ export function StationWizard({
         <div>
           {step > 0 && !saved && (
             <button
-              className="secondary-button"
+              className="navigation-link secondary-button"
               disabled={saving}
               onClick={() => setStep(0)}
             >

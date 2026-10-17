@@ -8,9 +8,10 @@ import { AdminAudit } from './AdminAudit'
 import { AdminHealth } from './AdminHealth'
 import { AdminManualTopup } from './AdminManualTopup'
 import { AdminPrivacyRetention } from './AdminPrivacyRetention'
+import { AdminWalletAudit } from './AdminWalletAudit'
 import './admin.css'
 
-type Area = 'accounts' | 'audit' | 'health' | 'topup' | 'privacy'
+type Area = 'accounts' | 'audit' | 'health' | 'topup' | 'wallet-audit' | 'privacy'
 const areas: {
   id: Area
   label: string
@@ -19,6 +20,7 @@ const areas: {
   { id: 'accounts', label: 'Tài khoản & vai trò', icon: 'settings' },
   { id: 'topup', label: 'Nạp tiền thủ công', icon: 'report' },
   { id: 'audit', label: 'Nhật ký thao tác', icon: 'session' },
+  { id: 'wallet-audit', label: 'Nhật ký ví', icon: 'session' },
   { id: 'health', label: 'Sức khỏe hệ thống', icon: 'report' },
   { id: 'privacy', label: 'Lưu trữ & Quyền riêng tư', icon: 'settings' },
 ]
@@ -91,6 +93,8 @@ export function AdminWorkspace({
           <AdminAccounts currentUser={currentUser} />
         ) : area === 'topup' ? (
           <AdminManualTopup key={currentUser.id} adminId={currentUser.id} />
+        ) : area === 'wallet-audit' ? (
+          <AdminWalletAudit currentUser={currentUser} />
         ) : area === 'audit' ? (
           <AdminAudit />
         ) : area === 'health' ? (

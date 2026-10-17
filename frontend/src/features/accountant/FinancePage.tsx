@@ -3,8 +3,10 @@ import { reviewLabels } from '../owner/ownerApi'
 import { FinanceTechnical } from './FinanceTechnical'
 import { FinanceInsights } from './FinanceInsights'
 import { InvoiceRegister, ReconciliationQueue } from './FinanceRegisters'
+import { ReconciliationRunsView } from './ReconciliationRunsView'
 import { FinanceSummary } from './FinanceSummary'
-import { ageLabels, energy, financeHints, financeLink, financeRequest, financeTitles, financialLabels, financialQuery, instant, money, navigateFinance, type FinanceArea, type FinancialDetail, type FinancialPage, type FinancialSession, type StationOption } from './financeApi'
+import { ageLabels, energy, exportAccountantRevenueCsv, financeHints, financeLink, financeRequest, financeTitles, financialLabels, financialQuery, instant, money, navigateFinance, type FinanceArea, type FinancialDetail, type FinancialPage, type FinancialSession, type StationOption } from './financeApi'
+
 
 function Status({ item }: {item:FinancialSession}) {
   return <span className={`finance-status is-${item.status}`}>{financialLabels[item.status]}</span>
@@ -37,7 +39,7 @@ function Filters({ area, params, stations }: {area:FinanceArea; params:URLSearch
 function Detail({ item, back, onBack }: {item:FinancialDetail; back:string; onBack:()=>void}) {
   const reasons = item.review_reasons.map(reason=>reviewLabels[reason] ?? (reason==='settlement_ledger_mismatch' ? 'Hóa đơn và sổ cái chưa khớp' : 'Dữ liệu cần kiểm tra'))
   return <>
-    <div className="finance-detail-heading"><a className="finance-button" href={back} onClick={event=>{if(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;event.preventDefault();onBack()}}>← Quay lại danh sách</a><Status item={item}/></div>
+    <div className="finance-detail-heading"><a className="finance-button navigation-link" href={back} onClick={event=>{if(event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;event.preventDefault();onBack()}}>← Quay lại danh sách</a><Status item={item}/></div>
     <section className="finance-panel finance-session-detail">
       <div className="finance-section-heading"><div><h2>Phiên #{item.session_id}</h2><p>{item.station_name} · {item.charge_point_code} · Đầu nối {item.connector_number}</p></div><strong>{money(item.invoice_total_vnd)}</strong></div>
       <p className={`finance-explanation${item.status==='needs_review' ? ' is-warning' : ''}`}>{financeHints[item.status]}</p>
@@ -83,12 +85,13 @@ export function FinancePage({ area }: {area:FinanceArea}) {
   const key = `${path}:${revision}`
   const chartsReady=useCallback(()=>setChartsKey(key),[key])
   useEffect(()=>{
+    if (area === 'runs') return
     const controller=new AbortController()
     void financeRequest<FinancialPage|FinancialDetail>(path,controller.signal).then(data=>{
       if(!controller.signal.aborted)setRecord('items' in data ? {key,list:data,at:new Date().toISOString()} : {key,detail:data,at:new Date().toISOString()})
     }).catch(error=>{if(!controller.signal.aborted)setRecord({key,error:error instanceof Error ? error.message : 'Không tải được dữ liệu.'})})
     return()=>controller.abort()
-  },[path,key])
+  },[path,key,area])
   useEffect(()=>{
     const controller=new AbortController()
     void financeRequest<{items:StationOption[]}>('/finance/stations',controller.signal).then(data=>{if(!controller.signal.aborted){setStations(data.items);setStationsError('')}}).catch(()=>{if(!controller.signal.aborted)setStationsError('Chưa tải được danh sách trạm. Bạn vẫn có thể tìm theo mã phiên hoặc email, hoặc bấm Làm mới.')})
@@ -103,10 +106,44 @@ export function FinancePage({ area }: {area:FinanceArea}) {
   },[selected,current,chartsKey,key])
   function rememberScroll(){window.history.replaceState({...window.history.state,accountingScroll:{main:document.querySelector('.accountant-page')?.scrollTop??0,window:window.scrollY}},'')}
   function goPage(page:number){const next=new URLSearchParams(listParams);next.set('page',String(page));window.history.replaceState({...window.history.state,accountingScroll:{main:0,window:0}},'');navigateFinance(area,next)}
+  const [exportingRevenue, setExportingRevenue] = useState(false)
   const list=current?.list
+
+  const handleExportRevenue = async () => {
+    setExportingRevenue(true)
+    try {
+      await exportAccountantRevenueCsv({
+        period: 'month',
+        date_from: params.get('date_from') || undefined,
+        date_to: params.get('date_to') || undefined,
+        station_id: params.get('station_id') || undefined,
+      })
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Xuất CSV thất bại.')
+    } finally {
+      setExportingRevenue(false)
+    }
+  }
+
+  if (area === 'runs') {
+    return <ReconciliationRunsView stations={stations} />
+  }
+
   return <section className="finance-workspace" aria-labelledby="finance-title">
     <div className="finance-sticky-header">
-    <header className="finance-heading"><div><h1 id="finance-title">{financeTitles[area]}</h1><p>{area==='sessions'?'Theo dõi phiên, hóa đơn và khoản trừ ví trên toàn hệ thống.':area==='invoices'?'Tra cứu hóa đơn phí sạc đã lưu và chi tiết từng khoản phí.':'Theo dõi phiên có dữ liệu cần kiểm tra hoặc đã kết thúc nhưng chưa quyết toán.'}</p></div><button onClick={()=>setRevision(r=>r+1)}>Làm mới</button></header>
+    <header className="finance-heading">
+      <div>
+        <h1 id="finance-title">{financeTitles[area]}</h1>
+        <p>{area==='sessions'?'Theo dõi phiên, hóa đơn và khoản trừ ví trên toàn hệ thống.':area==='invoices'?'Tra cứu hóa đơn phí sạc đã lưu và chi tiết từng khoản phí.':'Theo dõi phiên có dữ liệu cần kiểm tra hoặc đã kết thúc nhưng chưa quyết toán.'}</p>
+      </div>
+      <div className="finance-heading-actions">
+        <button type="button" className="finance-button" onClick={handleExportRevenue} disabled={exportingRevenue} aria-label="Xuất CSV báo cáo doanh thu">
+          {exportingRevenue ? 'Đang xuất…' : 'Xuất CSV doanh thu'}
+        </button>
+        <button type="button" onClick={()=>setRevision(r=>r+1)}>Làm mới</button>
+      </div>
+    </header>
+
     <p className="finance-readonly">Chỉ đọc · Không phát hành hóa đơn điện tử hoặc đối soát đối tác.{current?.at && <span> Tải lúc {instant(current.at)}</span>}</p>
     {!selected && <>
       <details className="finance-filter-disclosure" open={filtersOpen} onToggle={event=>setFiltersOpen(event.currentTarget.open)}><summary>Tra cứu & bộ lọc{['q','station_id','date_from','date_to','status','age'].some(k=>params.get(k)) && <span>Đang áp dụng bộ lọc</span>}</summary><Filters key={listParams.toString()} area={area} params={listParams} stations={stations}/></details>

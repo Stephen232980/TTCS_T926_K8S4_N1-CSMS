@@ -79,7 +79,7 @@ Không áp dụng redaction dữ liệu cũ khi chưa có migration/allowlist/po
 
 ## Migration và kiểm thử
 
-Migration `h170026a2026` sau `g210021a2026` tạo `privacy_requests`, các FK RESTRICT,
+Migration `h170026a2026` sau `g210021a2026` (merge head `k170027a2026` nối với develop `j240024a2026`) tạo `privacy_requests`, các FK RESTRICT,
 check constraint quyết định và unique partial index. Downgrade chỉ bỏ bảng yêu cầu;
 **phải xuất/bảo toàn yêu cầu trước rollback production**. Không chạy downgrade production
 như một cách hoàn tác xử lý dữ liệu. Round-trip chỉ xác minh trên DB dùng riêng.

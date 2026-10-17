@@ -54,6 +54,10 @@ async def authorize(
     *,
     reservation_context: bool = False,
 ) -> tuple[str, ChargingCard | None, ChargingEligibility | None]:
+    from src.modules.ocpp.configuration_gate import reset_pending
+
+    if await reset_pending(session, charger.id):
+        return "Blocked", None, None
     row = (
         await session.execute(
             select(ChargingCard, User.status)
@@ -469,6 +473,10 @@ async def start_transaction(
     from src.modules.charging.driver import attach_remote_start
 
     await attach_remote_start(session, transaction, card)
+    if result == "Accepted":
+        from src.modules.power.service import note_power_start
+
+        await note_power_start(session, charger.station_id, connector.id)
     return {"transactionId": transaction.id, "idTagInfo": {"status": result}}
 
 

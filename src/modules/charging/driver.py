@@ -112,6 +112,10 @@ async def remote_start(
             .where(ChargePoint.id == registered.charge_point_id)
             .with_for_update()
         )
+        from src.modules.ocpp.configuration_gate import reset_pending
+
+        if charger and await reset_pending(session, charger.id):
+            raise HTTPException(409, "Trụ đang khởi động lại.")
         station = (
             await session.scalar(
                 select(Station)

@@ -177,7 +177,7 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
         </p>
       </header>
       {area === 'wallet' && invoiceView && <div className="driver-wallet-stack">
-        <button className="secondary-button driver-wallet-back" onClick={() => { setInvoiceView(false); window.history.pushState(null, '', '#driver-wallet') }}><Icon name="chevronLeft" />Quay lại ví</button>
+        <button className="navigation-link secondary-button driver-wallet-back" onClick={() => { setInvoiceView(false); window.history.pushState(null, '', '#driver-wallet') }}><Icon name="chevronLeft" />Quay lại ví</button>
         <DriverInvoicePage sessionId={invoiceSessionId} onOpen={openInvoice} onBack={() => openInvoice()} />
       </div>}
       <div hidden={area !== 'wallet' || invoiceView}>
@@ -203,8 +203,8 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
       {area === 'privacy' && <DriverPrivacy />}
       {(area === 'session' || area === 'stations') && (
         <>
+          <div className="driver-return" hidden={!showStart || area !== 'stations'}><button className="navigation-link secondary-button" onClick={() => setShowStart(false)}><Icon name="chevronLeft" />Quay lại bản đồ và danh sách</button></div>
           <DriverReservations key={reservationFocus ?? 'list'} ownerId={currentUser.id} focusedId={reservationFocus} />
-          <div className="driver-return" hidden={!showStart || area !== 'stations'}><button className="secondary-button" onClick={() => setShowStart(false)}><Icon name="chevronLeft" />Quay lại bản đồ và danh sách</button></div>
           <DriverCharging ownerId={currentUser.id} stationId={station?.id} stationName={station?.name} showSession={area === 'session'} showConnectors={area === 'stations' && showStart} onFindStations={showStations} onSessionStarted={sessionStarted} />
           {mapOpened && <div className="driver-map-container" hidden={area !== 'stations' || showStart}><DriverMapPage selectedStationId={station?.id} onOpenStation={selected => { setStation(selected); setShowStart(true) }} /></div>}
         </>
