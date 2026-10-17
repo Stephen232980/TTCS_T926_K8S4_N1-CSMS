@@ -663,6 +663,9 @@ async def stop_transaction(
             Decimal(payload.meterStop) - transaction.meter_start_wh
         ) / Decimal(1000)
     await note_stop(session, transaction)
+    from src.modules.driver_notifications.service import notify_event
+
+    await notify_event(session, transaction, "stop")
     return {}
 
 

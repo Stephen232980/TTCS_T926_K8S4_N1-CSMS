@@ -77,6 +77,8 @@ GET,/api/v1/driver/charging/sessions/{session_id}/invoice,user,driver.invoice.vi
 POST,/api/v1/driver/charging/sessions/{session_id}/stop,user,driver.session.stop,own,driver,
 POST,/api/v1/driver/charging/start,user,driver.start,own,driver,
 GET,/api/v1/driver/invoices,user,driver.invoice.view,own_wallet,driver,
+GET,/api/v1/driver/notifications,user,driver.notification.read,own,driver,
+POST,/api/v1/driver/notifications/{notification_id}/read,user,driver.notification.read,own,driver,
 POST,/api/v1/driver/privacy/anonymize-request,user,driver.privacy.request,own,driver,
 GET,/api/v1/driver/privacy/requests,user,driver.privacy.request,own,driver,
 GET,/api/v1/driver/reservations,user,driver.reservations.read,own,driver,

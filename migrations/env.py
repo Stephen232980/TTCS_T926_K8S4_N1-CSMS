@@ -13,6 +13,7 @@ from src.modules.alerts import models as alert_models  # noqa: F401
 from src.modules.billing import models as billing_models  # noqa: F401
 from src.modules.charging import driver_models  # noqa: F401
 from src.modules.charging import models as charging_models  # noqa: F401
+from src.modules.driver_notifications import models as notification_models  # noqa: F401
 from src.modules.identity import models  # noqa: F401
 from src.modules.ocpp import (
     admin_health_models,  # noqa: F401

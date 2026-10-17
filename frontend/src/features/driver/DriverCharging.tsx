@@ -4,7 +4,6 @@ import { ChargerDrawing, ConnectorSymbol } from '../owner/OwnerVisuals'
 import { DriverSessionControls } from './DriverSessionControls'
 import { Icon } from '../../components/icons/Icon'
 import { ReservationForm } from '../reservations/ReservationForm'
-
 interface StartResult { id: string; status: string; deadline: string | null; session_id?: number | null; connector_id?: string; rejection_reason?: string | null; balance_vnd?: number | null; minimum_balance_vnd?: number | null }
 interface Session { id: number; station_name: string; charge_point_code: string; connector_number: number; started_at: string; ended_at?: string | null; demo_unplug_available?: boolean; energy_kwh: string | number; elapsed_seconds: number; latest_meter_at: string | null; needs_attention: boolean }
 interface Current { awaiting_unplug?: Session | null; session: Session | null; start_request: StartResult | null }
@@ -86,11 +85,16 @@ export function DriverCharging({ ownerId = 'session', stationId, stationName, sh
     const stale = 'Không cập nhật được phiên sạc. Dữ liệu bên dưới có thể đã cũ; đang kết nối lại.'
     const accept = (data: Current, clearError = true) => {
       const occupied = data.session ?? data.awaiting_unplug
-      if (occupied) { lastOccupiedSession.current = occupied.id; setReleasedSession(null) }
-      else if (lastOccupiedSession.current !== null) {
-        setReleasedSession(lastOccupiedSession.current); lastOccupiedSession.current = null
+      if (occupied) {
+        lastOccupiedSession.current = occupied.id
+        setReleasedSession(null)
+      } else if (lastOccupiedSession.current !== null) {
+        setReleasedSession(lastOccupiedSession.current)
+        lastOccupiedSession.current = null
       }
-      setCurrent(data); setClock(Date.now()); setReceivedAt(Date.now())
+      setCurrent(data)
+      setClock(Date.now())
+      setReceivedAt(Date.now())
       if (clearError) setError('')
     }
     const deny = () => {
