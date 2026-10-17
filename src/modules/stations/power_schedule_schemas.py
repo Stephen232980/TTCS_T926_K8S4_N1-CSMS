@@ -89,3 +89,12 @@ class CurrentPowerLimitResponse(BaseModel):
     local_date: date
     power_limit_w: int | None
     power_limit_kw: str | None
+    scheduled_limit_w: int | None = None
+    scheduled_limit_kw: str | None = None
+    applied_limit_w: int | None = None
+    applied_limit_kw: str | None = None
+    confirmed_limit_w: int | None = None
+    confirmed_limit_kw: str | None = None
+    compliance_status: str = "unconfigured"
+    state: str | None = None
+    issue: str | None = None

@@ -13,7 +13,7 @@ from uuid import UUID
 
 @dataclass(frozen=True)
 class SessionDemand:
-    session_id: UUID
+    session_id: UUID | int
     started_at: datetime
     current_w: int
     nominal_w: int
@@ -22,10 +22,10 @@ class SessionDemand:
 
 @dataclass(frozen=True)
 class AllocationResult:
-    to_decrease: dict[UUID, int]  # session_id -> target_w (decrease first)
-    to_increase: dict[UUID, int]  # session_id -> target_w (increase after)
-    unchanged: dict[UUID, int]  # session_id -> target_w
-    to_preempt: list[UUID]  # sessions to be stopped (LIFO order: newest first)
+    to_decrease: dict[UUID | int, int]  # session_id -> target_w (decrease first)
+    to_increase: dict[UUID | int, int]  # session_id -> target_w (increase after)
+    unchanged: dict[UUID | int, int]  # session_id -> target_w
+    to_preempt: list[UUID | int]  # sessions to be stopped (LIFO order: newest first)
     preemption_reason: str = ""
     allocated_total_w: int = 0
     is_degraded: bool = False
@@ -73,7 +73,7 @@ def phan_bo_cong_suat(
 
     # 1. Check if preemption is needed (AC-3)
     active = list(sessions)
-    preempted: list[UUID] = []
+    preempted: list[UUID | int] = []
 
     while active and sum(s.min_w for s in active) > limit_w:
         # Pick the newest session from active to preempt
@@ -93,7 +93,7 @@ def phan_bo_cong_suat(
         )
 
     # 2. Distribute power among surviving sessions (Equal share with nominal cap)
-    allocated: dict[UUID, int] = {}
+    allocated: dict[UUID | int, int] = {}
     remaining_budget = limit_w
     unassigned = list(active)
 
@@ -128,9 +128,9 @@ def phan_bo_cong_suat(
             allocated[s.session_id] = 0
 
     # 3. Classify into to_decrease and to_increase (AC-2 safety: decrease first)
-    to_decrease: dict[UUID, int] = {}
-    to_increase: dict[UUID, int] = {}
-    unchanged: dict[UUID, int] = {}
+    to_decrease: dict[UUID | int, int] = {}
+    to_increase: dict[UUID | int, int] = {}
+    unchanged: dict[UUID | int, int] = {}
 
     for s in active:
         target = allocated[s.session_id]

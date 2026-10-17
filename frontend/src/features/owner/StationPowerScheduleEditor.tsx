@@ -99,12 +99,42 @@ export function StationPowerScheduleEditor({
             Đặt trần công suất theo từng khung giờ trong ngày để giảm chi phí giờ cao điểm.
           </p>
         </div>
-        {currentLimit && currentLimit.power_limit_kw && (
-          <div className="owner-badge owner-badge-active">
-            Đang áp dụng: <strong>{currentLimit.power_limit_kw} kW</strong> ({currentLimit.local_time} {currentLimit.timezone})
+        {currentLimit && (currentLimit.scheduled_limit_kw || currentLimit.power_limit_kw) && (
+          <div
+            className={`owner-badge ${
+              currentLimit.compliance_status === 'confirmed'
+                ? 'owner-badge-active'
+                : currentLimit.compliance_status === 'degraded'
+                ? 'owner-badge-error'
+                : 'owner-badge-warning'
+            }`}
+            data-testid="compliance-badge"
+          >
+            {currentLimit.compliance_status === 'confirmed' ? (
+              <>
+                Đã xác nhận tuân thủ: <strong>{currentLimit.confirmed_limit_kw ?? currentLimit.power_limit_kw} kW</strong> ({currentLimit.local_time} {currentLimit.timezone})
+              </>
+            ) : currentLimit.compliance_status === 'degraded' ? (
+              <>
+                Suy giảm / Chưa tuân thủ: <strong>Lịch {currentLimit.scheduled_limit_kw ?? currentLimit.power_limit_kw} kW</strong> (Chưa xác nhận giảm từ {currentLimit.confirmed_limit_kw ?? currentLimit.applied_limit_kw ?? '---'} kW)
+              </>
+            ) : (
+              <>
+                Chờ áp dụng: <strong>Lịch {currentLimit.scheduled_limit_kw ?? currentLimit.power_limit_kw} kW</strong> (Đã xác nhận: {currentLimit.confirmed_limit_kw ?? currentLimit.applied_limit_kw ?? '---'} kW)
+              </>
+            )}
           </div>
         )}
       </div>
+
+      {currentLimit?.compliance_status === 'degraded' && (
+        <div
+          className="owner-feedback owner-feedback-error"
+          data-testid="compliance-degraded-warning"
+        >
+          Cảnh báo: Trụ sạc chưa xác nhận hạn mức mới hoặc có lỗi kết nối ({currentLimit.issue ?? 'power_profile_not_verified'}). Hệ thống đã tạm dừng khởi động phiên sạc mới để đảm bảo an toàn.
+        </div>
+      )}
 
       {message && (
         <div
