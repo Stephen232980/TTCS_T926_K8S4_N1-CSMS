@@ -777,3 +777,147 @@ details.driver-tx-history-section[open] > summary { margin-bottom: 16px; }
 @media (max-width: 480px) {
   .reservation-fee-item .tx-title-row { flex-direction: column; gap: 4px; }
 }
+
+/* S-59: Notification toast and browser notification controls */
+.driver-toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1300;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: min(420px, calc(100vw - 32px));
+  pointer-events: none;
+}
+.driver-toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(25, 61, 75, 0.16);
+  border-left: 4px solid var(--accent);
+  animation: driver-toast-in 0.25s ease-out;
+  color: var(--ink);
+}
+.driver-toast-idle, .driver-toast-stop {
+  border-left-color: #e67e22;
+  background: #fffaf4;
+}
+.driver-toast-fault {
+  border-left-color: #e74c3c;
+  background: #fdf4f4;
+}
+.driver-toast-invoice {
+  border-left-color: #27ae60;
+  background: #f4fcf6;
+}
+.driver-toast-icon {
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.driver-toast-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.driver-toast-stop .driver-toast-icon svg,
+.driver-toast-idle .driver-toast-icon svg {
+  color: #e67e22;
+}
+.driver-toast-fault .driver-toast-icon svg {
+  color: #e74c3c;
+}
+.driver-toast-invoice .driver-toast-icon svg {
+  color: #27ae60;
+}
+.driver-toast-content {
+  flex: 1;
+  min-width: 0;
+}
+.driver-toast-title {
+  font-weight: 700;
+  font-size: 14px;
+  margin: 0 0 4px;
+  color: var(--ink);
+}
+.driver-toast-message {
+  font-size: 13px;
+  line-height: 1.4;
+  margin: 0;
+  color: var(--muted);
+}
+.driver-toast-action {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--accent);
+  text-decoration: underline;
+}
+.driver-toast-close {
+  background: transparent;
+  border: 0;
+  padding: 4px;
+  cursor: pointer;
+  color: var(--muted);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.driver-toast-close:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--ink);
+}
+.driver-notification-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #eef6f9;
+  border-radius: 10px;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+.driver-notification-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--surface);
+  border: 1px solid var(--field-border);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+  min-height: 36px;
+}
+.driver-notification-btn:hover {
+  background: #f0f4f6;
+}
+.driver-notification-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--accent);
+  font-weight: 600;
+}
+@keyframes driver-toast-in {
+  from { opacity: 0; transform: translateY(-12px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.driver-inbox { margin-bottom: 16px; padding: 12px 16px; border: 1px solid #cbd5e1; border-radius: 12px; background: #fff; }
+.driver-inbox summary { cursor: pointer; font-weight: 600; }
+.driver-inbox ul { list-style: none; padding: 0; max-height: 360px; overflow-y: auto; }
+.driver-inbox li { padding: 12px 0; border-top: 1px solid #e2e8f0; }
+.driver-inbox p, .driver-toast-message { white-space: pre-line; overflow-wrap: anywhere; }
+.driver-inbox li a { margin-right: 12px; }
