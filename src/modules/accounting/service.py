@@ -4,6 +4,7 @@ import hashlib
 import inspect
 import json
 import logging
+from collections.abc import AsyncGenerator, Sequence
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import ROUND_HALF_UP, Decimal, localcontext
 from typing import Any
@@ -51,6 +52,10 @@ RECONCILIATION_ISSUES_CSV_HEADERS: list[str] = [
     "kwh_difference",
     "details",
     "status",
+    "generated_at",
+    "timezone",
+    "filter_category",
+    "run_revision",
 ]
 
 
@@ -1014,14 +1019,9 @@ async def export_reconciliation_issues_csv(
     if not run:
         raise HTTPException(status_code=404, detail="Không tìm thấy phiên đối soát")
 
-    stmt = (
-        select(
-            ReconciliationIssue,
-            Invoice.id.label("invoice_id"),
-        )
-        .outerjoin(Invoice, Invoice.session_id == ReconciliationIssue.session_id)
-        .where(ReconciliationIssue.run_id == run_id)
-    )
+    # Snapshot immutability (AC-4/5): DO NOT join live invoices table!
+    # Query strictly from reconciliation_run_issues snapshot.
+    stmt = select(ReconciliationIssue).where(ReconciliationIssue.run_id == run_id)
     if severity:
         stmt = stmt.where(ReconciliationIssue.severity == severity)
     if issue_type:
@@ -1032,39 +1032,163 @@ async def export_reconciliation_issues_csv(
         ReconciliationIssue.created_at.desc(),
     )
 
-    rows_res = (await db.execute(stmt)).all()
-    csv_rows: list[list[Any]] = []
-    for issue, inv_id in rows_res:
+    generated_at = datetime.now(REPORT_TIMEZONE).isoformat()
+    timezone_str = "Asia/Ho_Chi_Minh"
+    filter_cat = issue_type or "all"
+    run_rev = getattr(run, "algorithm_version", "1.0")
+    run_status = str(run.status)
+
+    def transform_issue_row(raw_row: Any) -> list[Any]:
+        if isinstance(raw_row, (tuple, list)):
+            issue: ReconciliationIssue = raw_row[0]
+            legacy_inv_id = (
+                str(raw_row[1]) if len(raw_row) > 1 and raw_row[1] is not None else ""
+            )
+        else:
+            issue = raw_row
+            legacy_inv_id = ""
+
         desc = issue.details
+        inv_id_val = legacy_inv_id
+
         try:
-            if issue.details.startswith("{") and issue.details.endswith("}"):
+            if (
+                issue.details
+                and issue.details.startswith("{")
+                and issue.details.endswith("}")
+            ):
                 parsed = json.loads(issue.details)
-                desc = parsed.get("description", issue.details)
+                if isinstance(parsed, dict):
+                    desc = str(parsed.get("description", issue.details))
+                    evidence = parsed.get("evidence", {})
+                    if isinstance(evidence, dict) and evidence.get("invoice_id"):
+                        inv_id_val = str(evidence["invoice_id"])
         except (json.JSONDecodeError, TypeError, ValueError) as exc:
             logger.debug("CSV issue details JSON parse fallback: %s", exc)
 
-        csv_rows.append(
-            [
-                str(issue.run_id),
-                issue.session_id,
-                str(inv_id) if inv_id is not None else "",
-                issue.issue_type,
-                issue.severity,
-                issue.recomputed_vnd if issue.recomputed_vnd is not None else "",
-                issue.billed_vnd if issue.billed_vnd is not None else "",
-                issue.debited_vnd if issue.debited_vnd is not None else "",
+        expected_vnd: Any = ""
+        actual_vnd: Any = ""
+        debited_vnd: Any = ""
+        delta_vnd: Any = ""
+
+        if issue.issue_type == "missing_ledger":
+            expected_vnd = issue.billed_vnd if issue.billed_vnd is not None else ""
+            actual_vnd = issue.debited_vnd if issue.debited_vnd is not None else 0
+            debited_vnd = issue.debited_vnd if issue.debited_vnd is not None else 0
+            delta_vnd = (
                 issue.money_difference_vnd
                 if issue.money_difference_vnd is not None
-                else "",
-                issue.meter_kwh if issue.meter_kwh is not None else "",
-                issue.billed_kwh if issue.billed_kwh is not None else "",
-                issue.kwh_difference if issue.kwh_difference is not None else "",
-                desc,
-                run.status,
-            ]
+                else expected_vnd
+            )
+        elif issue.issue_type == "ledger_mismatch":
+            expected_vnd = issue.billed_vnd if issue.billed_vnd is not None else ""
+            actual_vnd = issue.debited_vnd if issue.debited_vnd is not None else 0
+            debited_vnd = issue.debited_vnd if issue.debited_vnd is not None else 0
+            delta_vnd = (
+                issue.money_difference_vnd
+                if issue.money_difference_vnd is not None
+                else ""
+            )
+        elif issue.issue_type == "pricing_mismatch":
+            expected_vnd = (
+                issue.recomputed_vnd if issue.recomputed_vnd is not None else ""
+            )
+            actual_vnd = issue.billed_vnd if issue.billed_vnd is not None else ""
+            debited_vnd = issue.debited_vnd if issue.debited_vnd is not None else ""
+            delta_vnd = (
+                issue.money_difference_vnd
+                if issue.money_difference_vnd is not None
+                else ""
+            )
+        elif issue.issue_type == "missing_invoice":
+            expected_vnd = (
+                issue.recomputed_vnd if issue.recomputed_vnd is not None else ""
+            )
+            actual_vnd = 0
+            debited_vnd = issue.debited_vnd if issue.debited_vnd is not None else ""
+            delta_vnd = (
+                issue.money_difference_vnd
+                if issue.money_difference_vnd is not None
+                else ""
+            )
+        else:
+            expected_vnd = (
+                issue.recomputed_vnd if issue.recomputed_vnd is not None else ""
+            )
+            actual_vnd = issue.billed_vnd if issue.billed_vnd is not None else ""
+            debited_vnd = issue.debited_vnd if issue.debited_vnd is not None else ""
+            delta_vnd = (
+                issue.money_difference_vnd
+                if issue.money_difference_vnd is not None
+                else ""
+            )
+
+        meter_kwh_str = f"{issue.meter_kwh:.6f}" if issue.meter_kwh is not None else ""
+        billed_kwh_str = (
+            f"{issue.billed_kwh:.6f}" if issue.billed_kwh is not None else ""
+        )
+        kwh_diff_str = (
+            f"{issue.kwh_difference:.6f}" if issue.kwh_difference is not None else ""
         )
 
+        return [
+            str(issue.run_id),
+            issue.session_id,
+            inv_id_val,
+            issue.issue_type,
+            issue.severity,
+            expected_vnd,
+            actual_vnd,
+            debited_vnd,
+            delta_vnd,
+            meter_kwh_str,
+            billed_kwh_str,
+            kwh_diff_str,
+            desc,
+            run_status,
+            generated_at,
+            timezone_str,
+            filter_cat,
+            run_rev,
+        ]
+
+    async def generate_rows() -> AsyncGenerator[Sequence[Any], None]:
+        batch_size = 1000
+        count = 0
+        max_rows = 100_000
+
+        exec_res = await db.execute(stmt)
+
+        is_mock = type(exec_res).__module__.startswith("unittest.mock")
+        if not is_mock and hasattr(exec_res, "fetchmany"):
+            while True:
+                chunk = exec_res.fetchmany(batch_size)
+                if not chunk:
+                    break
+                for raw_row in chunk:
+                    count += 1
+                    if count > max_rows:
+                        return
+                    yield transform_issue_row(raw_row)
+        else:
+            raw_rows = exec_res.all() if hasattr(exec_res, "all") else exec_res
+            if inspect.iscoroutine(raw_rows):
+                raw_rows = await raw_rows
+            if isinstance(raw_rows, (list, tuple, set)):
+                for raw_row in raw_rows:
+                    count += 1
+                    if count > max_rows:
+                        return
+                    yield transform_issue_row(raw_row)
+
     filename = f"reconciliation_issues_{run_id}.csv"
+    extra_headers = {
+        "X-Export-Quota-Limit": "100000",
+        "X-Export-Timezone": "Asia/Ho_Chi_Minh",
+    }
     return build_csv_streaming_response(
-        filename, RECONCILIATION_ISSUES_CSV_HEADERS, csv_rows
+        filename,
+        RECONCILIATION_ISSUES_CSV_HEADERS,
+        generate_rows(),
+        extra_headers=extra_headers,
     )

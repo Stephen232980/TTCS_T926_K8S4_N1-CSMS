@@ -19,8 +19,13 @@ class RevenueReportQuery(BaseModel):
 
     @model_validator(mode="after")
     def validate_dates(self) -> "RevenueReportQuery":
-        if self.date_from and self.date_to and self.date_from > self.date_to:
-            raise ValueError("Ngày bắt đầu phải trước hoặc bằng ngày kết thúc")
+        if self.date_from and self.date_to:
+            if self.date_from > self.date_to:
+                raise ValueError("Ngày bắt đầu phải trước hoặc bằng ngày kết thúc")
+            if (self.date_to - self.date_from).days > 366:
+                raise ValueError("Khoảng thời gian xuất báo cáo tối đa là 366 ngày")
+            if self.period == "month":
+                self.period = "custom"
         if self.date_to == date.max:
             raise ValueError("Ngày kết thúc nằm ngoài phạm vi hỗ trợ")
         return self
