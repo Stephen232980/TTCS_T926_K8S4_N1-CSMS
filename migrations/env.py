@@ -26,6 +26,7 @@ from src.modules.pricing import models as pricing_models  # noqa: F401
 from src.modules.privacy import models as privacy_models  # noqa: F401
 from src.modules.reservations import models as reservation_models  # noqa: F401
 from src.modules.stations import models as stations_models  # noqa: F401
+from src.modules.subscriptions import models as subscription_models  # noqa: F401
 from src.modules.wallet import models as wallet_models  # noqa: F401
 from src.modules.wallet import topup_models  # noqa: F401
 from src.platform.audit import models as audit_models  # noqa: F401

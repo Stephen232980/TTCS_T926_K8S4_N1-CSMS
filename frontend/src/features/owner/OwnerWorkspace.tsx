@@ -20,6 +20,7 @@ import { StationWizard } from './StationWizard'
 import { ChargerWizard } from './ChargerWizard'
 import { OwnerCharging } from './OwnerCharging'
 import { TariffHistoryPanel } from './TariffHistoryPanel'
+import { StationSubscriptionPlans } from './StationSubscriptionPlans'
 import { StationPowerPage } from './StationPowerPage'
 import { OwnerRevenueReport } from './OwnerRevenueReport'
 import { StationOperation } from './StationOperation'
@@ -39,11 +40,12 @@ import './owner.css'
 
 const stationsApi = new HttpStationApi()
 const chargersApi = new HttpChargePointApi()
-type Area = 'stations' | 'charging' | 'tariffs' | 'revenue' | 'power'
+type Area = 'stations' | 'charging' | 'tariffs' | 'subscriptions' | 'revenue' | 'power'
 const navigation: { area: Area; label: string; icon: IconName }[] = [
   { area: 'stations', label: 'Trạm của tôi', icon: 'station' },
   { area: 'charging', label: 'Phiên sạc', icon: 'session' },
   { area: 'tariffs', label: 'Biểu giá', icon: 'report' },
+  { area: 'subscriptions', label: 'Gói thuê bao', icon: 'wallet' },
   { area: 'revenue', label: 'Doanh thu', icon: 'report' },
   { area: 'power', label: 'Công suất', icon: 'bolt' },
 ]
@@ -579,7 +581,7 @@ export function OwnerWorkspace({
               selectedStationId={station?.id}
             />
           </section>
-        ) : area !== 'stations' && area !== 'tariffs' ? (
+        ) : area !== 'stations' && area !== 'tariffs' && area !== 'subscriptions' ? (
           <section className="owner-page">
             <header className="owner-heading">
               <div>
@@ -644,9 +646,9 @@ export function OwnerWorkspace({
                     Quay lại danh sách trạm
                   </button>
                 )}
-                <h1>{area === 'tariffs' ? 'Biểu giá' : station?.name ?? 'Trạm của tôi'}</h1>
+                <h1>{area === 'tariffs' ? 'Biểu giá' : area === 'subscriptions' ? 'Gói thuê bao tháng' : station?.name ?? 'Trạm của tôi'}</h1>
                 <p>
-                  {area === 'tariffs' ? station?.name ?? 'Chọn trạm' : station?.address ?? ''}
+                  {area === 'tariffs' || area === 'subscriptions' ? station?.name ?? 'Chọn trạm' : station?.address ?? ''}
                 </p>
               </div>
               <div className="owner-heading-actions">
@@ -788,10 +790,10 @@ export function OwnerWorkspace({
                               <p>{record.address}</p>
                               <button
                                 className="secondary-button"
-                                aria-label={`${area === 'tariffs' ? 'Xem biểu giá' : 'Xem chi tiết'} ${record.name}`}
+                                aria-label={`${area === 'tariffs' ? 'Xem biểu giá' : area === 'subscriptions' ? 'Quản lý gói thuê bao' : 'Xem chi tiết'} ${record.name}`}
                                 onClick={() => open(record)}
                               >
-                                {area === 'tariffs' ? 'Xem biểu giá' : 'Xem trạm'}
+                                {area === 'tariffs' ? 'Xem biểu giá' : area === 'subscriptions' ? 'Quản lý gói thuê bao' : 'Xem trạm'}
                                 <Icon name="chevronRight" />
                               </button>
                             </div>
@@ -867,6 +869,8 @@ export function OwnerWorkspace({
                 {area === 'tariffs' ? <div className="owner-tariff-scroll owner-grow" role="region" aria-label="Biểu giá của trạm" tabIndex={0}>
                   <TariffHistoryPanel key={station.id} stationId={String(station.id)} />
                   <details className="owner-reservation-policy"><summary>Chính sách phí không đến</summary><ReservationPolicy key={station.id} stationId={String(station.id)} /></details>
+                </div> : area === 'subscriptions' ? <div className="owner-tariff-scroll owner-grow">
+                  <StationSubscriptionPlans key={station.id} stationId={String(station.id)} />
                 </div> : <div className="owner-detail-grid owner-grow">
                   <section className="owner-chargers">
                     <header>

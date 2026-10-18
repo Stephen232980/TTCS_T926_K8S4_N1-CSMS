@@ -51,7 +51,7 @@ class WalletLedger(Base):
     __tablename__ = "wallet_ledger"
     __table_args__ = (
         CheckConstraint(
-            "entry_type IN ('gateway_topup', 'manual_topup', 'charging_debit', 'adjustment', 'reservation_fee')",
+            "entry_type IN ('gateway_topup', 'manual_topup', 'charging_debit', 'adjustment', 'reservation_fee', 'subscription_debit')",
             name="ck_wallet_ledger_entry_type",
         ),
         CheckConstraint(
@@ -68,6 +68,10 @@ class WalletLedger(Base):
         CheckConstraint(
             "entry_type <> 'reservation_fee' OR (amount_vnd < 0 AND reference_type = 'reservation')",
             name="ck_wallet_reservation_fee",
+        ),
+        CheckConstraint(
+            "entry_type <> 'subscription_debit' OR (amount_vnd < 0 AND reference_type = 'subscription')",
+            name="ck_wallet_subscription_debit",
         ),
     )
 

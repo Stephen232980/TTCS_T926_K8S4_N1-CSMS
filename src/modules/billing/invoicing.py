@@ -22,6 +22,11 @@ from src.modules.pricing.service import (
     lay_bieu_gia_hieu_luc,
 )
 from src.modules.stations.models import ChargePoint, Connector, Station
+from src.modules.subscriptions.models import (
+    DriverSubscription,
+    SubscriptionPlan,
+    SubscriptionPlanBand,
+)
 
 LEGACY_ROUNDING_RULE = (
     "Tiền điện: làm tròn nửa lên đến đồng nguyên ở từng đoạn rồi cộng tổng. "
@@ -151,6 +156,72 @@ async def _daily_tariffs(
     return versions, frames
 
 
+async def _active_subscription_frames(
+    db: AsyncSession,
+    *,
+    driver_id: UUID,
+    station_id: UUID,
+    started_at: datetime,
+    frames: dict[date, list[TariffFrame]],
+) -> tuple[UUID | None, dict[date, list[TariffFrame]]]:
+    subscription = await db.scalar(
+        select(DriverSubscription)
+        .where(
+            DriverSubscription.driver_id == driver_id,
+            DriverSubscription.station_id == station_id,
+            DriverSubscription.current_period_start <= started_at,
+            DriverSubscription.current_period_end > started_at,
+        )
+        .order_by(DriverSubscription.current_period_start.desc())
+        .limit(1)
+        .with_for_update()
+    )
+    if subscription is None:
+        return None, frames
+    plan = await db.scalar(
+        select(SubscriptionPlan)
+        .where(SubscriptionPlan.id == subscription.plan_id)
+        .with_for_update()
+    )
+    if plan is None:
+        raise _InvalidInvoice("invoice_missing_subscription_plan")
+    bands = await db.scalars(
+        select(SubscriptionPlanBand)
+        .where(SubscriptionPlanBand.plan_id == plan.id)
+        .order_by(SubscriptionPlanBand.start_min)
+    )
+    try:
+        normalized = kiem_khung_gio(
+            [
+                BandInput(
+                    band.start_min,
+                    band.end_min,
+                    band.energy_rate_vnd_per_kwh,
+                    band.label,
+                )
+                for band in bands
+            ]
+        )
+    except TariffBandsError as exc:
+        raise _InvalidInvoice("invoice_invalid_subscription_tariff") from exc
+    if plan.used_at is None:
+        plan.used_at = datetime.now(UTC)
+        await db.flush()
+    for day, station_frames in tuple(frames.items()):
+        tariff_id = station_frames[0].tariff_version
+        frames[day] = [
+            TariffFrame(
+                _clock(band.start_min),
+                _clock(band.end_min),
+                band.energy_rate_vnd_per_kwh,
+                tariff_id,
+                band.label,
+            )
+            for band in normalized
+        ]
+    return plan.id, frames
+
+
 def _idle_lines(
     charging: ChargingSession,
     station: Station,
@@ -255,6 +326,13 @@ async def _create_invoice(
     versions, frames = await _daily_tariffs(
         db, station, charging.started_at, billing_end
     )
+    subscription_plan_id, frames = await _active_subscription_frames(
+        db,
+        driver_id=charging.driver_id,
+        station_id=station.id,
+        started_at=charging.started_at,
+        frames=frames,
+    )
     # Numeric(24,6) readings may use all 24 digits; avoid caller Decimal contexts.
     with localcontext() as ctx:
         ctx.prec = 50
@@ -287,6 +365,7 @@ async def _create_invoice(
             band_label=s["frame_label"],
             interpolated=s["start_interpolated"] or s["end_interpolated"],
             tariff_id=UUID(s["tariff_version"]),
+            subscription_plan_id=subscription_plan_id,
             amount_vnd=s["amount_vnd"],
         )
         for s in segments

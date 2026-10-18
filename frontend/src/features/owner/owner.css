@@ -1226,6 +1226,18 @@ dl.owner-review div {
   overflow-y: auto;
   overscroll-behavior: contain;
 }
+.owner-subscription-plans { margin: 0; }
+.owner-subscription-plans form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 18px; }
+.owner-subscription-plans form > p, .owner-subscription-plans form > button { grid-column: 1 / -1; }
+.owner-subscription-plan-list { list-style: none; padding: 0; margin: 20px 0 0; }
+.owner-subscription-plan-list > li { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 16px 0; border-top: 1px solid #d9e5e9; }
+.owner-subscription-plan-list > li > div { display: grid; gap: 5px; }
+.owner-subscription-plan-list small { color: var(--muted); }
+@media (max-width: 680px) {
+  .owner-subscription-plans form { grid-template-columns: 1fr; }
+  .owner-subscription-plans form > p, .owner-subscription-plans form > button { grid-column: auto; }
+  .owner-subscription-plan-list > li { align-items: flex-start; flex-direction: column; }
+}
 .owner-tariff-bands { grid-column: 1 / -1; min-width: 0; border: 0; padding: 0; margin: 12px 0 24px; }
 .owner-tariff-bands legend { font-weight: 700; font-size: 18px; margin-bottom: 8px; }
 .owner-band-row { padding: 16px 0; border-bottom: 1px solid var(--field-border, #b9cdd6); }

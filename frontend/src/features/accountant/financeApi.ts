@@ -23,7 +23,8 @@ export interface FinancialPage {
 export interface FinancialDetail extends FinancialSession {
   rounding_rule: string | null; ledger_amount_vnd: string | null; ledger_reference_type: string | null;
   lines: { id: string; line_type: string; local_date: string; started_at: string; ended_at: string;
-    energy_kwh: string; rate_vnd: string; band_label: string; interpolated: boolean; amount_vnd: string; tariff_id: string }[];
+    energy_kwh: string; rate_vnd: string; band_label: string; interpolated: boolean; amount_vnd: string;
+    tariff_id: string; subscription_plan_id?: string | null }[];
 }
 export type StationOption = { id: string; name: string }
 export type FinanceArea = 'sessions' | 'invoices' | 'reconciliation' | 'runs'
@@ -281,5 +282,4 @@ export async function exportReconciliationIssuesCsv(
   const path = `/accounting/reconciliation-runs/${encodeURIComponent(runId)}/issues/export${qs ? `?${qs}` : ''}`
   await downloadCsvFile(path, `reconciliation_issues_${runId}.csv`)
 }
-
 

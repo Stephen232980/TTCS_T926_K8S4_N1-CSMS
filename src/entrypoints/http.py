@@ -47,6 +47,10 @@ from src.modules.stations.power_schedule_router import (
     router as power_schedule_router,
 )
 from src.modules.stations.router import router as stations_router
+from src.modules.subscriptions.router import (
+    driver_router as driver_subscription_router,
+)
+from src.modules.subscriptions.router import owner_router as owner_subscription_router
 from src.modules.wallet.admin_router import router as admin_wallet_router
 from src.modules.wallet.administration_router import (
     router as wallet_administration_router,
@@ -77,6 +81,8 @@ app.include_router(operation_router)
 app.include_router(reservation_router)
 app.include_router(reservation_policy_router)
 app.include_router(tariff_router)
+app.include_router(owner_subscription_router)
+app.include_router(driver_subscription_router)
 app.include_router(power_schedule_router)
 app.include_router(power_router)
 app.include_router(station_photo_router)

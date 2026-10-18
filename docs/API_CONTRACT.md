@@ -10,6 +10,10 @@ Nhóm endpoint `/api/v1/admin/accounts` và `/api/v1/admin/roles` chỉ dành ch
 admin. Nhóm tiếp theo bổ sung đọc nhật ký tài khoản và sức khỏe hệ thống:
 [contract và định nghĩa chỉ số](ADMIN_MONITORING_API_DELIVERY.md).
 
+Gói thuê bao tháng do chủ trạm cấu hình, tài xế thanh toán qua ví và được
+áp biểu giá điện riêng khi lập hóa đơn: xem
+[contract thuê bao](SUBSCRIPTIONS.md).
+
 Trạng thái: baseline cho frontend và backend, chốt ngày 26/09/2026.
 
 Tài liệu này định nghĩa contract HTTP mà frontend có thể dùng để phát triển. OpenAPI của

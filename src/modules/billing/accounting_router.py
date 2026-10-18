@@ -565,6 +565,7 @@ async def detail(session_id: int, db: Database) -> FinancialDetail:
                 band_label=line.band_label,
                 interpolated=line.interpolated,
                 tariff_id=line.tariff_id,
+                subscription_plan_id=line.subscription_plan_id,
                 amount_vnd=str(line.amount_vnd),
             )
             for line in lines
