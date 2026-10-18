@@ -1,4 +1,3 @@
-﻿
 """Encrypted PostgreSQL backup and restore helpers for S-62."""
 
 from __future__ import annotations
@@ -21,9 +20,7 @@ BACKUP_DIR = Path(os.getenv("S62_BACKUP_DIR", "backups"))
 
 
 def _temporary_path(destination: Path) -> Path:
-    return destination.with_name(
-        f".{destination.name}.{secrets.token_hex(8)}.tmp"
-    )
+    return destination.with_name(f".{destination.name}.{secrets.token_hex(8)}.tmp")
 
 
 def encrypt_backup(source: Path, destination: Path, key: bytes) -> None:
@@ -109,7 +106,7 @@ def _database_config() -> tuple[str, str, str, int, str]:
         raise RuntimeError("DATABASE_URL must be a PostgreSQL URL")
 
     username = unquote(parsed.username or "")
-    
+
     database = unquote(parsed.path.lstrip("/"))
     if not username or not database:
         raise RuntimeError("DATABASE_URL needs a username and database name")
