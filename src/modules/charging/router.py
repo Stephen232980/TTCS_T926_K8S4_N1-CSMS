@@ -482,8 +482,12 @@ async def pending_messages(
         }
         for item, code in rows
     ]
+
+
 @router.get("/my-sessions", response_model=SessionPage)
-@user_policy("driver.charging.sessions", "all", "driver") # Bạn có thể đổi string policy cho khớp với cấu hình Role tài xế của dự án
+@user_policy(
+    "driver.charging.sessions", "all", "driver"
+)  # Bạn có thể đổi string policy cho khớp với cấu hình Role tài xế của dự án
 async def my_sessions(
     query: Annotated[SessionQuery, Query()],
     actor: CurrentActorDependency,
@@ -512,7 +516,7 @@ async def my_sessions(
         )
         .subquery()
     )
-    
+
     # 2. Câu truy vấn chính kết hợp các bảng
     statement = (
         select(
@@ -530,21 +534,21 @@ async def my_sessions(
             latest, (latest.c.session_id == ChargingSession.id) & (latest.c.rank == 1)
         )
         # ĐIỂM QUAN TRỌNG NHẤT: Chỉ lấy các phiên sạc thuộc về tài xế đang gọi API
-        .where(ChargingSession.driver_id == actor.user_id) 
+        .where(ChargingSession.driver_id == actor.user_id)
     )
-    
+
     # 3. Lọc theo trạng thái (Đang sạc / Đã xong)
     if query.state == "open":
         statement = statement.where(ChargingSession.ended_at.is_(None))
     elif query.state == "closed":
         statement = statement.where(ChargingSession.ended_at.is_not(None))
-        
+
     # 4. Đếm tổng số lượng bản ghi để phân trang
     total = (
         await session.scalar(select(func.count()).select_from(statement.subquery()))
         or 0
     )
-    
+
     # 5. Lấy dữ liệu theo page và page_size
     rows = (
         await session.execute(
@@ -553,7 +557,7 @@ async def my_sessions(
             .limit(query.page_size)
         )
     ).all()
-    
+
     # 6. Trả về kết quả sử dụng lại hàm session_row và model SessionPage có sẵn
     return SessionPage(
         items=[
