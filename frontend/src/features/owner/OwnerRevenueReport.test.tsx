@@ -282,3 +282,32 @@ it('triggers CSV export when Xuất CSV button is clicked', async () => {
   })
 })
 
+
+
+it('clears a previous load error when switching to a period that succeeds', async () => {
+  let fails = true
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(fails ? {detail: 'Server unavailable'} : mockReport), { status: fails ? 500 : 200 })))
+  render(<OwnerRevenueReport />)
+  await screen.findByRole('alert')
+  fails = false
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Hôm nay' }))
+  await screen.findByText('CP-LANDMARK-01')
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(screen.getByRole('region', { name: 'Chi tiết doanh thu theo trụ' })).toHaveAttribute('tabindex', '0')
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Hôm nay' }))
+  expect(screen.getByRole('button', { name: 'Xuất CSV báo cáo doanh thu' })).toBeEnabled()
+})
+
+
+it('marks retained figures as updating and disables export while changing a filter', async () => {
+  let complete: (response: Response) => void = () => undefined
+  const fetcher = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(mockReport))).mockImplementationOnce(() => new Promise<Response>(resolve => { complete = resolve }))
+  vi.stubGlobal('fetch', fetcher)
+  render(<OwnerRevenueReport />)
+  await screen.findByText('CP-LANDMARK-01')
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Tuần này' }))
+  expect(screen.getByRole('status')).toHaveTextContent('Đang cập nhật báo cáo')
+  expect(screen.getByRole('button', { name: 'Xuất CSV báo cáo doanh thu' })).toBeDisabled()
+  complete(new Response(JSON.stringify(mockReport)))
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Xuất CSV báo cáo doanh thu' })).toBeEnabled())
+})
