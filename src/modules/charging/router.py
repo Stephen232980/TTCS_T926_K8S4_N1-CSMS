@@ -531,6 +531,7 @@ async def my_sessions(
             Connector.connector_number,
             latest.c.value,
             latest.c.timestamp,
+            Station.id,
         )
         .join(ChargePoint, ChargePoint.id == ChargingSession.charge_point_id)
         .join(Station, Station.id == ChargePoint.station_id)
@@ -566,7 +567,8 @@ async def my_sessions(
     # 6. Trả về kết quả sử dụng lại hàm session_row và model SessionPage có sẵn
     return SessionPage(
         items=[
-            session_row(row[0], row[1], row[2], row[3], row[4], row[5]) for row in rows
+            session_row(row[0], row[1], row[2], row[3], row[4], row[5], row[6])
+            for row in rows
         ],
         total=total,
         page=query.page,

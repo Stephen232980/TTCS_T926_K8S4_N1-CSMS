@@ -639,6 +639,10 @@ async def test_api_owner_scope_cards_samples_pending_and_driver_denied(db_sessio
                 )
             ).status_code == 404
             actor = CurrentActor(driver.id, frozenset({"driver"}))
+            history = await client.get("/api/v1/charging/my-sessions")
+            assert history.status_code == 200
+            assert history.json()["items"][0]["id"] == tid
+            assert history.json()["items"][0]["station_id"] == str(station.id)
             for path in ("sessions", "cards", "pending"):
                 assert (await client.get("/api/v1/charging/" + path)).status_code == 403
     finally:
