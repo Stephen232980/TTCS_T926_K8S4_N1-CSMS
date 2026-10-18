@@ -567,7 +567,7 @@ export function OwnerWorkspace({
         ) : area === 'power' ? (
           <StationPowerPage />
         ) : area === 'revenue' ? (
-          <section className="owner-page">
+          <section className="owner-page owner-revenue-page">
             <header className="owner-heading">
               <div>
                 <h1>Báo cáo doanh thu & sản lượng</h1>

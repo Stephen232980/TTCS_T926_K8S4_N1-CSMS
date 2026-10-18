@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { Station, StationStatus } from '../stations/model/station'
 import { OwnerApiError, ownerRequest } from './ownerApi'
 import './stationOperation.css'
@@ -24,11 +24,27 @@ export function StationOperation({ station, onChanged, onReload }: {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const input = useRef<HTMLInputElement>(null)
+  const dialog = useRef<HTMLDialogElement>(null)
+  const trigger = useRef<HTMLButtonElement>(null)
+  const titleId = useId()
   const mounted = useRef(true)
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
   useEffect(() => {
-    if (confirming) { input.current?.focus(); input.current?.scrollIntoView?.({ block: 'nearest' }) }
+    const modal = dialog.current
+    if (!modal) return
+    if (confirming) {
+      if (!modal.open) {
+        if (modal.showModal) modal.showModal()
+        else modal.setAttribute('open', '')
+      }
+      input.current?.focus({ preventScroll: true })
+    } else if (modal.open) {
+      if (modal.close) modal.close()
+      else modal.removeAttribute('open')
+      trigger.current?.focus({ preventScroll: true })
+    }
   }, [confirming])
+  function dismiss() { if (!busy) { setConfirming(false); setReason(''); setError('') } }
   async function change(status: 'active' | 'suspended') {
     if (busy) return
     setBusy(true); setError(''); setNotice('')
@@ -47,15 +63,18 @@ export function StationOperation({ station, onChanged, onReload }: {
   }
   return <section className="owner-operation" aria-label="Hoạt động của trạm" aria-busy={busy}>
     {station.status === 'blocked' ? <p>Trạm bị quản trị viên khóa. Liên hệ quản trị viên để mở lại.</p> : <>
-      {!confirming && <button type="button" className={`secondary-button ${station.status === 'active' ? 'operation-suspend' : 'operation-enable'}`} disabled={busy} onClick={() => station.status === 'active' ? setConfirming(true) : void change('active')}>{busy ? 'Đang lưu…' : station.status === 'active' ? 'Tạm ngừng trạm' : 'Bật trạm'}</button>}
-      {confirming && <form onSubmit={event => { event.preventDefault(); void change('suspended') }}>
-        <p>Ẩn trạm và chặn phiên mới. Phiên đang chạy tiếp tục bình thường.</p>
-        <label>Lý do tạm ngừng<input ref={input} required maxLength={500} value={reason} disabled={busy} onChange={event => setReason(event.target.value)} /></label>
-        <button className="primary-button operation-suspend" disabled={busy || !reason.trim()}>{busy ? 'Đang lưu…' : 'Xác nhận tạm ngừng'}</button>
-        <button type="button" className="secondary-button" disabled={busy} onClick={() => { setConfirming(false); setReason(''); setError('') }}>Hủy</button>
-      </form>}
+      <button ref={trigger} type="button" className={`secondary-button ${station.status === 'active' ? 'operation-suspend' : 'operation-enable'}`} disabled={busy} onClick={() => { setError(''); if (station.status === 'active') setConfirming(true); else void change('active') }}>{busy ? 'Đang lưu…' : station.status === 'active' ? 'Tạm ngừng trạm' : 'Bật trạm'}</button>
+      <dialog ref={dialog} className="owner-operation-dialog" aria-labelledby={titleId} onCancel={event => { event.preventDefault(); dismiss() }}>
+        <form onSubmit={event => { event.preventDefault(); void change('suspended') }}>
+          <div className="owner-operation-dialog-heading"><h2 id={titleId}>Tạm ngừng {station.name}</h2><button type="button" className="secondary-button" aria-label="Đóng xác nhận tạm ngừng" disabled={busy} onClick={dismiss}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg></button></div>
+          <p>Ẩn trạm và chặn phiên mới. Phiên đang chạy tiếp tục bình thường.</p>
+          <label>Lý do tạm ngừng<input ref={input} required maxLength={500} value={reason} disabled={busy} onChange={event => setReason(event.target.value)} /></label>
+          {error && <div role="alert"><p>{error}</p><button type="button" className="secondary-button" disabled={busy} onClick={() => { onReload(); dismiss() }}>Tải lại trạm</button></div>}
+          <div className="owner-operation-dialog-actions"><button type="button" className="secondary-button" disabled={busy} onClick={dismiss}>Hủy</button><button className="primary-button operation-suspend" disabled={busy || !reason.trim()}>{busy ? 'Đang lưu…' : 'Xác nhận tạm ngừng'}</button></div>
+        </form>
+      </dialog>
     </>}
     {notice && <p role="status">{notice}</p>}
-    {error && <div role="alert"><p>{error}</p><button type="button" className="secondary-button" disabled={busy} onClick={() => { onReload(); setError(''); setConfirming(false); setReason('') }}>Tải lại trạm</button></div>}
+    {error && !confirming && <div role="alert"><p>{error}</p><button type="button" className="secondary-button" disabled={busy} onClick={() => { onReload(); setError(''); setConfirming(false); setReason('') }}>Tải lại trạm</button></div>}
   </section>
 }
