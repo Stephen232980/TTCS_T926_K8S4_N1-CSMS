@@ -77,7 +77,7 @@ export function DriverInvoicePage({ api = driverInvoiceApi, sessionId, onOpen, o
         </div>
         <p>Thời gian hiển thị theo giờ Việt Nam (UTC+7). Ngày tính giá theo giờ trạm được lưu trên hóa đơn.</p>
         <ol className="driver-invoice-lines">{invoice.lines.map(line => <li key={line.id}>
-          <h3>{line.line_type === 'idle' ? 'Phí chiếm trụ' : 'Tiền điện'} · {line.band_label}</h3>
+          <h3>{line.line_type === 'idle' ? 'Phí chiếm trụ' : line.subscription_plan_id ? 'Tiền điện · gói thuê bao' : 'Tiền điện'} · {line.band_label}</h3>
           <p>Ngày tính giá: {localDate(line.local_date)}</p>
           <p>{vietnamTime(line.started_at)} – {vietnamTime(line.ended_at)}</p>
           <dl>
@@ -89,7 +89,7 @@ export function DriverInvoicePage({ api = driverInvoiceApi, sessionId, onOpen, o
         <details className="driver-invoice-technical"><summary>Thông tin đối chiếu</summary>
           <p>Mã hóa đơn: <strong>{invoice.invoice_id}</strong></p>
           <p>Quy tắc làm tròn: {invoice.rounding_rule}</p>
-          {invoice.lines.map(line => <div key={line.id}><p>{line.line_type === 'idle' ? 'Phí chiếm trụ' : 'Tiền điện'} · {line.band_label}: Phiên bản biểu giá {line.tariff_id}</p>{line.interpolated && <p>Số đo tại ranh giới được nội suy.</p>}</div>)}
+          {invoice.lines.map(line => <div key={line.id}><p>{line.line_type === 'idle' ? 'Phí chiếm trụ' : 'Tiền điện'} · {line.band_label}: {line.subscription_plan_id ? `Biểu giá gói thuê bao ${line.subscription_plan_id}` : `Phiên bản biểu giá ${line.tariff_id}`}</p>{line.interpolated && <p>Số đo tại ranh giới được nội suy.</p>}</div>)}
           <p>Hóa đơn được đọc từ bản ghi đã lưu; thay đổi biểu giá sau phiên không tính lại hóa đơn này.</p>
         </details>
       </>}

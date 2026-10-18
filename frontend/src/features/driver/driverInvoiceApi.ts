@@ -19,6 +19,7 @@ export interface InvoiceLine {
   band_label: string
   interpolated: boolean
   tariff_id: string
+  subscription_plan_id?: string | null
   amount_vnd: string
 }
 export interface DriverInvoice extends InvoiceSummary {

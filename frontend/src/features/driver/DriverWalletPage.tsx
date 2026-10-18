@@ -263,7 +263,8 @@ export function DriverWalletPage({
                       tx.entry_type === 'manual_topup'
                         ? 'topup'
                         : tx.entry_type === 'charge' ||
-                            tx.entry_type === 'charging_debit'
+                              tx.entry_type === 'charging_debit' ||
+                              tx.entry_type === 'subscription_debit'
                           ? 'charge'
                           : tx.entry_type === 'refund'
                             ? 'refund'
@@ -280,6 +281,8 @@ export function DriverWalletPage({
                     ) : tx.entry_type === 'charge' ||
                       tx.entry_type === 'charging_debit' ? (
                       '⚡'
+                    ) : tx.entry_type === 'subscription_debit' ? (
+                      '↻'
                     ) : tx.entry_type === 'refund' ? (
                       '↩'
                     ) : (

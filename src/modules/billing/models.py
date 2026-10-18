@@ -84,4 +84,7 @@ class InvoiceLine(Base):
     tariff_id: Mapped[UUID] = mapped_column(
         ForeignKey("tariffs.id", ondelete="RESTRICT"), nullable=False
     )
+    subscription_plan_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("subscription_plans.id", ondelete="RESTRICT")
+    )
     amount_vnd: Mapped[int] = mapped_column(BigInteger, nullable=False)

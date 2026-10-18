@@ -41,6 +41,7 @@ class LineResponse(BaseModel):
     band_label: str
     interpolated: bool
     tariff_id: UUID
+    subscription_plan_id: UUID | None
     amount_vnd: str
 
 
@@ -171,6 +172,7 @@ async def get_invoice(
             band_label=line.band_label,
             interpolated=line.interpolated,
             tariff_id=line.tariff_id,
+            subscription_plan_id=line.subscription_plan_id,
             amount_vnd=str(line.amount_vnd),
         )
         for line in lines

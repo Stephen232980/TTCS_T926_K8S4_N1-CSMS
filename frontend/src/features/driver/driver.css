@@ -39,7 +39,7 @@
 .driver-shell .driver-brand { color: #fff; display: flex; align-items: center; gap: 10px; text-decoration: none; font-size: 23px; }
 .driver-brand svg { color: #b9ebd9; width: 25px; height: 30px; }
 .driver-brand span { display: none; }
-.driver-navigation { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1000; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 8px 10px max(8px, env(safe-area-inset-bottom)); background: #173b47; }
+.driver-navigation { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1000; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; padding: 8px 10px max(8px, env(safe-area-inset-bottom)); background: #173b47; }
 .driver-shell .driver-navigation a { color: #d7e8ee; min-height: 52px; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 8px 10px; border-radius: 12px; text-decoration: none; font-size: 14px; font-weight: 650; }
 .driver-navigation a:hover, .driver-navigation a[aria-current] { background: #2c5664; color: #fff; }
 .driver-account { margin-left: auto; position: relative; }
@@ -257,11 +257,25 @@
   .driver-wallet-page { padding: 18px 14px; }
   .driver-wallet-page .primary-button, .driver-wallet-page .secondary-button { width: 100%; }
 }
-/* Three destinations fit in one row; the bottom navigation never covers wallet actions. */
+/* Keep all destinations in one row so the fixed navigation does not cover page actions. */
 @media (max-width: 699px) {
-  .driver-navigation { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .driver-navigation { grid-template-columns: repeat(5, minmax(0, 1fr)); }
   .driver-shell .driver-navigation a { flex-direction: column; gap: 4px; padding: 5px 2px; text-align: center; font-size: 11px; }
   .driver-shell .driver-navigation a svg { width: 20px; height: 20px; }
+}
+
+.driver-subscriptions { display: grid; gap: 20px; max-width: 900px; }
+.driver-subscriptions > header, .driver-subscriptions > section { background: #fff; border-radius: 16px; padding: 22px; box-shadow: 0 10px 28px rgba(25, 61, 75, .045); }
+.driver-subscriptions h2, .driver-subscriptions h3 { margin: 0 0 10px; }
+.driver-subscriptions header p { margin: 0; }
+.driver-subscriptions ul { display: grid; gap: 12px; list-style: none; padding: 0; margin: 14px 0 0; }
+.driver-subscriptions li { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 14px 0; border-top: 1px solid var(--line); }
+.driver-subscriptions li > div { display: grid; gap: 5px; }
+.driver-subscriptions small { color: var(--muted); }
+.driver-subscription-error { padding: 12px 16px; border-radius: 10px; color: #8b2d26 !important; background: #fff0ee; }
+@media (max-width: 480px) {
+  .driver-subscriptions > header, .driver-subscriptions > section { padding: 18px 14px; }
+  .driver-subscriptions li { align-items: flex-start; flex-direction: column; }
 }
 
 /* S-40: Driver wallet overview styles from develop. */
