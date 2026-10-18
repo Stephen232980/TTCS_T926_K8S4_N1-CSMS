@@ -35,16 +35,21 @@ class ReconciliationIssueResponse(BaseModel):
     driver_email: str | None
     started_at: datetime
     ended_at: datetime | None
+    issue_category: str
     issue_type: str
     severity: IssueSeverity
-    billed_vnd: str | None
-    recomputed_vnd: str | None
-    debited_vnd: str | None
-    money_difference_vnd: str | None
-    meter_kwh: str | None
-    billed_kwh: str | None
-    kwh_difference: str | None
+    discrepancy_amount_vnd: str
+    discrepancy_kwh: str
+    billed_vnd: str | None = None
+    recomputed_vnd: str | None = None
+    debited_vnd: str | None = None
+    money_difference_vnd: str | None = None
+    meter_kwh: str | None = None
+    billed_kwh: str | None = None
+    kwh_difference: str | None = None
+    description: str
     details: str
+    evidence: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
 
 
@@ -62,6 +67,9 @@ class ReconciliationRunResponse(BaseModel):
     matched_sessions: int
     mismatch_sessions: int
     missing_data_sessions: int
+    exempt_sessions: int = 0
+    beginning_uncollected_invoices_vnd: str = "0"
+    beginning_uncollected_count: int = 0
     total_meter_kwh: str
     total_billed_kwh: str
     kwh_discrepancy: str
@@ -69,8 +77,10 @@ class ReconciliationRunResponse(BaseModel):
     total_recomputed_vnd: str
     total_debited_vnd: str
     money_discrepancy_vnd: str
+    wallet_discrepancy_vnd: str = "0"
     summary_counts: dict[str, Any]
     algorithm_version: str
+    input_hash: str
 
 
 class ReconciliationRunListResponse(BaseModel):

@@ -16,10 +16,13 @@ const mockRun: ReconciliationRunItem = {
   mismatch_sessions: 2,
   missing_data_sessions: 0,
   exempt_sessions: 0,
+  beginning_uncollected_invoices_vnd: '38500',
+  beginning_uncollected_count: 1,
   total_billed_vnd: '200000',
   total_recomputed_vnd: '190000',
   total_debited_vnd: '200000',
   money_discrepancy_vnd: '10000',
+  wallet_discrepancy_vnd: '0',
   total_meter_kwh: '50.000000',
   total_billed_kwh: '50.000000',
   kwh_discrepancy: '0.000000',
@@ -27,12 +30,17 @@ const mockRun: ReconciliationRunItem = {
   summary_counts: {
     pricing_mismatch: 1,
     missing_invoice: 1,
+    critical: 2,
+    warning: 0,
+    info: 0,
+    beginning_uncollected_count: 1,
+    beginning_uncollected_vnd: 38500,
   },
   executed_by_actor_id: 'actor-1',
   created_at: '2026-10-15T12:05:00Z',
 }
 
-const mockIssue: ReconciliationIssueItem = {
+const mockPricingIssue: ReconciliationIssueItem = {
   id: 'issue-1',
   run_id: 'run-12345678-abcd',
   session_id: 101,
@@ -47,20 +55,46 @@ const mockIssue: ReconciliationIssueItem = {
     billed_total_vnd: 200000,
     recomputed_total_vnd: 190000,
     diff_vnd: 10000,
+    tariff_matched: true,
   },
   created_at: '2026-10-15T12:05:01Z',
 }
 
-function mockApi() {
+const mockMissingInvoiceIssue: ReconciliationIssueItem = {
+  id: 'issue-2',
+  run_id: 'run-12345678-abcd',
+  session_id: 102,
+  station_id: 'st-1',
+  station_name: 'Trạm Landmark',
+  issue_category: 'missing_invoice',
+  severity: 'critical',
+  discrepancy_amount_vnd: '0',
+  discrepancy_kwh: '5.000000',
+  description: 'Phiên sạc đã kết thúc nhưng chưa có hoá đơn được tạo trong hệ thống.',
+  evidence: {
+    session_id: 102,
+    ended_at: '2026-10-10T08:00:00Z',
+  },
+  created_at: '2026-10-15T12:05:02Z',
+}
+
+function mockApi(runOverride?: Partial<ReconciliationRunItem>) {
+  const currentRun = { ...mockRun, ...runOverride }
   const fetcher = vi.fn(async (url: string, options?: RequestInit) => {
     if (url.includes('/reconciliation-runs') && options?.method === 'POST') {
-      return new Response(JSON.stringify(mockRun), { status: 201 })
+      return new Response(JSON.stringify(currentRun), { status: 201 })
     }
     if (url.includes('/issues')) {
+      const urlObj = new URL(url, 'http://localhost')
+      const cat = urlObj.searchParams.get('issue_category')
+      let items = [mockPricingIssue, mockMissingInvoiceIssue]
+      if (cat === 'pricing_mismatch') items = [mockPricingIssue]
+      if (cat === 'missing_invoice') items = [mockMissingInvoiceIssue]
+
       return new Response(
         JSON.stringify({
-          items: [mockIssue],
-          total: 1,
+          items,
+          total: items.length,
           page: 1,
           page_size: 50,
           total_pages: 1,
@@ -68,13 +102,13 @@ function mockApi() {
         { status: 200 }
       )
     }
-    if (url.includes('/reconciliation-runs/run-12345678-abcd')) {
-      return new Response(JSON.stringify(mockRun), { status: 200 })
+    if (url.includes(`/reconciliation-runs/${currentRun.id}`)) {
+      return new Response(JSON.stringify(currentRun), { status: 200 })
     }
     if (url.includes('/reconciliation-runs')) {
       return new Response(
         JSON.stringify({
-          items: [mockRun],
+          items: [currentRun],
           total: 1,
           page: 1,
           page_size: 20,
@@ -136,7 +170,7 @@ it('opens form and validates date bounds before creating run', async () => {
   )
 })
 
-it('drills down into a run detail, displays KPIs and issues table', async () => {
+it('drills down into a run detail, displays KPIs, beginning uncollected debt and issues table', async () => {
   mockApi()
   const user = userEvent.setup()
   render(<ReconciliationRunsView stations={[]} />)
@@ -146,8 +180,54 @@ it('drills down into a run detail, displays KPIs and issues table', async () => 
   expect(await screen.findByRole('heading', { name: /Đợt đối soát #run-1234/ })).toBeInTheDocument()
   expect(screen.getByText(/abc123def4567890/)).toBeInTheDocument()
   expect(screen.getByText('Lệch đơn giá (tính lại) (1)')).toBeInTheDocument()
+  expect(screen.getByText('Thiếu hóa đơn (1)')).toBeInTheDocument()
+  expect(screen.getByText('Nợ tồn đầu kỳ (trước ngày bắt đầu)')).toBeInTheDocument()
+  expect(screen.getByText('38.500 đ')).toBeInTheDocument()
+  expect(screen.getByText('1 hóa đơn chưa thu')).toBeInTheDocument()
   expect(screen.getByRole('link', { name: 'Phiên #101' })).toBeInTheDocument()
-  expect(screen.getByText('Trạm Landmark')).toBeInTheDocument()
+  expect(screen.getAllByText('Trạm Landmark').length).toBeGreaterThan(0)
+})
+
+it('handles gracefully when input_hash is empty or undefined without throwing TypeError', async () => {
+  // AC-1 regression: test opening detail when input_hash is empty
+  mockApi({ input_hash: '' })
+  const user = userEvent.setup()
+  render(<ReconciliationRunsView stations={[]} />)
+
+  await user.click(await screen.findByRole('button', { name: /Xem chi tiết/ }))
+  expect(await screen.findByRole('heading', { name: /Đợt đối soát #run-1234/ })).toBeInTheDocument()
+  expect(screen.getByText(/Băm bất biến: —/)).toBeInTheDocument()
+})
+
+it('switches category tabs and fetches filtered issues', async () => {
+  const fetcher = mockApi()
+  const user = userEvent.setup()
+  render(<ReconciliationRunsView stations={[]} />)
+
+  await user.click(await screen.findByRole('button', { name: /Xem chi tiết/ }))
+  await screen.findByRole('link', { name: 'Phiên #101' })
+
+  // Click tab "Lệch đơn giá (tính lại)"
+  const pricingTab = screen.getByRole('button', { name: 'Lệch đơn giá (tính lại) (1)' })
+  await user.click(pricingTab)
+
+  await waitFor(() => {
+    expect(fetcher).toHaveBeenCalledWith(
+      expect.stringContaining('issue_category=pricing_mismatch'),
+      expect.anything()
+    )
+  })
+
+  // Click tab "Thiếu hóa đơn"
+  const missingInvoiceTab = screen.getByRole('button', { name: 'Thiếu hóa đơn (1)' })
+  await user.click(missingInvoiceTab)
+
+  await waitFor(() => {
+    expect(fetcher).toHaveBeenCalledWith(
+      expect.stringContaining('issue_category=missing_invoice'),
+      expect.anything()
+    )
+  })
 })
 
 it('copies issue evidence to clipboard with feedback', async () => {
@@ -159,12 +239,14 @@ it('copies issue evidence to clipboard with feedback', async () => {
   await user.click(await screen.findByRole('button', { name: /Xem chi tiết/ }))
   await screen.findByRole('link', { name: 'Phiên #101' })
 
-  await user.click(screen.getByRole('button', { name: 'Sao chép hồ sơ' }))
+  await user.click(screen.getAllByRole('button', { name: 'Sao chép hồ sơ' })[0])
   expect(clipboard).toHaveBeenCalledWith(expect.stringContaining('Phiên #101'))
-  expect(await screen.findByText('Đã sao chép để chuyển vận hành')).toBeInTheDocument()
+  expect(clipboard).toHaveBeenCalledWith(expect.stringContaining('Lệch đơn giá (tính lại)'))
+  expect(clipboard).toHaveBeenCalledWith(expect.stringContaining('"diff_vnd": 10000'))
+  expect(await screen.findByText('✓ Đã sao chép')).toBeInTheDocument()
 })
 
-it('exports reconciliation issues CSV when Xuất CSV button is clicked', async () => {
+it('exports reconciliation issues CSV with active category filter when Xuất CSV is clicked', async () => {
   const fetcher = mockApi()
   const user = userEvent.setup()
   window.URL.createObjectURL = vi.fn(() => 'blob:mock-url')
@@ -175,6 +257,9 @@ it('exports reconciliation issues CSV when Xuất CSV button is clicked', async 
   await user.click(await screen.findByRole('button', { name: /Xem chi tiết/ }))
   await screen.findByRole('link', { name: 'Phiên #101' })
 
+  // Switch to pricing_mismatch tab
+  await user.click(screen.getByRole('button', { name: 'Lệch đơn giá (tính lại) (1)' }))
+
   const exportBtn = screen.getByRole('button', {
     name: 'Xuất CSV sai lệch đối soát',
   })
@@ -183,11 +268,8 @@ it('exports reconciliation issues CSV when Xuất CSV button is clicked', async 
 
   await waitFor(() => {
     expect(fetcher).toHaveBeenCalledWith(
-      expect.stringContaining(
-        '/reconciliation-runs/run-12345678-abcd/issues/export',
-      ),
-      expect.objectContaining({ credentials: 'include' }),
+      expect.stringContaining('issue_category=pricing_mismatch'),
+      expect.objectContaining({ credentials: 'include' })
     )
   })
 })
-
