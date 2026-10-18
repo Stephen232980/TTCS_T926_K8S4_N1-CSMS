@@ -163,7 +163,7 @@ export function ReservationForm({ connectorId, capability, available, ownReserva
     <button type="button" className="secondary-button driver-reservation-cancel" disabled={busy && !!attempt} onClick={closePopup}>Hủy</button>
     </dialog>
     {!expanded && attempt && <p>Yêu cầu trước chưa rõ kết quả. Mở lại để thử lại cùng yêu cầu.</p>}
-    {!expanded && ownReservation && <p>Đầu nối đang được giữ cho bạn. Xem trạng thái tại Đặt chỗ của bạn.</p>}
+    {!expanded && ownReservation && <p>Đầu nối đang được giữ cho bạn. <a href="#driver-reservations">Xem lịch sử đặt chỗ</a></p>}
     {!expanded && notice && <p role="status">{notice}</p>}
   </section>
 }

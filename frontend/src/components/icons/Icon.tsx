@@ -17,8 +17,10 @@ export type IconName =
   | 'close'
   | 'logout'
   | 'wallet'
+  | 'bell'
 
 const paths: Record<IconName, ReactNode> = {
+  bell: <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM10 21h4" />,
   wallet: <path d="M21 7V5a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h15a2 2 0 0 0 2-2v-2M16 12h5v4h-5a2 2 0 0 1 0-4Z" />,
   bolt: <path d="m13 2-8 11h6l-1 9 8-12h-6l1-8Z" />,
   dashboard: <path d="M4 13h6V4H4v9Zm0 7h6v-3H4v3Zm10 0h6v-9h-6v9Zm0-13h6V4h-6v3Z" />,
