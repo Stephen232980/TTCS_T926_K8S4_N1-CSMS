@@ -33,7 +33,15 @@ it('restores the saved request on reload without showing deletion success', asyn
   }])
   render(<DriverPrivacy />)
   expect(await screen.findByText('Yêu cầu saved-request')).toBeInTheDocument()
-  expect(screen.getByText('Đã duyệt, chưa thực thi')).toBeInTheDocument()
+  expect(screen.getByText('Đã duyệt · Chờ xử lý')).toBeInTheDocument()
   expect(screen.getByText(/Cần xử lý khoản nợ/)).toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Gửi yêu cầu' })).not.toBeInTheDocument()
+})
+
+it('describes completed anonymization without claiming all financial history was deleted', async () => {
+  vi.mocked(adminRequest).mockResolvedValueOnce([{id:'completed',status:'approved',execution_status:'completed',blockers:[]}])
+  render(<DriverPrivacy />)
+  expect(await screen.findByText('Đã hoàn tất ẩn danh')).toBeInTheDocument()
+  expect(screen.queryByText('Đã duyệt · Chờ xử lý')).not.toBeInTheDocument()
+  expect(screen.getByText(/Liên kết với tài khoản gốc đã được gỡ/)).toBeInTheDocument()
 })

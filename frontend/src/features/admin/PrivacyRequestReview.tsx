@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { dateTime } from './adminApi'
 import { ErrorNotice } from './AdminShared'
 import { fetchPrivacyRequests, reviewPrivacyRequest, type PrivacyReceipt, executePrivacyRequest, DEFAULT_PRIVACY_POLICY_VERSION } from './privacyApi'
 
@@ -25,80 +26,70 @@ export function PrivacyRequestReview() {
   const [requests, setRequests] = useState<PrivacyReceipt[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<unknown>(null)
-  const [reason, setReason] = useState('')
-  const [policy, setPolicy] = useState(DEFAULT_PRIVACY_POLICY_VERSION)
-  const [confirm, setConfirm] = useState('')
-  const [busy, setBusy] = useState(false)
-
+  const [revision, setRevision] = useState(0)
   useEffect(() => {
     const controller = new AbortController()
     void fetchPrivacyRequests(controller.signal).then(data => {
       if (!controller.signal.aborted) setRequests(data)
     }).catch(err => {
       if (!controller.signal.aborted) setError(err)
-    }).finally(() => {
-      if (!controller.signal.aborted) setLoading(false)
-    })
+    }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [])
-
-  async function refresh() {
-    setLoading(true)
-    setError(null)
-    try { setRequests(await fetchPrivacyRequests()) }
-    catch (err) { setError(err) }
-    finally { setLoading(false) }
-  }
-
-  async function decide(id: string, decision: 'approved' | 'rejected') {
-    setBusy(true)
-    setError(null)
-    try {
-      const receipt = await reviewPrivacyRequest(id, decision, reason.trim(), policy.trim())
-      setRequests(rows => rows.map(row => row.id === id ? receipt : row))
-      setReason('')
-      setPolicy(DEFAULT_PRIVACY_POLICY_VERSION)
-    } catch (err) { setError(err) }
-    finally { setBusy(false) }
-  }
-
-  async function process(id: string) {
-    setBusy(true)
-    setError(null)
-    try {
-      const result = await executePrivacyRequest(id, reason.trim(), confirm)
-      setRequests(rows => rows.map(row => row.id === id ? result : row))
-      setConfirm('')
-    } catch (err) { setError(err) }
-    finally { setBusy(false) }
-  }
-
-  return <section className="admin-section" aria-labelledby="privacy-requests-title">
-    <h2 id="privacy-requests-title">Yêu cầu xử lý dữ liệu cá nhân</h2>
-    <p>Sau khi duyệt, hệ thống xếp hàng thực thi. Job sẽ thu hồi đăng nhập/thẻ, tách định danh; chứng từ giữ tối thiểu 10 năm trong phạm vi hạn chế.</p>
-    <button type="button" className="admin-button secondary" disabled={loading || busy} onClick={() => void refresh()}>Làm mới yêu cầu</button>
-    <ErrorNotice error={error} onRetry={() => void refresh()} />
+  }, [revision])
+  function refresh() { setLoading(true); setError(null); setRevision(v => v + 1) }
+  return <section className="admin-privacy-requests" aria-labelledby="privacy-requests-title" aria-busy={loading}>
+    <div className="admin-privacy-toolbar"><h2 id="privacy-requests-title">Yêu cầu xử lý dữ liệu cá nhân</h2>
+      <button type="button" disabled={loading} onClick={refresh}>Làm mới yêu cầu</button>
+    </div>
+    <p className="admin-privacy-policy">Sau khi duyệt, hệ thống ẩn danh tài khoản và gỡ liên kết định danh với lịch sử sạc. Hóa đơn, sổ cái và số liệu doanh thu được giữ lại.</p>
+    <ErrorNotice error={error} onRetry={refresh} />
     {loading && <p role="status">Đang tải yêu cầu…</p>}
-    {!loading && !requests.length && <p>Chưa có yêu cầu.</p>}
-    <label>Lý do quyết định <input value={reason} maxLength={500} onChange={e => setReason(e.target.value)} /></label>
-    <label>Phiên bản policy đã phê duyệt <input value={policy} maxLength={100} onChange={e => setPolicy(e.target.value)} /></label>
-    {requests.map(row => <article className="admin-card" key={row.id}>
-      <h3>Yêu cầu {row.id}</h3>
-      <p>Tài khoản: {row.user_id}</p>
-      <p>{row.reason}</p>
-      <p>Trạng thái: {{ pending: 'Chờ duyệt', approved: 'Đã duyệt', rejected: 'Đã từ chối' }[row.status]} · Thực thi: {{ blocked: 'bị chặn', queued: 'đã xếp hàng', processing: 'đang xử lý', needs_review: 'cần xem xét', completed: 'hoàn tất xử lý' }[row.execution_status]}</p>
-      {row.decision_reason && <p>Lý do quyết định: {row.decision_reason} · Policy: {row.policy_version}</p>}
-      {row.execution_status === 'completed' && <p>Đã xử lý định danh theo policy. Chứng từ tài chính và số đo được giữ lại; liên kết với tài khoản gốc đã được gỡ, không xóa số liệu tài chính.</p>}
-      {row.last_error && <p role="status">{blockers[row.last_error] ?? row.last_error}</p>}
-      <ul>{row.blockers.map(code => <li key={code}>{blockers[code] ?? code}</li>)}</ul>
-      {row.status === 'pending' && <div className="admin-actions">
-        <button type="button" className="admin-button primary" disabled={busy || reason.trim().length < 3 || !policy.trim()} onClick={() => void decide(row.id, 'approved')}>Duyệt yêu cầu</button>
-        <button type="button" className="admin-button danger" disabled={busy || reason.trim().length < 3 || !policy.trim()} onClick={() => void decide(row.id, 'rejected')}>Từ chối yêu cầu</button>
-      </div>}
-      {row.status === 'approved' && row.execution_status !== 'completed' && <div>
-        <label>Xác nhận thực thi <input value={confirm} placeholder="EXECUTE_PRIVACY_REQUEST" onChange={e => setConfirm(e.target.value)} /></label>
-        <button type="button" className="admin-button danger" disabled={busy || row.blockers.length > 0 || reason.trim().length < 3 || confirm !== 'EXECUTE_PRIVACY_REQUEST'} onClick={() => void process(row.id)}>Xếp hàng thực thi / thử lại</button>
-      </div>}
-    </article>)}
+    {!loading && !error && !requests.length && <p>Chưa có yêu cầu.</p>}
+    {requests.map(row => <RequestReview key={row.id} row={row} onUpdate={receipt => setRequests(rows => rows.map(item => item.id === receipt.id ? receipt : item))} />)}
   </section>
+}
+const statusLabels = { pending: 'Chờ duyệt', approved: 'Đã duyệt', rejected: 'Đã từ chối' }
+const executionLabels = { blocked: 'bị chặn', queued: 'đã xếp hàng', processing: 'đang xử lý', needs_review: 'cần xem xét', completed: 'hoàn tất xử lý' }
+function RequestReview({ row, onUpdate }: { row: PrivacyReceipt; onUpdate: (row: PrivacyReceipt) => void }) {
+  const [reason, setReason] = useState('')
+  const [policy, setPolicy] = useState(DEFAULT_PRIVACY_POLICY_VERSION)
+  const [confirm, setConfirm] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<unknown>(null)
+  const retryable = row.status === 'approved' && (row.execution_status === 'needs_review' || row.execution_status === 'blocked')
+  async function decide(decision: 'approved' | 'rejected') {
+    setBusy(true); setError(null)
+    try { onUpdate(await reviewPrivacyRequest(row.id, decision, reason.trim(), policy.trim())); setReason('') }
+    catch (err) { setError(err) } finally { setBusy(false) }
+  }
+  async function retry() {
+    setBusy(true); setError(null)
+    try { onUpdate(await executePrivacyRequest(row.id, reason.trim(), 'EXECUTE_PRIVACY_REQUEST')); setConfirm(false); setReason('') }
+    catch (err) { setError(err) } finally { setBusy(false) }
+  }
+  return <details className="admin-privacy-request" open={row.status === 'pending' ? true : undefined}>
+    <summary><strong>{statusLabels[row.status] ?? 'Cần kiểm tra trạng thái'}</strong>Yêu cầu {dateTime(row.created_at)} · {executionLabels[row.execution_status] ?? 'chưa xác định'}</summary>
+    <div className="admin-privacy-detail">
+      <dl><dt>Mã yêu cầu</dt><dd>{row.id}</dd><dt>Mã tài khoản</dt><dd>{row.user_id}</dd><dt>Lý do yêu cầu</dt><dd>{row.reason}</dd></dl>
+      <p>Trạng thái: {statusLabels[row.status]} · Thực thi: {executionLabels[row.execution_status]}</p>
+      {row.decision_reason && <p>Lý do quyết định: {row.decision_reason} · Chính sách: {row.policy_version}</p>}
+      {row.execution_status === 'completed' && <p>Đã gỡ liên kết với tài khoản gốc; chứng từ tài chính và số đo được giữ lại.</p>}
+      {row.last_error && <p role="status">{blockers[row.last_error] ?? 'Xử lý chưa hoàn tất. Hãy kiểm tra hồ sơ trước khi thử lại.'}</p>}
+      {row.blockers.length > 0 && <div><strong>Cần giải quyết trước khi xử lý</strong><ul className="admin-privacy-blockers">{row.blockers.map(code => <li key={code}>{blockers[code] ?? 'Có nghĩa vụ chưa hoàn tất; cần kiểm tra hồ sơ.'}</li>)}</ul></div>}
+      <ErrorNotice error={error} />
+      {(row.status === 'pending' || retryable) && <div className="admin-privacy-form">
+        <label>Lý do quyết định<input value={reason} maxLength={500} disabled={busy} onChange={e => setReason(e.target.value)} /></label>
+        {row.status === 'pending' && <>
+          <label>Chính sách đã phê duyệt<input value={policy} maxLength={100} disabled={busy} onChange={e => setPolicy(e.target.value)} /></label>
+          <div className="admin-actions"><button type="button" className="admin-primary" disabled={busy || reason.trim().length < 3 || !policy.trim()} onClick={() => void decide('approved')}>Duyệt yêu cầu</button>
+          <button type="button" className="admin-danger" disabled={busy || reason.trim().length < 3 || !policy.trim()} onClick={() => void decide('rejected')}>Từ chối yêu cầu</button></div>
+        </>}
+        {retryable && <>
+          <label className="admin-privacy-confirm"><input type="checkbox" checked={confirm} disabled={busy} onChange={e => setConfirm(e.target.checked)} />Tôi xác nhận thử lại xử lý ẩn danh theo chính sách đã duyệt.</label>
+          <button type="button" className="admin-danger" disabled={busy || row.blockers.length > 0 || reason.trim().length < 3 || !confirm} onClick={() => void retry()}>Thử lại xử lý</button>
+        </>}
+        {busy && <p role="status">Đang xử lý yêu cầu…</p>}
+      </div>}
+    </div>
+  </details>
 }

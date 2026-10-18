@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, expect, it, vi } from 'vitest'
 import { StationOperation } from './StationOperation'
@@ -39,4 +39,19 @@ it('keeps the pending form on version conflict and offers reload instead of clai
   expect(changed).not.toHaveBeenCalled()
   await user.click(screen.getByRole('button', { name: 'Tải lại trạm' }))
   expect(reload).toHaveBeenCalledOnce()
+})
+
+
+it('cancels the modal without changing operation and restores the trigger focus', async () => {
+  const request = vi.fn(); vi.stubGlobal('fetch', request)
+  const user = userEvent.setup()
+  render(<StationOperation station={station} onChanged={vi.fn()} onReload={vi.fn()} />)
+  const trigger = screen.getByRole('button', { name: 'Tạm ngừng trạm' })
+  await user.click(trigger)
+  const modal = screen.getByRole('dialog', { name: 'Tạm ngừng Trạm thử' })
+  await user.type(screen.getByLabelText('Lý do tạm ngừng'), 'Chưa xác nhận')
+  fireEvent(modal, new Event('cancel', { cancelable: true }))
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(trigger).toHaveFocus()
+  expect(request).not.toHaveBeenCalled()
 })

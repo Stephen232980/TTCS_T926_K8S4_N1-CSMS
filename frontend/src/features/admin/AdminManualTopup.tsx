@@ -379,12 +379,9 @@ export function AdminManualTopup({ adminId = 'admin' }: { adminId?: string }) {
                   value={externalReference}
                   maxLength={128}
                   aria-invalid={!!fields.external_reference}
-                  aria-describedby="topup-reference-help topup-reference-error"
+                  aria-describedby={fields.external_reference ? "topup-reference-error" : undefined}
                   onChange={(event) => setExternalReference(event.target.value)}
                 />
-                <p id="topup-reference-help">
-                  Nhập mã chứng từ bên ngoài nếu có. Mã phiếu nạp do CSMS tự tạo; bạn không cần nhập mã phiếu.
-                </p>
                 <p
                   id="topup-reference-error"
                   className="admin-topup-field-error"

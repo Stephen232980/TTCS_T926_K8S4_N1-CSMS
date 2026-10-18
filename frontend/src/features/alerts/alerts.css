@@ -38,3 +38,5 @@
   .owner-shell .csms-alerts-popover { width: min(400px, max(280px, 31%)); }
   .operator-shell .csms-alerts-popover { width: 320px; }
 }
+
+.csms-alerts button[aria-expanded="true"], .csms-alerts button[aria-expanded="true"]:hover:not(:disabled) { background: #173b47; color: #fff; }

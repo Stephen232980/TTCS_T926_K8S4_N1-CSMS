@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { changed, dateLabel, definitiveRejection, json, labels, reservationRequest, type Reservation, type ReservationPage } from './api'
 import './reservations.css'
 
-export function DriverReservations({ ownerId, focusedId }: { ownerId: string; focusedId?: string }) {
+export function DriverReservations({ ownerId, focusedId, standalone = false }: { ownerId: string; focusedId?: string; standalone?: boolean }) {
   const [result, setResult] = useState<ReservationPage | null>(null)
   const [page, setPage] = useState(1)
   const [expanded, setExpanded] = useState(!!focusedId)
@@ -53,7 +53,7 @@ export function DriverReservations({ ownerId, focusedId }: { ownerId: string; fo
     } finally { inFlight.current = false; if (mounted.current) setBusy('') }
   }
   const current = result?.items.find(item => ['pending', 'active', 'uncertain', 'cancel_pending', 'expiry_release_pending'].includes(item.status))
-  return <details className="driver-reservations" open={expanded} onToggle={event => setExpanded(event.currentTarget.open)}>
+  return <details className={`driver-reservations${standalone ? ' driver-reservations-page' : ''}`} open={standalone || expanded} onToggle={event => setExpanded(event.currentTarget.open)}>
     <summary>Đặt chỗ của bạn{current ? ` · ${labels[current.status]}` : result ? ` (${result.total})` : ' · Đang tải'}</summary>
     <div className="driver-reservation-content">
       {error && <p role="alert">{error}{result && ' Dữ liệu đang hiển thị có thể cũ.'}</p>}

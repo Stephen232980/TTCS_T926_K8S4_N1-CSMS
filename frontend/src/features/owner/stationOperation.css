@@ -18,3 +18,13 @@
 .owner-shell .owner-operation .operation-enable:hover:not(:disabled) { background: #0d624b; }
 .owner-shell .owner-operation .operation-suspend { background: #fff0df; color: #8a3b06; }
 .owner-shell .owner-operation .operation-suspend:hover:not(:disabled) { background: #ffe0bc; }
+
+.owner-operation-dialog { width: min(520px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); margin: auto; padding: 24px; box-sizing: border-box; color: #193d4b; background: #fff; border: 0; border-radius: 16px; overflow: auto; box-shadow: 0 16px 48px rgb(25 61 75 / 24%); }
+.owner-operation-dialog::backdrop { background: rgb(13 38 49 / 48%); }
+.owner-operation-dialog form { display: grid; gap: 18px; }
+.owner-operation-dialog-heading { display: flex; gap: 16px; align-items: center; justify-content: space-between; }
+.owner-operation-dialog-heading h2 { margin: 0; font-size: 20px; overflow-wrap: anywhere; }
+.owner-operation-dialog-heading button { flex: none; padding: 8px; }
+.owner-operation-dialog-heading svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.owner-operation-dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
+@media (max-width: 800px) { .owner-operation-dialog { padding: 20px; } }
