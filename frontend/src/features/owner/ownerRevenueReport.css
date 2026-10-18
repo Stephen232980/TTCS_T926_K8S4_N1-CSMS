@@ -350,3 +350,47 @@
   padding: 40px 16px !important;
   color: var(--muted, #526e7b);
 }
+
+/* Revenue keeps the report controls and table within the operating viewport. */
+.owner-revenue-page { overflow: hidden; }
+.owner-revenue-container { flex: 1; min-height: 0; gap: 12px; padding: 0 4px; overflow: auto; }
+.owner-revenue-toolbar { flex: none; gap: 8px; padding: 8px 12px; box-shadow: none; }
+.owner-revenue-period-group { padding: 2px; }
+.owner-revenue-filters { gap: 8px; min-width: 0; }
+.owner-shell .owner-revenue-toolbar button, .owner-shell .owner-revenue-toolbar select { min-height: 36px; height: auto; padding: 6px 12px; }
+.owner-revenue-cards { flex: none; gap: 12px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.owner-metric-card { padding: 12px 16px; gap: 6px; min-width: 0; border-left: 0; box-shadow: none; }
+.owner-metric-title { font-size: 12px; letter-spacing: 0; text-transform: none; }
+.owner-metric-value { font-size: 24px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.owner-metric-subtext { font-size: 12px; gap: 3px; }
+.owner-revenue-chart-card { flex: none; padding: 12px 16px; gap: 8px; box-shadow: none; }
+.owner-timeline-bars { height: clamp(96px, 15vh, 150px); }
+.owner-revenue-table-card { flex: 1 0 180px; min-height: 180px; box-shadow: none; }
+.owner-table-header { flex: none; padding: 12px 16px; gap: 12px; flex-wrap: wrap; }
+.owner-revenue-table-wrap { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.owner-revenue-table thead th { position: sticky; top: 0; z-index: 1; background: #f2f6f7; }
+.owner-table-pagination { flex: none; padding: 8px 16px; }
+.owner-revenue-loading { flex: none; margin: 0; color: #526e7b; }
+.owner-bar-col:focus-visible .owner-bar-tooltip { display: block; }
+.owner-date-inputs { flex-wrap: wrap; }
+@media (min-width: 1101px) { .owner-revenue-container { overflow: hidden; } .owner-revenue-table-card { flex: 1; min-height: 120px; } }
+@media (min-width: 1101px) and (max-height: 760px) { .owner-revenue-page { gap: 10px; padding-top: 18px; padding-bottom: 18px; } .owner-revenue-container { gap: 8px; } .owner-metric-card { padding: 10px 12px; } .owner-timeline-bars { height: 84px; } }
+@media (max-width: 1100px) { .owner-revenue-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } .owner-revenue-table-card { flex: none; height: 380px; } }
+@media (max-width: 800px) {
+  .owner-revenue-page { height: calc(100dvh - 52px); overflow-y: auto; overflow-x: hidden; }
+  .owner-revenue-container { overflow: visible; flex: none; }
+  .owner-revenue-toolbar, .owner-revenue-filters { align-items: stretch; }
+  .owner-revenue-filters { width: 100%; }
+  .owner-revenue-period-group { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); width: 100%; }
+  .owner-shell .owner-revenue-toolbar button, .owner-shell .owner-revenue-toolbar select { min-height: 44px; padding: 6px 8px; }
+  .owner-revenue-cards { grid-template-columns: 1fr; }
+  .owner-chart-header { flex-wrap: wrap; gap: 8px; }
+  .owner-revenue-table-card { height: min(60vh, 460px); min-height: 260px; }
+  .owner-table-pagination { flex-wrap: wrap; gap: 8px; }
+}
+
+.owner-revenue-table { min-width: 1180px; }
+.owner-revenue-table td { white-space: nowrap; padding: 10px 14px; }
+.owner-revenue-table td:first-child { max-width: 220px; white-space: normal; overflow-wrap: anywhere; }
+.owner-cp-code { white-space: nowrap; }
+@media (min-width: 1101px) and (max-height: 760px) { .owner-revenue-chart-card { padding: 8px 16px; gap: 4px; } .owner-timeline-bars { height: 64px; } }
