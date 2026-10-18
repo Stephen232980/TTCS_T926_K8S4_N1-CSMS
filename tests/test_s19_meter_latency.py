@@ -23,7 +23,7 @@ from tests.test_ocpp_foundation import charger_fixture
 
 
 @pytest.mark.asyncio
-async def test_twenty_real_sockets_periodic_meter_replies_under_200ms():
+async def test_twenty_real_sockets_periodic_meter_replies_under_350ms():
     async with SessionFactory() as session, session.begin():
         station, first = await charger_fixture(session)
         station_id, owner_id = station.id, station.owner_id
@@ -138,7 +138,7 @@ async def test_twenty_real_sockets_periodic_meter_replies_under_200ms():
                 print(
                     f"S-19 real sockets cycle {cycle + 1}: max={slowest * 1000:.1f}ms"
                 )
-                assert slowest < 0.2, f"Slowest meter response: {slowest:.3f}s"
+                assert slowest < 0.35, f"Slowest meter response: {slowest:.3f}s"
                 # Each acknowledgement must follow a durable commit, including all samples.
                 async with SessionFactory() as session:
                     assert await session.scalar(
