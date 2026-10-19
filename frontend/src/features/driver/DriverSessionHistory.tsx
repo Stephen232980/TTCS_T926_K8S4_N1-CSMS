@@ -97,8 +97,7 @@ export function DriverSessionHistory() {
     setRoute(next)
   }
   if (route.session && route.invoice) return <div className="driver-history-invoice-view">
-    <button type="button" className="secondary-button" onClick={() => navigate({ ...route, invoice: false })}><Icon name="chevronLeft" />Quay lại phiên sạc</button>
-    <DriverInvoicePage key={route.session} sessionId={route.session} onOpen={session => navigate({ ...route, session, invoice: true })} onBack={() => navigate({ ...route, invoice: false })} />
+    <DriverInvoicePage backLabel="Quay lại phiên sạc" key={route.session} sessionId={route.session} onOpen={session => navigate({ ...route, session, invoice: true })} onBack={() => navigate({ ...route, invoice: false })} />
   </div>
   return route.session ? <HistoryDetail route={route} navigate={navigate} /> : <SessionList route={route} navigate={navigate} />
 }

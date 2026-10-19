@@ -6,7 +6,7 @@ import { notifySessionUnauthorized } from '../auth/sessionEvents'
 import { historyDate, readHistoryRoute } from './driverHistoryApi'
 
 vi.mock('../auth/sessionEvents', () => ({ notifySessionUnauthorized: vi.fn() }))
-vi.mock('./DriverInvoicePage', () => ({ DriverInvoicePage: ({sessionId}: {sessionId?:number}) => <section>Hóa đơn phiên {sessionId}</section> }))
+vi.mock('./DriverInvoicePage', () => ({ DriverInvoicePage: ({sessionId,onBack,backLabel}: {sessionId?:number;onBack:()=>void;backLabel?:string}) => <section>Hóa đơn phiên {sessionId}<button onClick={onBack}>{backLabel}</button></section> }))
 const item = { id: 41, station_id: 'station', station_name: 'Trạm Trung Tâm', charge_point_code: 'CP-01', connector_number: 1, started_at: '2026-10-18T23:30:00Z', ended_at: '2026-10-19T00:30:00Z', energy_kwh: '1.500000', latest_meter_wh: '2500', meter_start_wh: '1000', review_reasons: [], abnormal_since: null }
 const page = { items: [item], total: 12, page: 1, total_pages: 2 }
 const detail = { ...item, elapsed_seconds: 3600, needs_attention: false }
@@ -104,4 +104,19 @@ it('keeps missing final energy unknown while using readings for open sessions', 
   render(<DriverSessionHistory />)
   expect(await screen.findByText('Chưa có số đo')).toBeInTheDocument()
   expect(screen.getByText('1,5 kWh')).toBeInTheDocument()
+})
+
+
+it('resets a session deep link when returning to history from the account menu', async () => {
+  const { DriverWorkspace } = await import('./DriverWorkspace')
+  window.history.replaceState(null,'','/#driver-history?page=2&state=closed&session=41')
+  vi.stubGlobal('fetch',vi.fn().mockImplementation((url:string)=>Promise.resolve(response(url.includes('/notifications')?{items:[],next_cursor:null}:url.includes('my-sessions')?page:detail))))
+  render(<DriverWorkspace currentUser={{id:'driver',email:'driver@example.com',roles:['driver']}} onLogout={async()=>{}} />)
+  expect(await screen.findByRole('heading',{name:'Phiên #41'})).toBeInTheDocument()
+  const user=userEvent.setup()
+  await user.click(screen.getByRole('button',{name:'Tài khoản'}))
+  await user.click(screen.getByRole('button',{name:'Lịch sử phiên sạc',exact:true}))
+  expect(await screen.findByRole('link',{name:'Phiên #41 · Trạm Trung Tâm'})).toBeInTheDocument()
+  expect(screen.queryByRole('heading',{name:'Phiên #41'})).not.toBeInTheDocument()
+  expect(window.location.hash).toBe('#driver-history')
 })
