@@ -98,6 +98,9 @@ async def test_real_migrated_backup_restore_and_application_read(tmp_path: Path)
         "csms-s62-backup:review",
     ]
 
+    if os.name != "nt":
+        args[3:3] = ["--user", f"{os.getuid()}:{os.getgid()}"]
+
     def run(*command):
         return subprocess.run(
             [*args, *command], capture_output=True, timeout=120, check=False
