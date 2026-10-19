@@ -478,6 +478,12 @@ class PrivacyRetentionService:
         external_refund_confirmed: bool = False,
         expected_balance_vnd: int | None = None,
     ) -> PrivacyReceipt:
+        # Match the worker's job -> request -> user -> wallet lock order.
+        job = await self.db.scalar(
+            select(PrivacyJob)
+            .where(PrivacyJob.request_id == request_id)
+            .with_for_update()
+        )
         request = await self.db.scalar(
             select(PrivacyRequest)
             .where(PrivacyRequest.id == request_id)
@@ -491,12 +497,15 @@ class PrivacyRetentionService:
             or request.policy_version != VERSION
         ):
             raise HTTPException(409, "Yêu cầu chưa đủ điều kiện duyệt")
+        if (
+            job is None
+            and await self.db.scalar(
+                select(PrivacyJob.id).where(PrivacyJob.request_id == request_id)
+            )
+            is not None
+        ):
+            raise HTTPException(409, "Hồ sơ vừa được duyệt; tải lại yêu cầu")
         await self._lock_user(request.user_id)
-        job = await self.db.scalar(
-            select(PrivacyJob)
-            .where(PrivacyJob.request_id == request_id)
-            .with_for_update()
-        )
         # Repeated submissions must not change money or requeue a running job.
         if job is not None and job.status in {"queued", "processing", "completed"}:
             return await self._receipt(request)

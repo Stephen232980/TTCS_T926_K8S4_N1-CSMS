@@ -85,7 +85,12 @@ async def test_external_confirmation_commits_one_debit_and_worker_completes():
         )
     engine = executor_engine()
     try:
-        assert await execute_job(engine, jid) == 3
+        async with asyncio.timeout(10):
+            checkpoint, replay = await asyncio.gather(
+                execute_job(engine, jid), retry(admin, rid)
+            )
+        assert checkpoint == 3
+        assert replay.execution_status in {"queued", "processing", "completed"}
     finally:
         await engine.dispose()
     assert (await retry(admin, rid)).execution_status == "completed"
