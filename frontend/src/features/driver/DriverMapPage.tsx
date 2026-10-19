@@ -24,21 +24,6 @@ export function DriverMapPage({ selectedStationId, onOpenStation }: { selectedSt
   const [result, setResult] = useState<Result | null>(null)
   const [selectedId, setSelectedId] = useState(selectedStationId)
   const [position, setPosition] = useState<MapPosition>()
-  const [selectionRevision, setSelectionRevision] = useState(0)
-  function selectStation(id: string) { setSelectedId(id); setSelectionRevision(value => value + 1) }
-  useEffect(() => {
-    let active = true
-    // Reuse permission already granted; a new permission prompt stays user initiated.
-    if (navigator.permissions && navigator.geolocation) {
-      void navigator.permissions.query({ name: 'geolocation' }).then(permission => {
-        if (active && permission.state === 'granted') navigator.geolocation.getCurrentPosition(
-          ({ coords }) => { if (active) setPosition({ latitude: coords.latitude, longitude: coords.longitude }) },
-          () => {}, { timeout: 10000, maximumAge: 60000 },
-        )
-      }).catch(() => {})
-    }
-    return () => { active = false }
-  }, [])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const loadedQuery = useRef(query)
@@ -98,19 +83,21 @@ export function DriverMapPage({ selectedStationId, onOpenStation }: { selectedSt
     {error && <div className="driver-error" role="alert"><p>{error}{result && ' Dữ liệu bên dưới có thể cũ.'}</p><button className="secondary-button" onClick={() => setRevision(value => value + 1)}>Thử lại</button></div>}
     {result?.search_too_broad && <p role="status">Có hơn 500 trạm phù hợp. Nhập tên hoặc địa chỉ cụ thể hơn để xem đầy đủ và sắp theo khoảng cách.</p>}
     {result && !result.search_too_broad && <div className="driver-station-layout">
-      <div className="driver-map-panel"><StationMap stations={mapStations} selectedId={selectedId} onSelect={selectStation} focusNearby selectionRevision={selectionRevision} onLocate={next => { setSelectedId(undefined); setPosition(next) }} userPosition={position} /></div>
+      <div className="driver-map-panel"><StationMap stations={mapStations} selectedId={selectedId} onSelect={setSelectedId} onLocate={setPosition} userPosition={position} /></div>
       <section className="driver-station-results" aria-label="Danh sách trạm trên bản đồ">
         <div className="driver-results-heading"><h2>{position ? 'Trạm gần bạn' : 'Trạm đang hoạt động'}</h2><span role="status">{stations.length} trạm</span></div>
+        <p className="driver-subtle">{position ? 'Sắp theo khoảng cách đường thẳng, không phải quãng đường lái xe.' : 'Bấm “Đến vị trí của tôi” trên bản đồ để sắp trạm gần bạn. Vị trí không gửi lên CSMS.'}</p>
+        <p className="driver-subtle">{result.generated_at && `Cập nhật ${new Date(result.generated_at).toLocaleTimeString('vi-VN')}. `}Làm mới mỗi 15 giây. Số đầu nối rảnh có thể thay đổi trước khi bạn đến.</p>
         {stations.length === 0 && <p>Chưa có trạm đang hoạt động phù hợp. Hãy thử tên hoặc địa chỉ khác.</p>}
         {stations.map(station => <article key={station.id} className={`driver-station-card${selectedId === station.id ? ' is-selected' : ''}`}>
-          <button type="button" className="driver-station-select" onClick={() => selectStation(station.id)} aria-pressed={selectedId === station.id}><Icon name="station" /><span><strong>{station.name}</strong><span>{station.address}</span></span>{position && <span className="driver-distance">{distance(station, position).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} km</span>}</button>
+          <button type="button" className="driver-station-select" onClick={() => setSelectedId(station.id)} aria-pressed={selectedId === station.id}><Icon name="station" /><span><strong>{station.name}</strong><span>{station.address}</span></span>{position && <span className="driver-distance">{distance(station, position).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} km</span>}</button>
           <div className="driver-discovery-summary">
             <strong>{station.available_connectors ?? 0}/{station.total_connectors ?? 0} đầu nối rảnh</strong>
             <span>{[...new Set(station.connectors?.map(connector => `${connector.connector_type ?? 'Chưa khai báo loại'}${connector.current_type ? ` · ${connector.current_type}` : ''}${connector.max_power_kw ? ` · ${Number(connector.max_power_kw).toLocaleString('vi-VN')} kW` : ''}`))].join('; ') || 'Chưa khai báo đầu nối'}</span>
             <span>{station.energy_rate_vnd_per_kwh == null ? 'Chưa có giá sạc hiện hành' : `${station.energy_rate_vnd_per_kwh.toLocaleString('vi-VN')} đ/kWh`}</span>
             {station.idle_rate_vnd_per_minute != null && <span>Phí chiếm chỗ {station.idle_rate_vnd_per_minute.toLocaleString('vi-VN')} đ/phút · Miễn {station.grace_minutes ?? 0} phút</span>}
           </div>
-          <div className="driver-station-actions">{onOpenStation && station.energy_rate_vnd_per_kwh != null && <button className="secondary-button" disabled={!!error || loading} onClick={() => { selectStation(station.id); onOpenStation(station) }}>Xem đầu nối</button>}<a href={`https://www.openstreetmap.org/?mlat=${station.latitude}&mlon=${station.longitude}#map=17/${station.latitude}/${station.longitude}`} target="_blank" rel="noreferrer">Mở vị trí</a></div>
+          <div className="driver-station-actions">{onOpenStation && station.energy_rate_vnd_per_kwh != null && <button className="secondary-button" disabled={!!error || loading} onClick={() => { setSelectedId(station.id); onOpenStation(station) }}>Xem đầu nối</button>}<a href={`https://www.openstreetmap.org/?mlat=${station.latitude}&mlon=${station.longitude}#map=17/${station.latitude}/${station.longitude}`} target="_blank" rel="noreferrer">Mở vị trí</a></div>
         </article>)}
       </section>
     </div>}

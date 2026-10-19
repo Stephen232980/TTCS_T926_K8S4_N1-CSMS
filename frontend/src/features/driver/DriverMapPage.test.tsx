@@ -63,17 +63,3 @@ describe('DriverMapPage', () => {
     expect(fetchMock.mock.calls.every(([url]) => !url.includes('latitude') && !url.includes('longitude'))).toBe(true)
   })
 })
-
-
-it('prioritizes already-permitted browser location without another permission prompt', async () => {
-  const locate = vi.fn((success: PositionCallback) => success({ coords: { latitude: 10.7, longitude: 106.7 } } as GeolocationPosition))
-  vi.stubGlobal('navigator', Object.assign(Object.create(navigator), {
-    permissions: { query: vi.fn().mockResolvedValue({ state: 'granted' }) },
-    geolocation: { getCurrentPosition: locate },
-  }))
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => data }))
-  render(<DriverMapPage />)
-  expect(await screen.findByRole('heading', { name: 'Trạm gần bạn' })).toBeInTheDocument()
-  expect(locate).toHaveBeenCalledOnce()
-  expect(screen.queryByText(/Làm mới mỗi 15 giây/)).not.toBeInTheDocument()
-})
