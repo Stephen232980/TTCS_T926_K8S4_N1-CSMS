@@ -57,3 +57,17 @@ successful financial settlement without a backend record.
   Screenshots are UI evidence, not staging or financial acceptance.
 - Lint, TypeScript production build, Ruff and mypy. Remote CI and staging are
   reported separately after the fixes are pushed/deployed.
+
+## OCPP latency follow-up
+
+The existing 200 ms CI gate exposed repeated SQL compilation for periodic
+MeterValues writes. Small reports (1–16 accepted samples) now reuse a bounded,
+parameterized INSERT-from-SELECT statement; larger reports retain the batched
+VALUES path. Cached objects contain statement structure only, never report data.
+Charger/session locks, post-lock durable replay lookup, atomic samples/reply and
+commit-before-ACK are unchanged. No latency threshold or workload was relaxed.
+
+Local PostgreSQL validation: real 20-socket cycles 104.3 / 93.4 / 119.8 ms;
+94 charging/recovery/OCPP regression tests passed, including concurrent duplicate
+reports, committed reads, distinct values across calls, rollback and 1/4/16/17
+sample boundaries. These local timings do not replace remote CI results.
