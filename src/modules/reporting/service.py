@@ -1,3 +1,4 @@
+from collections.abc import AsyncGenerator, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
@@ -74,6 +75,9 @@ def resolve_report_range(
     """Resolve report start and end datetimes in Asia/Ho_Chi_Minh timezone."""
     now_local = (now_dt or datetime.now(UTC)).astimezone(REPORT_TIMEZONE)
     today = now_local.date()
+
+    if date_from and date_to and period == "month":
+        period = "custom"
 
     if period == "day":
         target_date = date_from or today
@@ -625,10 +629,9 @@ async def export_revenue_report_csv(
     from_str = start_dt.isoformat()
     to_str = end_dt.isoformat()
 
-    rows: list[list[Any]] = []
-    for item in cp_list:
-        rows.append(
-            [
+    async def generate_rows() -> AsyncGenerator[Sequence[Any], None]:
+        for item in cp_list:
+            yield [
                 from_str,
                 to_str,
                 "Asia/Ho_Chi_Minh",
@@ -654,9 +657,17 @@ async def export_revenue_report_csv(
                 item.unbilled_operating_kwh,
                 item.unbilled_missing_meter_sessions,
             ]
-        )
 
     filename = (
         f"revenue_report_{start_dt.strftime('%Y%m%d')}_{end_dt.strftime('%Y%m%d')}.csv"
     )
-    return build_csv_streaming_response(filename, REVENUE_CSV_HEADERS, rows)
+    extra_headers = {
+        "X-Export-Quota-Limit": "100000",
+        "X-Export-Timezone": "Asia/Ho_Chi_Minh",
+    }
+    return build_csv_streaming_response(
+        filename,
+        REVENUE_CSV_HEADERS,
+        generate_rows(),
+        extra_headers=extra_headers,
+    )

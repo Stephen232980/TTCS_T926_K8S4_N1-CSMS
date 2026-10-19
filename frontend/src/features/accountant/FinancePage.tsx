@@ -112,10 +112,14 @@ export function FinancePage({ area }: {area:FinanceArea}) {
   const handleExportRevenue = async () => {
     setExportingRevenue(true)
     try {
+      const dateFrom = params.get('date_from') || undefined
+      const dateTo = params.get('date_to') || undefined
+      const periodParam = params.get('period')
+      const period = periodParam || (dateFrom || dateTo ? 'custom' : 'month')
       await exportAccountantRevenueCsv({
-        period: 'month',
-        date_from: params.get('date_from') || undefined,
-        date_to: params.get('date_to') || undefined,
+        period,
+        date_from: dateFrom,
+        date_to: dateTo,
         station_id: params.get('station_id') || undefined,
       })
     } catch (err) {
