@@ -1,0 +1,10 @@
+[Unit]
+Description=Nightly CSMS database backup at 02:00 Vietnam time
+
+[Timer]
+OnCalendar=*-*-* 02:00:00 Asia/Ho_Chi_Minh
+Persistent=true
+Unit=csms-backup.service
+
+[Install]
+WantedBy=timers.target
