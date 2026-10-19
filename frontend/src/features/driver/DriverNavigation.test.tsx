@@ -2,13 +2,14 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, expect, it, vi } from 'vitest'
 import { DriverWorkspace } from './DriverWorkspace'
+vi.mock('./DriverSessionHistory', () => ({ DriverSessionHistory: () => <section>Danh sách phiên sạc riêng</section> }))
 vi.mock('./DriverCharging', () => ({ DriverCharging: () => <section>Phiên sạc đang theo dõi</section> }))
 vi.mock('./DriverMapPage', () => ({ DriverMapPage: () => <section>Bản đồ</section> }))
 vi.mock('../reservations/DriverReservations', () => ({ DriverReservations: ({focusedId}: {focusedId?:string}) => <section>Lịch sử riêng {focusedId}</section> }))
 vi.mock('./DriverPrivacy', () => ({ DriverPrivacy: () => <section>Yêu cầu ẩn danh</section> }))
 afterEach(() => {vi.unstubAllGlobals(); window.history.replaceState(null, '', '/')})
 const driver = { id:'driver', email:'driver@example.com', roles:['driver'] }
-it('puts the heading first and provides three account options with separate history navigation', async () => {
+it('puts the heading first and provides four account options with separate history navigation', async () => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ok:true,json:async()=>({items:[],next_cursor:null})}))
   const user=userEvent.setup(), logout=vi.fn().mockResolvedValue(undefined)
   render(<DriverWorkspace currentUser={driver} onLogout={logout}/>)
@@ -19,7 +20,7 @@ it('puts the heading first and provides three account options with separate hist
   expect(screen.getByRole('banner', {name:'CSMS'}).contains(screen.getByRole('button',{name:'Tài khoản'}))).toBe(true)
   await user.click(screen.getByRole('button',{name:'Tài khoản'}))
   const menu=screen.getByRole('navigation',{name:'Tùy chọn tài khoản'})
-  expect(menu.querySelectorAll('button')).toHaveLength(3)
+  expect(menu.querySelectorAll('button')).toHaveLength(4)
   await user.click(screen.getByRole('button',{name:'Lịch sử đặt chỗ'}))
   expect(screen.getByRole('heading',{level:1})).toHaveTextContent('Lịch sử đặt chỗ')
   expect(screen.getByText('Lịch sử riêng')).toBeInTheDocument()
@@ -41,4 +42,15 @@ it('preserves direct links to an individual reservation', () => {
   render(<DriverWorkspace currentUser={driver} onLogout={vi.fn()}/>)
   expect(screen.getByRole('heading',{level:1})).toHaveTextContent('Chi tiết đặt chỗ')
   expect(screen.getByText(/Lịch sử riêng 11111111/)).toBeInTheDocument()
+})
+
+it('opens charging history from account menu and preserves history deep links', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ok:true,json:async()=>({items:[],next_cursor:null})}))
+  render(<DriverWorkspace currentUser={driver} onLogout={vi.fn()}/>)
+  const user=userEvent.setup()
+  await user.click(screen.getByRole('button',{name:'Tài khoản'}))
+  await user.click(screen.getByRole('button',{name:'Lịch sử phiên sạc'}))
+  expect(screen.getByRole('heading',{level:1})).toHaveTextContent('Lịch sử phiên sạc')
+  expect(screen.getByText('Danh sách phiên sạc riêng')).toBeInTheDocument()
+  expect(window.location.hash).toBe('#driver-history')
 })

@@ -487,3 +487,98 @@ async def pending_messages(
         }
         for item, code in rows
     ]
+
+
+@router.get("/my-sessions", response_model=SessionPage)
+@user_policy("driver.charging.sessions", "own", "driver")
+async def my_sessions(
+    query: Annotated[SessionQuery, Query()],
+    actor: CurrentActorDependency,
+    session: Database,
+) -> SessionPage:
+    """
+    API dành cho Tài xế xem lịch sử các phiên sạc của chính mình.
+    """
+    # 1. Subquery lấy chỉ số đồng hồ điện (meter) mới nhất của mỗi phiên sạc
+    latest = (
+        select(
+            MeterSample.session_id,
+            MeterSample.value,
+            MeterSample.timestamp,
+            func.row_number()
+            .over(
+                partition_by=MeterSample.session_id,
+                order_by=MeterSample.timestamp.desc(),
+            )
+            .label("rank"),
+        )
+        .where(
+            MeterSample.measurand == "Energy.Active.Import.Register",
+            MeterSample.phase == "",
+            MeterSample.location == "Outlet",
+        )
+        .subquery()
+    )
+
+    # 2. Câu truy vấn chính kết hợp các bảng
+    statement = (
+        select(
+            ChargingSession,
+            Station.name,
+            ChargePoint.code,
+            Connector.connector_number,
+            latest.c.value,
+            latest.c.timestamp,
+            Station.id,
+        )
+        .join(ChargePoint, ChargePoint.id == ChargingSession.charge_point_id)
+        .join(Station, Station.id == ChargePoint.station_id)
+        .join(Connector, Connector.id == ChargingSession.connector_id)
+        .outerjoin(
+            latest, (latest.c.session_id == ChargingSession.id) & (latest.c.rank == 1)
+        )
+        # ĐIỂM QUAN TRỌNG NHẤT: Chỉ lấy các phiên sạc thuộc về tài xế đang gọi API
+        .where(ChargingSession.driver_id == actor.user_id)
+    )
+
+    # 3. Lọc theo trạng thái (Đang sạc / Đã xong)
+    if query.state == "open":
+        statement = statement.where(ChargingSession.ended_at.is_(None))
+    elif query.state == "closed":
+        statement = statement.where(ChargingSession.ended_at.is_not(None))
+
+    elif query.state == "review":
+        statement = statement.where(
+            func.jsonb_array_length(ChargingSession.review_reasons) > 0
+        )
+    elif query.state == "abnormal":
+        statement = statement.where(
+            ChargingSession.ended_at.is_(None),
+            ChargingSession.abnormal_since.is_not(None),
+        )
+
+    # 4. Đếm tổng số lượng bản ghi để phân trang
+    total = (
+        await session.scalar(select(func.count()).select_from(statement.subquery()))
+        or 0
+    )
+
+    # 5. Lấy dữ liệu theo page và page_size
+    rows = (
+        await session.execute(
+            statement.order_by(ChargingSession.id.desc())
+            .offset((query.page - 1) * query.page_size)
+            .limit(query.page_size)
+        )
+    ).all()
+
+    # 6. Trả về kết quả sử dụng lại hàm session_row và model SessionPage có sẵn
+    return SessionPage(
+        items=[
+            session_row(row[0], row[1], row[2], row[3], row[4], row[5], row[6])
+            for row in rows
+        ],
+        total=total,
+        page=query.page,
+        total_pages=(total + query.page_size - 1) // query.page_size,
+    )

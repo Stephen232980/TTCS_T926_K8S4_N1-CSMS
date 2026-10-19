@@ -63,6 +63,7 @@ PATCH,/api/v1/charge-points/{charge_point_id},user,owner.chargers.update_charge_
 GET,/api/v1/charging/cards,user,owner.charging.cards,owned,station_owner,
 POST,/api/v1/charging/cards,user,owner.charging.create_card,owned,station_owner,
 PATCH,/api/v1/charging/cards/{card_id},user,owner.charging.update_card,owned,station_owner,
+GET,/api/v1/charging/my-sessions,user,driver.charging.sessions,own,driver,
 GET,/api/v1/charging/pending,user,owner.charging.pending_messages,owned,station_owner,
 GET,/api/v1/charging/sessions,user,owner.charging.sessions,owned,station_owner,
 POST,/api/v1/charging/sessions/{transaction_id}/close,user,ops.sessions.close,all,operator,
