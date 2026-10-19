@@ -15,12 +15,12 @@ type Area = 'accounts' | 'audit' | 'health' | 'topup' | 'wallet-audit' | 'privac
 const areas: {
   id: Area
   label: string
-  icon: 'settings' | 'session' | 'report'
+  icon: 'settings' | 'session' | 'report' | 'wallet'
 }[] = [
   { id: 'accounts', label: 'Tài khoản & vai trò', icon: 'settings' },
   { id: 'topup', label: 'Nạp tiền thủ công', icon: 'report' },
   { id: 'audit', label: 'Nhật ký thao tác', icon: 'session' },
-  { id: 'wallet-audit', label: 'Nhật ký ví', icon: 'session' },
+  { id: 'wallet-audit', label: 'Nhật ký ví', icon: 'wallet' },
   { id: 'health', label: 'Sức khỏe hệ thống', icon: 'report' },
   { id: 'privacy', label: 'Lưu trữ & Quyền riêng tư', icon: 'settings' },
 ]
