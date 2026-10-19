@@ -293,7 +293,14 @@ async def test_repair_overflow_does_not_change_cache_or_create_audit(db_session)
             db_session, wallet_id=wallet.id, actor_id=admin.id, reason="Overflow"
         )
     assert wallet.balance_vnd == 0
-    assert await db_session.scalar(select(func.count()).select_from(WalletAudit)) == 0
+    assert (
+        await db_session.scalar(
+            select(func.count())
+            .select_from(WalletAudit)
+            .where(WalletAudit.wallet_id == wallet.id)
+        )
+        == 0
+    )
 
 
 async def test_runtime_role_can_append_audit_but_cannot_rewrite_it(db_session):
@@ -356,7 +363,11 @@ async def test_cache_repair_has_audit_without_fake_money_and_never_unlocks(db_se
             db_session, wallet_id=wallet.id, actor_id=admin.id, reason=" Reconcile "
         )
         assert repaired.balance_vnd == 80_000 and repaired.status == "locked"
-    audits = (await db_session.scalars(select(WalletAudit))).all()
+    audits = (
+        await db_session.scalars(
+            select(WalletAudit).where(WalletAudit.wallet_id == wallet.id)
+        )
+    ).all()
     assert len(audits) == 1
     assert (audits[0].before_balance_vnd, audits[0].after_balance_vnd) == (
         100_000,

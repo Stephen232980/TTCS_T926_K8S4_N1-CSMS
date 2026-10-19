@@ -112,6 +112,7 @@ export interface PrivacyReceipt {
   privacy_mode?: string
   retained_data?: string[] | 'completed'
   blockers: string[]
+  wallet_balance_vnd?: number | null
 }
 
 export function fetchPrivacyRequests(signal?: AbortSignal) {
@@ -125,8 +126,8 @@ export function reviewPrivacyRequest(id: string, decision: 'approved' | 'rejecte
 
 export const DEFAULT_PRIVACY_POLICY_VERSION = 'CSMS-PRIVACY-2026-01'
 
-export function executePrivacyRequest(id: string, reason: string, confirmPhrase: string) {
+export function executePrivacyRequest(id: string, reason: string, confirmPhrase: string, refund?: { external_refund_confirmed: true; expected_balance_vnd: number }) {
   return adminRequest<PrivacyReceipt>(`/admin/privacy/requests/${id}/execute`, writeJson('POST', {
-    reason, confirm_phrase: confirmPhrase,
+    reason, confirm_phrase: confirmPhrase, ...refund,
   }))
 }

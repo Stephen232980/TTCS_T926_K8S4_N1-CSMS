@@ -247,5 +247,10 @@ async def execute_privacy_request(
     db_session: DatabaseSession,
 ) -> PrivacyReceipt:
     return await PrivacyRetentionService(db_session).enqueue_execution(
-        request_id, actor.user_id, authorization, payload.reason
+        request_id,
+        actor.user_id,
+        authorization,
+        payload.reason,
+        external_refund_confirmed=payload.external_refund_confirmed,
+        expected_balance_vnd=payload.expected_balance_vnd,
     )

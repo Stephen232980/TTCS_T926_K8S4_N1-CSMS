@@ -170,7 +170,7 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
           { key: 'stations', label: 'Tìm trạm', icon: 'station' },
           { key: 'wallet', label: 'Ví của bạn', icon: 'wallet' },
           { key: 'history', label: 'Lịch sử phiên sạc', icon: 'session' },
-          { key: 'reservations', label: 'Lịch sử đặt chỗ', icon: 'session' },
+          { key: 'reservations', label: 'Lịch sử đặt chỗ', icon: 'calendar' },
         ] as const).map(item => <a className={(item.key === 'reservations' || item.key === 'history') ? 'driver-desktop-reservations' : undefined} key={item.key} href={`#driver-${item.key}`} aria-current={area === item.key ? 'page' : undefined} onClick={event => { event.preventDefault(); navigate(item.key) }}><Icon name={item.icon} /><span>{item.label}</span></a>)}
       </nav>
       {onExit && <footer className="driver-workspace-exit"><button type="button" onClick={onExit}>Đổi khu vực</button></footer>}
