@@ -151,7 +151,7 @@ Bằng chứng: ${JSON.stringify(issue.evidence, null, 2)}`
       <div className="finance-sticky-header">
         <header className="finance-heading">
           <div>
-            <h1 id="reconciliation-runs-title">Đợt đối soát tổng kWh & tiền thu (S-53)</h1>
+            <h1 id="reconciliation-runs-title">Đợt đối soát tổng kWh & tiền thu</h1>
             <p>
               Đối soát bất biến theo mốc cutoff. Dung sai tiền = 0 đồng (tính lại theo biểu giá &amp; quy tắc làm tròn từng dòng).
             </p>

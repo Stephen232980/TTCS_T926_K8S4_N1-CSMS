@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy import String, and_, cast, func, or_, select
+from sqlalchemy.engine import Row
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -1039,7 +1040,7 @@ async def export_reconciliation_issues_csv(
     run_status = str(run.status)
 
     def transform_issue_row(raw_row: Any) -> list[Any]:
-        if isinstance(raw_row, (tuple, list)):
+        if isinstance(raw_row, (Row, tuple, list)):
             issue: ReconciliationIssue = raw_row[0]
             legacy_inv_id = (
                 str(raw_row[1]) if len(raw_row) > 1 and raw_row[1] is not None else ""
