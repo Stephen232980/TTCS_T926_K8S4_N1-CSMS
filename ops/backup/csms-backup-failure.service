@@ -1,0 +1,6 @@
+[Unit]
+Description=Report CSMS backup failure
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/logger -p daemon.err -t csms-backup -- "S-62 backup failed; inspect journalctl -u csms-backup.service"

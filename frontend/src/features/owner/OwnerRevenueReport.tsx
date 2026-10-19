@@ -45,6 +45,7 @@ export function OwnerRevenueReport({
     })
       .then((data) => {
         if (!ignore) {
+          setError(null)
           setReport(data)
           setLoading(false)
         }
@@ -66,6 +67,7 @@ export function OwnerRevenueReport({
   }, [period, dateFrom, dateTo, stationId, page, refreshCount])
 
   const handlePeriodChange = (newPeriod: PeriodType) => {
+    if (newPeriod === period) return
     setLoading(true)
     setPeriod(newPeriod)
     setPage(1)
@@ -104,13 +106,14 @@ export function OwnerRevenueReport({
     : 1
 
   return (
-    <div className="owner-revenue-container" data-testid="owner-revenue-report">
+    <div className="owner-revenue-container" data-testid="owner-revenue-report" aria-busy={loading}>
       {/* 1. Filter Toolbar */}
       <div className="owner-revenue-toolbar">
         <div className="owner-revenue-period-group" role="group" aria-label="Kỳ báo cáo">
           <button
             type="button"
             className={`owner-period-btn ${period === 'day' ? 'active' : ''}`}
+            aria-pressed={period === 'day'}
             onClick={() => handlePeriodChange('day')}
           >
             Hôm nay
@@ -118,6 +121,7 @@ export function OwnerRevenueReport({
           <button
             type="button"
             className={`owner-period-btn ${period === 'week' ? 'active' : ''}`}
+            aria-pressed={period === 'week'}
             onClick={() => handlePeriodChange('week')}
           >
             Tuần này
@@ -125,6 +129,7 @@ export function OwnerRevenueReport({
           <button
             type="button"
             className={`owner-period-btn ${period === 'month' ? 'active' : ''}`}
+            aria-pressed={period === 'month'}
             onClick={() => handlePeriodChange('month')}
           >
             Tháng này
@@ -132,6 +137,7 @@ export function OwnerRevenueReport({
           <button
             type="button"
             className={`owner-period-btn ${period === 'custom' ? 'active' : ''}`}
+            aria-pressed={period === 'custom'}
             onClick={() => handlePeriodChange('custom')}
           >
             Tùy chọn
@@ -148,6 +154,7 @@ export function OwnerRevenueReport({
                   aria-label="Từ ngày"
                   value={dateFrom}
                   onChange={(e) => {
+                    setLoading(true)
                     setDateFrom(e.target.value)
                     setPage(1)
                   }}
@@ -160,6 +167,7 @@ export function OwnerRevenueReport({
                   aria-label="Đến ngày"
                   value={dateTo}
                   onChange={(e) => {
+                    setLoading(true)
                     setDateTo(e.target.value)
                     setPage(1)
                   }}
@@ -174,6 +182,7 @@ export function OwnerRevenueReport({
               className="owner-station-select"
               value={stationId}
               onChange={(e) => {
+                setLoading(true)
                 setStationId(e.target.value)
                 setPage(1)
               }}
@@ -218,6 +227,7 @@ export function OwnerRevenueReport({
         </div>
       )}
 
+      {loading && report && <p className="owner-revenue-loading" role="status">Đang cập nhật báo cáo…</p>}
       {/* Loading state indicator */}
       {loading && !report && (
         <div role="status" className="owner-panel owner-placeholder">
@@ -368,7 +378,7 @@ export function OwnerRevenueReport({
                 Tổng cộng {report.pagination.total_items} trụ
               </span>
             </div>
-            <div className="owner-revenue-table-wrap">
+            <div className="owner-revenue-table-wrap" role="region" aria-label="Chi tiết doanh thu theo trụ" tabIndex={0}>
               <table className="owner-revenue-table">
                 <thead>
                   <tr>
@@ -453,15 +463,15 @@ export function OwnerRevenueReport({
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button
                     type="button"
-                    disabled={page <= 1}
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={loading || page <= 1}
+                    onClick={() => { setLoading(true); setPage((p) => Math.max(1, p - 1)) }}
                   >
                     Trước
                   </button>
                   <button
                     type="button"
-                    disabled={page >= report.pagination.total_pages}
-                    onClick={() => setPage((p) => p + 1)}
+                    disabled={loading || page >= report.pagination.total_pages}
+                    onClick={() => { setLoading(true); setPage((p) => p + 1) }}
                   >
                     Sau
                   </button>

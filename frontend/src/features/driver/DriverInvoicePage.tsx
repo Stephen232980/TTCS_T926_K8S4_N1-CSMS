@@ -14,11 +14,12 @@ const lineTotal = (invoice: DriverInvoice, type: 'energy' | 'idle') => invoiceMo
   invoice.lines.filter(line => line.line_type === type).reduce((total, line) => total + BigInt(line.amount_vnd), 0n).toString(),
 )
 
-export function DriverInvoicePage({ api = driverInvoiceApi, sessionId, onOpen, onBack }: {
+export function DriverInvoicePage({ api = driverInvoiceApi, sessionId, onOpen, onBack, backLabel = 'Về danh sách hóa đơn' }: {
   api?: DriverInvoiceApi
   sessionId?: number
   onOpen: (id: number) => void
   onBack: () => void
+  backLabel?: string
 }) {
   const [page, setPage] = useState<InvoiceList>()
   const [invoice, setInvoice] = useState<DriverInvoice>()
@@ -51,7 +52,7 @@ export function DriverInvoicePage({ api = driverInvoiceApi, sessionId, onOpen, o
 
   return <section className="driver-wallet-page driver-invoice" aria-label="Hóa đơn phiên sạc">
     <h2>{sessionId !== undefined ? `Hóa đơn phiên #${sessionId}` : 'Hóa đơn phiên sạc'}</h2>
-    {sessionId !== undefined && <button className="secondary-button" onClick={onBack}>Về danh sách hóa đơn</button>}
+    {sessionId !== undefined && <button className="secondary-button" onClick={onBack}>{backLabel}</button>}
     {loading && <p role="status">Đang tải hóa đơn…</p>}
     {error && <p role="alert">{error}</p>}
     {!loading && (error || invoice?.status === 'pending' || invoice?.status === 'needs_review' || invoice?.status === 'awaiting_unplug') &&

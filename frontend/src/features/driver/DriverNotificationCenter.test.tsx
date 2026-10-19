@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { DriverNotificationCenter } from './DriverNotificationCenter'
 import { DriverNotificationToastContainer } from './DriverNotificationToast'
@@ -46,7 +46,7 @@ it('only links to an invoice on a persisted invoice event and marks read explici
   await act(async () => { await vi.advanceTimersByTimeAsync(1) })
   expect(screen.getByRole('region').querySelector('a')).toHaveAttribute('href', '#driver-invoice-7')
   expect(read).toBe(false)
-  act(() => { screen.getByText(/^Thông báo ·/).click() })
+  act(() => { screen.getByRole('button', { name: /^Thông báo ·/ }).click() })
   await act(async () => { screen.getByRole('button', { name: 'Đánh dấu đã đọc' }).click() })
   expect(read).toBe(true)
   expect(screen.queryByRole('button', { name: 'Đánh dấu đã đọc' })).not.toBeInTheDocument()
@@ -57,4 +57,21 @@ it('recovers after an inbox network error', async () => {
   render(<DriverNotificationCenter ownerId="driver" />)
   await act(async () => { await vi.advanceTimersByTimeAsync(2001) })
   expect(screen.getByRole('region')).toHaveTextContent('Trạm A')
+})
+
+
+it('opens from the bell, closes by X or Escape, and does not mark read just by opening', async () => {
+  const fetcher=vi.fn().mockResolvedValue({ok:true,json:async()=>({items:[item],next_cursor:null})})
+  vi.stubGlobal('fetch',fetcher)
+  render(<DriverNotificationCenter ownerId="driver" />)
+  const bell=await screen.findByRole('button',{name:'Thông báo · 1 chưa đọc'})
+  expect(screen.queryByRole('region',{name:'Danh sách thông báo'})).not.toBeInTheDocument()
+  fireEvent.click(bell)
+  expect(screen.getByRole('region',{name:'Danh sách thông báo'})).toBeVisible()
+  fireEvent.click(screen.getByRole('button',{name:'Đóng danh sách thông báo'}))
+  expect(bell).toHaveFocus()
+  fireEvent.click(bell)
+  fireEvent.keyDown(document,{key:'Escape'})
+  expect(bell).toHaveAttribute('aria-expanded','false')
+  expect(fetcher.mock.calls.some(([,options])=>options.method==='POST')).toBe(false)
 })

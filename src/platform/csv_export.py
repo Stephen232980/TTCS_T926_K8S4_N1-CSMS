@@ -87,16 +87,20 @@ def build_csv_streaming_response(
     filename: str,
     headers: Sequence[str],
     rows: Iterable[Sequence[Any]] | AsyncIterable[Sequence[Any]],
+    extra_headers: dict[str, str] | None = None,
 ) -> StreamingResponse:
     """Create a FastAPI StreamingResponse for CSV download."""
     safe_filename = filename.replace('"', '\\"')
+    resp_headers = {
+        "Content-Disposition": f'attachment; filename="{safe_filename}"',
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+    }
+    if extra_headers:
+        resp_headers.update(extra_headers)
     return StreamingResponse(
         generate_csv_chunks(headers, rows),
         media_type="text/csv; charset=utf-8",
-        headers={
-            "Content-Disposition": f'attachment; filename="{safe_filename}"',
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            "Pragma": "no-cache",
-            "Expires": "0",
-        },
+        headers=resp_headers,
     )

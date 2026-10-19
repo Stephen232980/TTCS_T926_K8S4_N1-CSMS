@@ -38,6 +38,10 @@ Database = Annotated[AsyncSession, Depends(get_db_session)]
 
 
 def present_run(run: ReconciliationRun) -> ReconciliationRunResponse:
+    exempt_sessions = run.summary_counts.get("legacy_exempt", 0)
+    beg_uncollected_vnd = run.summary_counts.get("beginning_uncollected_vnd", 0)
+    beg_uncollected_cnt = run.summary_counts.get("beginning_uncollected_count", 0)
+    wallet_discrepancy = abs(run.total_billed_vnd - run.total_debited_vnd)
     return ReconciliationRunResponse(
         id=run.id,
         period_type=run.period_type,
@@ -52,6 +56,9 @@ def present_run(run: ReconciliationRun) -> ReconciliationRunResponse:
         matched_sessions=run.matched_sessions,
         mismatch_sessions=run.mismatch_sessions,
         missing_data_sessions=run.missing_data_sessions,
+        exempt_sessions=exempt_sessions,
+        beginning_uncollected_invoices_vnd=str(beg_uncollected_vnd),
+        beginning_uncollected_count=beg_uncollected_cnt,
         total_meter_kwh=str(run.total_meter_kwh),
         total_billed_kwh=str(run.total_billed_kwh),
         kwh_discrepancy=str(run.kwh_discrepancy),
@@ -59,8 +66,10 @@ def present_run(run: ReconciliationRun) -> ReconciliationRunResponse:
         total_recomputed_vnd=str(run.total_recomputed_vnd),
         total_debited_vnd=str(run.total_debited_vnd),
         money_discrepancy_vnd=str(run.money_discrepancy_vnd),
+        wallet_discrepancy_vnd=str(wallet_discrepancy),
         summary_counts=run.summary_counts,
         algorithm_version=run.algorithm_version,
+        input_hash=run.input_hash,
     )
 
 
@@ -136,6 +145,7 @@ async def get_run_issues(
     page_size: Annotated[int, Query(ge=1, le=100)] = 50,
     severity: Annotated[IssueSeverity | None, Query()] = None,
     issue_type: Annotated[str | None, Query()] = None,
+    issue_category: Annotated[str | None, Query()] = None,
 ) -> ReconciliationIssuesListResponse:
     run = await get_reconciliation_run(db, run_id)
     if run is None:
@@ -143,13 +153,14 @@ async def get_run_issues(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Không tìm thấy đợt đối soát",
         )
+    target_category = issue_category or issue_type
     items, total = await get_reconciliation_issues(
         db,
         run_id=run_id,
         page=page,
         page_size=page_size,
         severity=severity,
-        issue_type=issue_type,
+        issue_type=target_category,
     )
     total_pages = max(1, (total + page_size - 1) // page_size)
     return ReconciliationIssuesListResponse(
@@ -169,10 +180,12 @@ async def export_run_issues(
     db: Database,
     severity: Annotated[IssueSeverity | None, Query()] = None,
     issue_type: Annotated[str | None, Query()] = None,
+    issue_category: Annotated[str | None, Query()] = None,
 ) -> StreamingResponse:
+    target_category = issue_category or issue_type
     return await export_reconciliation_issues_csv(
         db,
         run_id=run_id,
         severity=severity,
-        issue_type=issue_type,
+        issue_type=target_category,
     )
