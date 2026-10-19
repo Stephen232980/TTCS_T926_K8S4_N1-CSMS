@@ -12,14 +12,17 @@ interface Props {
   onSelect?: (id: string) => void
   disabled?: boolean
   onLocate?: (position: MapPosition) => void
+  focusNearby?: boolean
+  selectionRevision?: number
   userPosition?: MapPosition
 }
 const emptyStations: MapStation[] = []
 const markerIcon = L.divIcon({ className: 'station-map-pin', html: '<span></span>', iconSize: [24, 24], iconAnchor: [12, 12] })
 
-export function StationMap({ stations = emptyStations, position, onPick, selectedId, onSelect, disabled = false, onLocate, userPosition }: Props) {
+export function StationMap({ stations = emptyStations, position, onPick, selectedId, onSelect, disabled = false, onLocate, userPosition, focusNearby = false, selectionRevision = 0 }: Props) {
   const container = useRef<HTMLDivElement>(null)
   const map = useRef<L.Map | null>(null)
+  const previousView = useRef('')
   const callbacks = useRef({ onPick, onSelect, disabled, onLocate })
   const [tileError, setTileError] = useState(false)
   const [locationError, setLocationError] = useState('')
@@ -30,6 +33,7 @@ export function StationMap({ stations = emptyStations, position, onPick, selecte
     if (!container.current) return
     const instance = L.map(container.current, { scrollWheelZoom: false }).setView([16.1, 106.2], 5)
     map.current = instance
+    previousView.current = ''
     instance.createPane('driver-location').style.zIndex = '650'
     const tiles = L.tileLayer(import.meta.env.VITE_MAP_TILE_URL || 'https://basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}{r}.png?key=cb1_474k_1_5a54119591e8059d70c828f2', {
       maxZoom: 19,
@@ -63,7 +67,7 @@ export function StationMap({ stations = emptyStations, position, onPick, selecte
     if (position) {
       L.marker([position.latitude, position.longitude], { icon: markerIcon, title: 'Vị trí trạm đã chọn' }).addTo(markers)
       instance.setView([position.latitude, position.longitude], Math.max(instance.getZoom(), 15))
-    } else if (stations.length) {
+    } else if (stations.length && !focusNearby) {
       const points: [number, number][] = stations.map(s => [s.latitude, s.longitude])
       if (userPosition) points.push([userPosition.latitude, userPosition.longitude])
       instance.fitBounds(L.latLngBounds(points), { padding: [35, 35], maxZoom: 15 })
@@ -71,7 +75,17 @@ export function StationMap({ stations = emptyStations, position, onPick, selecte
     if (userPosition) L.circleMarker([userPosition.latitude, userPosition.longitude], { pane: 'driver-location', radius: 8, color: '#fff', weight: 3, fillColor: '#2688c1', fillOpacity: 1 }).bindTooltip('Vị trí của bạn').addTo(markers)
     selectedMarker?.openPopup()
     return () => { markers.remove() }
-  }, [stations, position, selectedId, userPosition])
+  }, [stations, position, selectedId, userPosition, focusNearby, selectionRevision])
+
+  useEffect(() => {
+    if (!focusNearby || !map.current || !stations.length) return
+    const selected = stations.find(station => station.id === selectedId)
+    const key = JSON.stringify([selected && [selected.id, selected.latitude, selected.longitude], selectionRevision, userPosition, stations.map(station => station.id)])
+    if (previousView.current === key) return
+    const target = selected ?? userPosition ?? stations[0]
+    map.current.setView([target.latitude, target.longitude], 15)
+    previousView.current = key
+  }, [focusNearby, stations, selectedId, selectionRevision, userPosition])
 
   function locate() {
     if (locating) return

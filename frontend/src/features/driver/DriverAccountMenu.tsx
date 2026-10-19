@@ -19,7 +19,7 @@ export function DriverAccountMenu({ email, open, onOpenChange, onNavigate, onLog
     {open && <nav id={id} className="driver-account-dropdown" aria-label="Tùy chọn tài khoản">
       <span className="driver-account-email" title={email}>{email}</span>
       <button type="button" onClick={() => onNavigate('history')}><Icon name="session" />Lịch sử phiên sạc</button>
-      <button type="button" onClick={() => onNavigate('reservations')}><Icon name="session" />Lịch sử đặt chỗ</button>
+      <button type="button" onClick={() => onNavigate('reservations')}><Icon name="calendar" />Lịch sử đặt chỗ</button>
       <button type="button" onClick={() => onNavigate('privacy')}><Icon name="settings" />Dữ liệu cá nhân</button>
       <button type="button" disabled={loggingOut} onClick={onLogout}><Icon name="logout" />{loggingOut ? 'Đang đăng xuất…' : 'Đăng xuất'}</button>
       {logoutError && <p role="alert">{logoutError}</p>}
