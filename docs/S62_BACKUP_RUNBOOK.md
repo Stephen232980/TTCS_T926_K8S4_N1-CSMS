@@ -194,9 +194,30 @@ restore into an empty database, comparison of 56 tables and sequences, applicati
 session read and populated-target rejection passed. Additional failure tests cover
 archive damage, wrong key, settings validation, locking and failed mirror retention.
 
-Still required for S-62 Done: install the nightly job on staging; validate
-backup-role coverage, available disk space, failure monitoring and a restore drill
-from an actual staging archive into an empty isolated database. The source database
-and active services must remain unchanged. Off-host storage is an optional future
-improvement, not a prerequisite for this staging-only deployment. No staging
-installation or S-62 Done claim follows from local tests.
+Staging evidence dated 2026-10-19 (Asia/Ho_Chi_Minh):
+
+- Installed a separate backup image `csms-s62-backup:8e298bd`, with a dedicated
+  `csms_backup` login granted read-only data access; application runtime rights
+  were not expanded.
+- Executed the installed `csms-backup.service` successfully and enabled
+  `csms-backup.timer`. Next scheduled run: **2026-10-20 02:00 Vietnam time**.
+- Tested retention through repeated successful runs: exactly **3 encrypted
+  archives**, mode 0600, approximately **151.3 MB total** at acceptance time.
+- Restored a staging archive (50,424,060 encrypted bytes) to a fresh, isolated
+  PostgreSQL 16 container. Restore and checks completed in about 30 seconds.
+- Recovered schema revision `m170029a2026`, 56 tables, 192 charging sessions,
+  98,547 meter samples, 118 wallets and 6 sequences. All 192 invoice rows,
+  252 invoice-line rows and 305 wallet-ledger rows sampled from the live database
+  matched the recovered historical records. No foreign key remained unvalidated.
+  Live telemetry keeps changing, so this is not a claim that every live table
+  matched a single coordinated source snapshot.
+- Confirmed the failure-notification unit emits a local syslog message. No remote
+  email/notification channel is configured for backup failures.
+- Removed the temporary recovery container/network/data after the drill. Active
+  backend/database/simulator container identities and start times were unchanged;
+  backend readiness remained `ready`.
+
+This establishes deployed backup scheduling and one real restore drill for the
+agreed staging-only S-62 scope. The first unattended overnight run has not occurred
+at the time of this evidence. Review/merge and Jira status are separate from this
+operational evidence. Local-only storage retains the documented host-loss limit.
