@@ -13,7 +13,7 @@ const areas: {
   { id: 'sessions', label: 'Phiên sạc & thanh toán', icon: 'session' },
   { id: 'invoices', label: 'Hóa đơn phí sạc', icon: 'report' },
   { id: 'reconciliation', label: 'Cần đối chiếu', icon: 'settings' },
-  { id: 'runs', label: 'Đợt đối soát (S-53)', icon: 'dashboard' },
+  { id: 'runs', label: 'Đợt đối soát', icon: 'dashboard' },
 ]
 
 const readArea = (): Area =>

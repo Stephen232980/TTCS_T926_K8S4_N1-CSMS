@@ -141,9 +141,9 @@ export function FinancePage({ area }: {area:FinanceArea}) {
         <p>{area==='sessions'?'Theo dõi phiên, hóa đơn và khoản trừ ví trên toàn hệ thống.':area==='invoices'?'Tra cứu hóa đơn phí sạc đã lưu và chi tiết từng khoản phí.':'Theo dõi phiên có dữ liệu cần kiểm tra hoặc đã kết thúc nhưng chưa quyết toán.'}</p>
       </div>
       <div className="finance-heading-actions">
-        <button type="button" className="finance-button" onClick={handleExportRevenue} disabled={exportingRevenue} aria-label="Xuất CSV báo cáo doanh thu">
+        {area === 'sessions' && !selected && <button type="button" className="finance-button" onClick={handleExportRevenue} disabled={exportingRevenue} aria-label="Xuất CSV báo cáo doanh thu">
           {exportingRevenue ? 'Đang xuất…' : 'Xuất CSV doanh thu'}
-        </button>
+        </button>}
         <button type="button" onClick={()=>setRevision(r=>r+1)}>Làm mới</button>
       </div>
     </header>

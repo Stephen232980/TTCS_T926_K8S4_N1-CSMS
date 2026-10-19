@@ -220,3 +220,11 @@ it('triggers accountant revenue CSV export with custom period when date range fi
   window.location.hash = ''
 })
 
+
+
+it.each(['invoices', 'reconciliation'] as const)('does not offer revenue export in %s', async area => {
+  mockApi()
+  render(<FinancePage area={area} />)
+  await screen.findByRole('heading', { level: 1 })
+  expect(screen.queryByRole('button', { name: 'Xuất CSV báo cáo doanh thu' })).not.toBeInTheDocument()
+})
