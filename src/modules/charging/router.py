@@ -490,9 +490,7 @@ async def pending_messages(
 
 
 @router.get("/my-sessions", response_model=SessionPage)
-@user_policy(
-    "driver.charging.sessions", "all", "driver"
-)  # Bạn có thể đổi string policy cho khớp với cấu hình Role tài xế của dự án
+@user_policy("driver.charging.sessions", "own", "driver")
 async def my_sessions(
     query: Annotated[SessionQuery, Query()],
     actor: CurrentActorDependency,
@@ -548,6 +546,16 @@ async def my_sessions(
         statement = statement.where(ChargingSession.ended_at.is_(None))
     elif query.state == "closed":
         statement = statement.where(ChargingSession.ended_at.is_not(None))
+
+    elif query.state == "review":
+        statement = statement.where(
+            func.jsonb_array_length(ChargingSession.review_reasons) > 0
+        )
+    elif query.state == "abnormal":
+        statement = statement.where(
+            ChargingSession.ended_at.is_(None),
+            ChargingSession.abnormal_since.is_not(None),
+        )
 
     # 4. Đếm tổng số lượng bản ghi để phân trang
     total = (
