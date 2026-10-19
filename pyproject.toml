@@ -18,6 +18,7 @@ dependencies = [
     "email-validator>=2.0",
     "Pillow>=11,<13",
     "tzdata",
+    "cryptography>=44",
     "httpx>=0.28,<1",
     "websockets>=14,<17",
 ]
@@ -50,3 +51,4 @@ plugins = ["pydantic.mypy"]
 
 [tool.setuptools.packages.find]
 include = ["src*", "simulator*"]
+

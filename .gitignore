@@ -42,3 +42,6 @@ Thumbs.db
 /impeccable/
 
 node_modules/
+
+# Local database backups
+/backups/

@@ -1,0 +1,7 @@
+# Root-owned /etc/csms-backup/runner.conf (shell syntax, no credentials)
+S62_DOCKER_NETWORK=replace_with_database_network
+S62_LOCAL_DIR=/var/lib/csms-backup
+# Staging-only deployment: optional off-host mirror is disabled.
+S62_REMOTE_MOUNT=
+S62_KEEP_COUNT=3
+S62_BACKUP_IMAGE=csms-s62-backup:local
