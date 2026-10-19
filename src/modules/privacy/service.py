@@ -1,5 +1,5 @@
 from datetime import UTC, datetime, timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import HTTPException
 from sqlalchemy import func, select, text
@@ -32,6 +32,8 @@ from src.modules.privacy.schemas import (
 )
 from src.modules.reservations.models import HOLDS, Reservation
 from src.modules.stations.models import StationCreateIdempotency
+from src.modules.wallet.administration import dieu_chinh_vi
+from src.modules.wallet.exceptions import WalletReconciliationError
 from src.modules.wallet.models import Wallet
 from src.platform.audit.models import AuditLog
 from src.platform.audit.service import ghi_nhat_ky
@@ -455,6 +457,7 @@ class PrivacyRetentionService:
             reviewed_at=request.reviewed_at,
             decision_reason=request.decision_reason,
             policy_version=request.policy_version,
+            wallet_balance_vnd=wallet.balance_vnd if wallet is not None else None,
             blockers=[] if job and job.status == "completed" else blockers,
             execution_status=job.status if job else "blocked",
             checkpoint=job.checkpoint if job else 0,
@@ -471,7 +474,16 @@ class PrivacyRetentionService:
         actor_id: UUID,
         authorization: AuthorizationEvidence,
         reason: str,
+        *,
+        external_refund_confirmed: bool = False,
+        expected_balance_vnd: int | None = None,
     ) -> PrivacyReceipt:
+        # Match the worker's job -> request -> user -> wallet lock order.
+        job = await self.db.scalar(
+            select(PrivacyJob)
+            .where(PrivacyJob.request_id == request_id)
+            .with_for_update()
+        )
         request = await self.db.scalar(
             select(PrivacyRequest)
             .where(PrivacyRequest.id == request_id)
@@ -485,15 +497,60 @@ class PrivacyRetentionService:
             or request.policy_version != VERSION
         ):
             raise HTTPException(409, "Yêu cầu chưa đủ điều kiện duyệt")
+        if (
+            job is None
+            and await self.db.scalar(
+                select(PrivacyJob.id).where(PrivacyJob.request_id == request_id)
+            )
+            is not None
+        ):
+            raise HTTPException(409, "Hồ sơ vừa được duyệt; tải lại yêu cầu")
         await self._lock_user(request.user_id)
-        receipt = await self._receipt(request)
-        if receipt.blockers:
-            raise HTTPException(409, ", ".join(receipt.blockers))
-        job = await self.db.scalar(
-            select(PrivacyJob)
-            .where(PrivacyJob.request_id == request_id)
-            .with_for_update()
+        # Repeated submissions must not change money or requeue a running job.
+        if job is not None and job.status in {"queued", "processing", "completed"}:
+            return await self._receipt(request)
+        wallet = await self.db.scalar(
+            select(Wallet).where(Wallet.driver_id == request.user_id).with_for_update()
         )
+        receipt = await self._receipt(request)
+        remaining = [code for code in receipt.blockers if code != "refund_required"]
+        if remaining:
+            raise HTTPException(409, ", ".join(remaining))
+        if wallet is not None and wallet.balance_vnd > 0:
+            if not external_refund_confirmed:
+                raise HTTPException(409, "refund_required")
+            if expected_balance_vnd != wallet.balance_vnd:
+                raise HTTPException(
+                    409, "Số dư đã thay đổi; tải lại hồ sơ và xác nhận lại"
+                )
+            audit_id = uuid4()
+            try:
+                await dieu_chinh_vi(
+                    self.db,
+                    wallet_id=wallet.id,
+                    actor_id=actor_id,
+                    amount_vnd=-wallet.balance_vnd,
+                    audit_id=audit_id,
+                    reason=f"Xác nhận hoàn tiền bên ngoài: {reason}"[:500],
+                )
+            except WalletReconciliationError as error:
+                raise HTTPException(
+                    409, "Sổ cái và số dư chưa khớp; cần đối chiếu ví"
+                ) from error
+            await ghi_nhat_ky(
+                self.db,
+                actor_id=actor_id,
+                action="privacy.external_refund_confirmed",
+                object_type="user",
+                object_id=str(request.user_id),
+                data={
+                    "reason": reason,
+                    "amount_vnd": expected_balance_vnd,
+                    "method": "external_manual",
+                },
+                permission=authorization.permission,
+                actor_roles=authorization.roles,
+            )
         if job is None:
             self.db.add(PrivacyJob(request_id=request_id))
         elif job.status == "needs_review":

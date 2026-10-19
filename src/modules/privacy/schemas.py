@@ -101,9 +101,12 @@ class PrivacyReceipt(BaseModel):
     privacy_mode: str = "unlink_original_account_preserve_financials"
     retained_data: list[str] = Field(default_factory=list)
     blockers: list[str]
+    wallet_balance_vnd: int | None = None
 
 
 class PrivacyExecutionPayload(BaseModel):
+    external_refund_confirmed: bool = Field(default=False, strict=True)
+    expected_balance_vnd: int | None = Field(default=None, ge=0, strict=True)
     confirm_phrase: Literal["EXECUTE_PRIVACY_REQUEST"]
     reason: Annotated[
         str, StringConstraints(strip_whitespace=True, min_length=3, max_length=500)
