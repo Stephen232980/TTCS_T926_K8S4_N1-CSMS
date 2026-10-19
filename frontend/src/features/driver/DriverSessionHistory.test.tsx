@@ -115,7 +115,7 @@ it('resets a session deep link when returning to history from the account menu',
   expect(await screen.findByRole('heading',{name:'Phiên #41'})).toBeInTheDocument()
   const user=userEvent.setup()
   await user.click(screen.getByRole('button',{name:'Tài khoản'}))
-  await user.click(screen.getByRole('button',{name:'Lịch sử phiên sạc',exact:true}))
+  await user.click(screen.getByRole('button',{name:'Lịch sử phiên sạc'}))
   expect(await screen.findByRole('link',{name:'Phiên #41 · Trạm Trung Tâm'})).toBeInTheDocument()
   expect(screen.queryByRole('heading',{name:'Phiên #41'})).not.toBeInTheDocument()
   expect(window.location.hash).toBe('#driver-history')
