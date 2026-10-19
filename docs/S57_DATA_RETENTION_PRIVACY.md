@@ -81,3 +81,22 @@ mypy src
 
 Frontend: lint, toàn bộ test và build. Tests thông thường tắt scheduler để tránh xử lý fixture
 của test khác; test worker integration bật và gọi chính loop production.
+
+
+## Xác nhận hoàn tiền bên ngoài trước khi thử lại (19/10/2026)
+
+Admin dùng ô xác nhận ngay trong hồ sơ bị chặn bởi `refund_required`, không có
+màn hình hoàn tiền riêng. Ô xác nhận nêu số tiền hiện tại; ghi chú là tùy chọn.
+Đây là ghi nhận việc người vận hành đã hoàn tiền bên ngoài, không chuyển tiền.
+
+API execute nhận `external_refund_confirmed=true` và `expected_balance_vnd`.
+Máy chủ khóa hồ sơ/user/job/wallet, kiểm tra số dư dương đúng số admin đã thấy,
+đối chiếu sổ cái rồi ghi adjustment âm toàn bộ số dư qua lệnh ví hiện có.
+WalletAudit, ledger, audit xác nhận và enqueue được commit cùng giao dịch.
+Nếu lỗi ghi nhật ký hoặc điều kiện chặn khác, giao dịch không trừ tiền.
+Số dư âm tiếp tục yêu cầu xử lý nợ. Số dư thay đổi yêu cầu tải lại/xác nhận lại.
+
+Gửi trùng đồng thời không tạo bút toán thứ hai. Job queued/processing/completed
+trả lại trạng thái hiện có; worker vẫn kiểm tra đầy đủ trước từng checkpoint.
+Chứng từ không chứa liên kết trực tiếp từ request ID đến wallet audit sau ẩn danh.
+Không có migration hoặc thay đổi quyền DB; không gọi execute trên hồ sơ thật khi deploy.
