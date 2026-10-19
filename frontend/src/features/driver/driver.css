@@ -90,7 +90,7 @@
 .driver-shell .leaflet-control-zoom a { width: 44px; height: 44px; line-height: 44px; }
 .driver-shell .station-map p { font-size: 13px; }
 .driver-station-results { min-width: 0; }
-.driver-results-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 16px; }
+.driver-results-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .driver-shell .driver-results-heading h2 { font-size: 20px; margin: 0; }
 .driver-results-heading > span { white-space: nowrap; color: var(--muted); font-size: 13px; }
 .driver-shell .driver-subtle { margin: 10px 0 16px; font-size: 13px; }
