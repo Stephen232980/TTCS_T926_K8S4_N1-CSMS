@@ -44,7 +44,8 @@ it('shows only one action until opened and resolves the probe when polling repor
   expect(screen.queryByText(/Yêu cầu giữ ngay/)).not.toBeInTheDocument()
   await userEvent.click(screen.getByRole('button', {name:'Đặt trước đầu nối'}))
   view.rerender(<ReservationForm {...props} capability="supported" />)
-  expect(await screen.findByLabelText('Giờ đến')).toBeEnabled()
+  expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+  expect(await screen.findByText(/Giữ chỗ ngay trong 15 phút/)).toBeVisible()
   await waitFor(() => expect(screen.getByRole('button', {name:'Xác nhận đặt chỗ'})).toBeEnabled())
 })
 
@@ -89,7 +90,7 @@ it.each(['network', 'server'] as const)('retries the identical persisted request
   const original = fetch.mock.calls.find(([, options]) => options?.method === 'POST')![1].body
   first.unmount()
   render(<ReservationForm {...props} available={false} />)
-  expect(screen.getByLabelText('Giờ đến')).toBeDisabled()
+  expect(screen.queryByLabelText('Giờ đến')).not.toBeInTheDocument()
   await userEvent.click(screen.getByRole('button', { name: 'Thử lại cùng yêu cầu đặt chỗ' }))
   expect(fetch.mock.calls.filter(([, options]) => options?.method === 'POST')[1][1].body).toBe(original)
   expect(await screen.findByRole('status')).toHaveTextContent('Theo dõi xác nhận')
@@ -163,4 +164,27 @@ it.each(['connector_reserved', {reason:'connector_reserved',alternatives:[null,{
   await userEvent.click(screen.getByRole('button',{name:'Đặt trước đầu nối'}))
   await userEvent.click(screen.getByRole('button',{name:'Xác nhận đặt chỗ'}))
   expect(await screen.findByText(/Chưa có đầu nối thay thế phù hợp/)).toBeInTheDocument()
+})
+
+
+it('only creates immediate reservations with no scheduled arrival', async () => {
+  const fetch = vi.fn().mockImplementation(async (_url: string, options?: RequestInit) => response(options?.method === 'POST' ? {...item, status:'pending'} : {fee_vnd:0, version:0}))
+  vi.stubGlobal('fetch', fetch)
+  render(<ReservationForm connectorId="connector" capability="supported" available ownerId="owner" onChanged={vi.fn()} />)
+  await userEvent.click(screen.getByRole('button', {name:'Đặt trước đầu nối'}))
+  expect(screen.queryByRole('combobox')).not.toBeInTheDocument()
+  expect(screen.queryByLabelText('Thời gian đến')).not.toBeInTheDocument()
+  await userEvent.click(screen.getByRole('button', {name:'Xác nhận đặt chỗ'}))
+  const body = JSON.parse(fetch.mock.calls.find(([, options]) => options?.method === 'POST')![1].body)
+  expect(body.arrival_at).toBeNull()
+})
+
+it('preserves a persisted scheduled request when retrying after the policy change', async () => {
+  const previous = {request_id:'old-key', connector_id:'connector', arrival_at:'2026-10-20T08:00:00Z', accepted_fee_vnd:0, accepted_policy_version:0}
+  sessionStorage.setItem('csms:reservation:owner:connector', JSON.stringify(previous))
+  const fetch = vi.fn().mockResolvedValue(response({...item, status:'pending'}))
+  vi.stubGlobal('fetch', fetch)
+  render(<ReservationForm connectorId="connector" capability="supported" available={false} ownerId="owner" onChanged={vi.fn()} />)
+  await userEvent.click(screen.getByRole('button', {name:'Thử lại cùng yêu cầu đặt chỗ'}))
+  expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual(previous)
 })

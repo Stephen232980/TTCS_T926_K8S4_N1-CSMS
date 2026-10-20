@@ -31,7 +31,11 @@ class BookingBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     request_id: UUID
     connector_id: UUID
-    arrival_at: AwareDatetime | None = None
+    arrival_at: AwareDatetime | None = Field(
+        default=None,
+        description="Omit or use null for a new immediate 15-minute hold. "
+        "Explicit timestamps are only accepted when replaying an existing request.",
+    )
     accepted_fee_vnd: Annotated[StrictInt, Field(ge=0, le=1000000)] | None = None
     accepted_policy_version: Annotated[StrictInt, Field(ge=0)] | None = None
 
