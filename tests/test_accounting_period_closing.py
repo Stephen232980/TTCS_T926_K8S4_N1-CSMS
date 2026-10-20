@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator
 from dataclasses import replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
 import psycopg
@@ -398,3 +399,43 @@ async def test_reopening_requires_closed_period_and_reason(
             period_start=date(2026, 8, 1),
             reason="Không tồn tại kỳ đã chốt",
         )
+
+
+@pytest.mark.asyncio
+async def test_reopen_flushes_revision_before_opening_period() -> None:
+    period = PeriodClose(
+        id=uuid4(),
+        period_start=date(2026, 8, 1),
+        period_end=date(2026, 8, 31),
+        status="closed",
+        revision=1,
+    )
+    previous_snapshot = PeriodSnapshot(id=uuid4())
+    db = MagicMock()
+    db.scalar = AsyncMock(return_value=None)
+    db.scalar.side_effect = [None, period, previous_snapshot]
+    db.add = MagicMock()
+
+    flush_count = 0
+
+    async def assert_ordered_flush() -> None:
+        nonlocal flush_count
+        added = db.add.call_args.args[0]
+        assert isinstance(added, PeriodRevision)
+        if flush_count == 0:
+            assert period.status == "closed"
+            assert period.revision == 1
+        else:
+            assert period.status == "open"
+            assert period.revision == 2
+        flush_count += 1
+
+    db.flush = AsyncMock(side_effect=assert_ordered_flush)
+    revision = await reopen_period(
+        db,
+        period_start=date(2026, 8, 1),
+        reason="Kiểm tra thứ tự ghi",
+    )
+
+    assert revision.revision == 2
+    assert flush_count == 2

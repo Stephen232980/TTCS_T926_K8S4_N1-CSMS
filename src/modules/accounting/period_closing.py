@@ -318,6 +318,7 @@ async def reopen_period(
         reason=normalized_reason,
     )
     db.add(revision)
+    await db.flush()
     period.status = "open"
     period.revision = revision.revision
     await db.flush()
