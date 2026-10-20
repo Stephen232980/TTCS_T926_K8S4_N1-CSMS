@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from src.config import settings
 from src.modules.accounting import models as accounting_models  # noqa: F401
+from src.modules.accounting import period_models as accounting_period_models  # noqa: F401
 from src.modules.alerts import models as alert_models  # noqa: F401
 from src.modules.billing import models as billing_models  # noqa: F401
 from src.modules.charging import driver_models  # noqa: F401
