@@ -1,12 +1,21 @@
+import asyncio
+import os
+import subprocess
+import sys
+from collections.abc import AsyncIterator
 from dataclasses import replace
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
 
+import psycopg
 import pytest
+import pytest_asyncio
+from psycopg import sql
 from sqlalchemy import select, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.exc import DBAPIError
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from src.modules.accounting.models import ReconciliationRun
 from src.modules.accounting.period_closing import (
@@ -23,6 +32,51 @@ from src.modules.accounting.period_models import (
     PeriodSnapshot,
 )
 from src.modules.accounting.revenue_share import RevenueShareDay
+
+
+@pytest_asyncio.fixture
+async def period_migration_db() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
+    url = make_url(os.environ["DATABASE_URL"])
+    database = f"s55_{uuid4().hex}"
+    admin_url = url.set(drivername="postgresql", database="postgres")
+    with psycopg.connect(
+        admin_url.render_as_string(hide_password=False), autocommit=True
+    ) as connection:
+        connection.execute(
+            sql.SQL("CREATE DATABASE {}").format(sql.Identifier(database))
+        )
+
+    test_url = url.set(database=database).render_as_string(hide_password=False)
+    engine = create_async_engine(test_url)
+    try:
+        await asyncio.to_thread(
+            subprocess.run,
+            [sys.executable, "-m", "alembic", "upgrade", "head"],
+            env=os.environ | {"DATABASE_URL": test_url},
+            check=True,
+            capture_output=True,
+        )
+        yield async_sessionmaker(engine, expire_on_commit=False)
+    finally:
+        await engine.dispose()
+        with psycopg.connect(
+            admin_url.render_as_string(hide_password=False), autocommit=True
+        ) as connection:
+            connection.execute(
+                sql.SQL("DROP DATABASE {} WITH (FORCE)").format(
+                    sql.Identifier(database)
+                )
+            )
+
+
+async def _run_migration(test_url: str, *args: str) -> None:
+    await asyncio.to_thread(
+        subprocess.run,
+        [sys.executable, "-m", "alembic", *args],
+        env=os.environ | {"DATABASE_URL": test_url},
+        check=True,
+        capture_output=True,
+    )
 
 
 def _reconciliation_run(period_start: date, period_end: date) -> ReconciliationRun:
@@ -57,6 +111,38 @@ def test_month_date_range_requires_calendar_month_start() -> None:
     )
     with pytest.raises(PeriodClosingError, match="ngày đầu tháng"):
         month_date_range(date(2026, 8, 2))
+
+
+@pytest.mark.asyncio
+async def test_period_migration_downgrade_upgrade_round_trip(
+    period_migration_db: async_sessionmaker[AsyncSession],
+) -> None:
+    test_url = period_migration_db.kw["bind"].url.render_as_string(hide_password=False)
+
+    await _run_migration(test_url, "downgrade", "n170030a2026")
+    async with period_migration_db() as session:
+        assert await session.scalar(text("SELECT to_regclass('period_closes')")) is None
+        assert (
+            await session.scalar(text("SELECT to_regclass('period_snapshots')")) is None
+        )
+        assert (
+            await session.scalar(text("SELECT to_regclass('period_revisions')")) is None
+        )
+
+    await _run_migration(test_url, "upgrade", "head")
+    async with period_migration_db() as session:
+        assert (
+            await session.scalar(text("SELECT to_regclass('period_closes')"))
+            == "period_closes"
+        )
+        assert (
+            await session.scalar(text("SELECT to_regclass('period_snapshots')"))
+            == "period_snapshots"
+        )
+        assert (
+            await session.scalar(text("SELECT to_regclass('period_revisions')"))
+            == "period_revisions"
+        )
 
 
 def test_reconciliation_run_gate_requires_completed_clean_full_month() -> None:

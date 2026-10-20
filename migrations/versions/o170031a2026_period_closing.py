@@ -341,12 +341,14 @@ def downgrade() -> None:
             "S-55 period history exists; downgrade requires an explicit recovery plan"
         )
 
-    op.execute("DROP TRIGGER immutable_period_closes ON period_closes")
-    op.execute("DROP TRIGGER guarded_period_close_transition ON period_closes")
     op.execute("DROP TRIGGER period_close_snapshot_required ON period_closes")
     op.execute("DROP TRIGGER period_revision_state_required ON period_revisions")
     op.execute("DROP TRIGGER guard_period_revision ON period_revisions")
     op.execute("DROP TRIGGER guard_period_snapshot ON period_snapshots")
+    op.execute("DROP TRIGGER immutable_period_revisions ON period_revisions")
+    op.execute("DROP TRIGGER immutable_period_snapshots ON period_snapshots")
+    op.execute("DROP TRIGGER immutable_period_closes ON period_closes")
+    op.execute("DROP TRIGGER guarded_period_close_transition ON period_closes")
     op.execute("DROP FUNCTION reject_period_close_truncate()")
     op.execute("DROP FUNCTION enforce_period_close_transition()")
     op.execute("DROP FUNCTION verify_period_history_consistency()")
