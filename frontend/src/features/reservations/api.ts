@@ -22,7 +22,7 @@ const messages: Record<string, string> = {
   reservation_capability_unverified: 'Chưa xác minh trụ hỗ trợ đặt chỗ. Bấm kiểm tra hỗ trợ rồi thử lại.',
   reservation_unsupported: 'Trụ không hỗ trợ đặt chỗ. Chọn trụ khác.',
   station_or_charger_unavailable: 'Trạm hoặc trụ đang không khả dụng. Tải lại để kiểm tra.',
-  reservation_arrival_out_of_range: 'Giờ đến phải từ bây giờ đến hai giờ tới.',
+  reservation_arrival_out_of_range: 'Chỉ hỗ trợ giữ chỗ ngay trong 15 phút. Vui lòng tạo yêu cầu mới.',
   reservation_request_conflict: 'Mã yêu cầu đã được dùng cho thao tác khác. Tải lại đặt chỗ của bạn.',
   reservation_policy_changed: 'Phí không đến đã thay đổi. Kiểm tra và xác nhận mức phí mới trước khi đặt.',
   reservation_expired: 'Đặt chỗ đã quá hạn. Không thể hủy ngược thời gian.',

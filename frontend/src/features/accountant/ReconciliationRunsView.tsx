@@ -147,7 +147,7 @@ Bằng chứng: ${JSON.stringify(issue.evidence, null, 2)}`
 
 
   return (
-    <section className="finance-workspace" aria-labelledby="reconciliation-runs-title">
+    <section className="finance-workspace finance-reconciliation-runs" aria-labelledby="reconciliation-runs-title">
       <div className="finance-sticky-header">
         <header className="finance-heading">
           <div>
@@ -373,9 +373,10 @@ Bằng chứng: ${JSON.stringify(issue.evidence, null, 2)}`
               </button>
             </div>
 
-            <div className="finance-category-tabs" role="tablist">
+            <div className="finance-category-tabs" role="group" aria-label="Lọc loại sai lệch">
               <button
                 className={`finance-tab ${issuesCategory === '' ? 'is-active' : ''}`}
+                aria-pressed={issuesCategory === ''}
                 onClick={() => {
                   setIssuesCategory('')
                   setIssuesPage(1)
@@ -393,6 +394,7 @@ Bằng chứng: ${JSON.stringify(issue.evidence, null, 2)}`
                 <button
                   key={cat}
                   className={`finance-tab ${issuesCategory === cat ? 'is-active' : ''}`}
+                  aria-pressed={issuesCategory === cat}
                   onClick={() => {
                     setIssuesCategory(cat)
                     setIssuesPage(1)
@@ -516,7 +518,7 @@ Bằng chứng: ${JSON.stringify(issue.evidence, null, 2)}`
                         <span>{run.date_from} → {run.date_to}</span>
                         <small>{run.station_id ? 'Lọc trạm' : 'Toàn hệ thống'}</small>
                       </td>
-                      <td>
+                      <td data-label="Phiên sạc">
                         <strong>{run.total_sessions}</strong>
                         <small>Khớp: {run.matched_sessions} · Lệch: {run.mismatch_sessions}</small>
                       </td>
@@ -524,12 +526,12 @@ Bằng chứng: ${JSON.stringify(issue.evidence, null, 2)}`
                         <span>HĐ: {money(run.total_billed_vnd)}</span>
                         <small>Tính lại: {money(run.total_recomputed_vnd)}</small>
                       </td>
-                      <td className="finance-money">
+                      <td className="finance-money" data-label="Lệch tiền">
                         <span className={Number(run.money_discrepancy_vnd) > 0 ? 'finance-diff is-warning' : ''}>
                           {money(run.money_discrepancy_vnd)}
                         </span>
                       </td>
-                      <td>
+                      <td data-label="Lệch điện">
                         {energy(run.kwh_discrepancy)}
                       </td>
                       <td>

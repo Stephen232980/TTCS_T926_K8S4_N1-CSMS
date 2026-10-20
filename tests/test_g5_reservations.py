@@ -1,6 +1,7 @@
 """Reservation admission, protocol outcomes and conservative release in PostgreSQL."""
 
 import asyncio
+import hashlib
 import json
 import multiprocessing
 import os
@@ -288,6 +289,10 @@ async def test_request_replay_scope_hash_and_safe_public_projection(reservation_
     assert first.status_code == second.status_code == 202
     assert first.json()["id"] == second.json()["id"]
     assert first.json()["status"] == "pending"
+    assert (
+        datetime.fromisoformat(first.json()["expires_at"])
+        - datetime.fromisoformat(first.json()["created_at"])
+    ) == timedelta(minutes=15)
     assert (
         not {"card_id", "idTag", "driver_id", "request_hash", "ocpp_id"}
         & first.json().keys()
@@ -670,15 +675,15 @@ async def test_expiry_requires_fresh_source_available_and_rejects_late_cancel(
         assert stored.status == "expired" and not stored.no_show_exempt
 
 
-@pytest.mark.parametrize("hours", [-1, 3])
-async def test_arrival_window_rejected_without_outbox(reservation_fleet, hours):
+@pytest.mark.parametrize("minutes", [-60, 1, 15, 60, 120, 180])
+async def test_arrival_window_rejected_without_outbox(reservation_fleet, minutes):
     factory, _, _, connector, *_ = reservation_fleet
     response = await request(
         "POST",
         body={
             "request_id": str(uuid4()),
             "connector_id": str(connector.id),
-            "arrival_at": (datetime.now(UTC) + timedelta(hours=hours)).isoformat(),
+            "arrival_at": (datetime.now(UTC) + timedelta(minutes=minutes)).isoformat(),
         },
     )
     assert response.status_code == 422
@@ -876,3 +881,32 @@ async def test_real_tcp_reserve_raw_status_consume_and_cancel(
         listener.close()
         closing.cancel()
         await asyncio.gather(closing, return_exceptions=True)
+
+
+async def test_existing_scheduled_booking_replay_survives_immediate_only_policy(
+    reservation_fleet,
+):
+    factory, _, _, connector, *_ = reservation_fleet
+    original = await book(reservation_fleet)
+    arrival = datetime.now(UTC) + timedelta(hours=1)
+    async with factory() as db, db.begin():
+        row = await db.get(Reservation, original.id)
+        row.arrival_at = arrival
+        row.expires_at = arrival + timedelta(minutes=15)
+        row.request_hash = hashlib.sha256(
+            f"{connector.id}|{arrival.isoformat()}|None|None".encode()
+        ).hexdigest()
+    result = await request(
+        "POST",
+        body={
+            "request_id": str(original.id),
+            "connector_id": str(connector.id),
+            "arrival_at": arrival.isoformat(),
+        },
+    )
+    assert result.status_code == 202
+    assert result.json()["id"] == str(original.id)
+    async with factory() as db:
+        assert (
+            await db.scalar(select(func.count()).select_from(ReservationCommand)) == 1
+        )

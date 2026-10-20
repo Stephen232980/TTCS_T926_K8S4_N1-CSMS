@@ -172,9 +172,10 @@ async def create_reservation(
         raise HTTPException(409, "reservation_request_conflict")
     point, connector, station = await lock_target(db, connector_id)
     now = await database_time(db)
-    arrival = arrival_at.astimezone(UTC) if arrival_at is not None else now
-    if arrival < now or arrival > now + timedelta(hours=2):
+    # Existing requests are replayed above; new bookings only hold from now.
+    if arrival_at is not None:
         raise HTTPException(422, "reservation_arrival_out_of_range")
+    arrival = now
     if station.status != "active" or not live(point, now):
         raise HTTPException(409, "station_or_charger_unavailable")
     cap = await db.get(ReservationCapability, point.id)

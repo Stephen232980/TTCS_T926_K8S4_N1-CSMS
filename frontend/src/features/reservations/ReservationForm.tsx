@@ -2,10 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { changed, dateLabel, definitiveRejection, json, reservationRequest, type BookingBody, type Reservation, type ReservationAlternative } from './api'
 import './reservations.css'
 
-function localTime(offsetMinutes: number) {
-  const date = new Date(Date.now() + offsetMinutes * 60000)
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16)
-}
 function stored(key: string, connectorId: string): BookingBody | null {
   try {
     const data = JSON.parse(sessionStorage.getItem(key) ?? 'null') as BookingBody | null
@@ -18,12 +14,6 @@ export function ReservationForm({ connectorId, capability, available, ownReserva
   const storageKey = `csms:reservation:${ownerId}:${connectorId}`
   const [attempt, setAttempt] = useState<BookingBody | null>(() => stored(storageKey, connectorId))
   const [expanded, setExpanded] = useState(!!attempt)
-  const [when, setWhen] = useState(() => attempt?.arrival_at ? 'later' : 'now')
-  const [arrival, setArrival] = useState(() => {
-    if (!attempt?.arrival_at) return localTime(15)
-    const date = new Date(attempt.arrival_at)
-    return new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0, 16)
-  })
   const [busy, setBusy] = useState(false)
   const [checking, setChecking] = useState(false)
   const [notice, setNotice] = useState('')
@@ -32,7 +22,7 @@ export function ReservationForm({ connectorId, capability, available, ownReserva
   const [policy, setPolicy] = useState<{fee_vnd:number; version:number} | null>(null)
   const [acceptedFee, setAcceptedFee] = useState(false)
   const [policyRevision, setPolicyRevision] = useState(0)
-  const inFlight = useRef(false), mounted = useRef(true), arrivalInput = useRef<HTMLInputElement>(null)
+  const inFlight = useRef(false), mounted = useRef(true)
   const dialog = useRef<HTMLDialogElement>(null)
   const trigger = useRef<HTMLButtonElement>(null)
   const probeController = useRef<AbortController | null>(null)
@@ -49,7 +39,6 @@ export function ReservationForm({ connectorId, capability, available, ownReserva
     setChecking(false)
   }
   useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
-  useEffect(() => { if (when === 'later') arrivalInput.current?.focus() }, [when])
   useEffect(() => {
     if (!checking) return
     if (capability === 'unverified') probeSawPending.current = true
@@ -98,8 +87,7 @@ export function ReservationForm({ connectorId, capability, available, ownReserva
   async function book() {
     if (inFlight.current || (!available && !attempt)) return
     if (!attempt && (!policy || policy.fee_vnd > 0 && !acceptedFee)) return
-    if (!attempt && when === 'later' && Number.isNaN(new Date(arrival).getTime())) { setError('Chọn thời gian đến hợp lệ trong hai giờ tới.'); return }
-    const next = attempt ?? { request_id: crypto.randomUUID(), connector_id: connectorId, arrival_at: when === 'now' ? null : new Date(arrival).toISOString(), accepted_fee_vnd: policy!.fee_vnd, accepted_policy_version: policy!.version }
+    const next = attempt ?? { request_id: crypto.randomUUID(), connector_id: connectorId, arrival_at: null, accepted_fee_vnd: policy!.fee_vnd, accepted_policy_version: policy!.version }
     setAttempt(next); sessionStorage.setItem(storageKey, JSON.stringify(next))
     inFlight.current = true; setBusy(true); setError(''); setNotice(''); setConflict(null)
     try {
@@ -114,7 +102,7 @@ export function ReservationForm({ connectorId, capability, available, ownReserva
         onChanged()
       }
       if (definitiveRejection(cause)) { sessionStorage.removeItem(storageKey); if (mounted.current) {setAttempt(null); setPolicy(null); setPolicyRevision(value => value + 1)} }
-      if (mounted.current) setError(definitiveRejection(cause) ? cause.message : 'Kết quả gửi chưa rõ. Thử lại cùng yêu cầu; không đổi đầu nối hoặc giờ đến.')
+      if (mounted.current) setError(definitiveRejection(cause) ? cause.message : 'Kết quả gửi chưa rõ. Thử lại cùng yêu cầu; không đổi đầu nối.')
     } finally { inFlight.current = false; if (mounted.current) setBusy(false) }
   }
   return <section className="driver-reservation-form" aria-label="Đặt trước đầu nối" aria-busy={busy}>
@@ -128,14 +116,13 @@ export function ReservationForm({ connectorId, capability, available, ownReserva
     <ul className="driver-reservation-summary">
       <li>{attempt ? `Phí không đến: ${attempt.accepted_fee_vnd ?? 0}đ.` : policy ? `Phí không đến: ${policy.fee_vnd}đ.` : 'Đang tải phí không đến…'}</li>
       <li>Không thu phí đặt trước.</li>
-      <li>Có hiệu lực trong 15 phút.</li>
+      <li>Giữ chỗ ngay trong 15 phút kể từ khi tạo yêu cầu.</li>
     </ul>
     {capability !== 'supported' && !attempt ? <>
       <p>{capability === 'unsupported' ? 'Trụ chưa hỗ trợ đặt chỗ.' : 'Cần kiểm tra trụ hỗ trợ đặt chỗ trước khi gửi yêu cầu.'}</p>
     </> : conflict !== null ? null : available || attempt ? <>
       {(expanded || attempt) && <form onSubmit={event => { event.preventDefault(); void book() }}>
-        <label>Giờ đến<select value={when} disabled={busy || !!attempt} onChange={event => setWhen(event.target.value)}><option value="now">Ngay bây giờ</option><option value="later">Trong hai giờ tới</option></select></label>
-        {when === 'later' && <label>Thời gian đến<input ref={arrivalInput} type="datetime-local" required value={arrival} min={localTime(0)} max={localTime(120)} disabled={busy || !!attempt} onChange={event => setArrival(event.target.value)} /></label>}
+        {attempt?.arrival_at && <p>Đang thử lại yêu cầu trước với giờ đến {dateLabel(attempt.arrival_at)}.</p>}
         {!attempt && policy && policy.fee_vnd > 0 && <label className="reservation-fee-consent"><input type="checkbox" checked={acceptedFee} onChange={event => setAcceptedFee(event.target.checked)} disabled={busy} />Tôi đồng ý.</label>}
         <button className="primary-button" disabled={busy || (!attempt && (!policy || policy.fee_vnd > 0 && !acceptedFee))}>{busy ? 'Đang gửi…' : attempt ? 'Thử lại cùng yêu cầu đặt chỗ' : 'Xác nhận đặt chỗ'}</button>
       </form>}
