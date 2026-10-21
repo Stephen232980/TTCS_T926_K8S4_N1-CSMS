@@ -68,6 +68,7 @@ export function DriverCharging({ ownerId = 'session', stationId, stationName, st
   const previousStation = useRef<string | undefined>(undefined)
   const hasConnectors = useRef(false)
   const [selected, setSelected] = useState('')
+  const [chargePoint, setChargePoint] = useState('')
   const [plugged, setPlugged] = useState(false)
   const [sending, setSending] = useState(false)
   const [command, setCommand] = useState<StartResult | null>(null)
@@ -157,13 +158,13 @@ export function DriverCharging({ ownerId = 'session', stationId, stationName, st
           hasConnectors.current = data.items.length > 0; setConnectorStale(false); setConnectorLoading(false)
           setConnectorError(value => value.startsWith('Không tải được đầu nối') ? '' : value)
         }
-      } catch { if (!controller.signal.aborted) { setConnectorError('Không tải được đầu nối. Dữ liệu có thể cũ; tải lại trước khi gửi yêu cầu.'); setConnectorStale(true); setConnectorLoading(false) } }
+      } catch { if (!controller.signal.aborted) { setConnectorError('Không tải được đầu nối. Đang tự thử lại; chưa thể gửi yêu cầu.'); setConnectorStale(true); setConnectorLoading(false) } }
       finally { running = false }
     }
     const timer = window.setTimeout(() => {
       if (previousStation.current !== stationId) {
         previousStation.current = stationId; hasConnectors.current = false
-        setConnectors([]); setSelected(''); setPlugged(false); setConnectorError(''); setWalletFailure(null)
+        setConnectors([]); setSelected(''); setChargePoint(''); setPlugged(false); setConnectorError(''); setWalletFailure(null)
       }
       void load()
     }, 0)
@@ -205,7 +206,7 @@ export function DriverCharging({ ownerId = 'session', stationId, stationName, st
   const selectedConnector = connectors.find(connector => connector.id === selected)
   const connectorGroups = new Map<string, Connector[]>()
   for (const connector of connectors) connectorGroups.set(connector.charge_point_code, [...(connectorGroups.get(connector.charge_point_code) ?? []), connector])
-  const visibleChargePoint = selectedConnector?.charge_point_code ?? connectors[0]?.charge_point_code
+  const visibleChargePoint = selectedConnector?.charge_point_code ?? (connectorGroups.has(chargePoint) ? chargePoint : connectors[0]?.charge_point_code)
   const visibleConnectors = visibleChargePoint ? connectorGroups.get(visibleChargePoint) ?? [] : []
   const statusLabels: Record<string, string> = { Available: 'Sẵn sàng', Preparing: 'Đang chuẩn bị', Charging: 'Đang sạc', Reserved: 'Đã đặt chỗ', Faulted: 'Có lỗi', Unavailable: 'Không khả dụng', Finishing: 'Đang kết thúc', SuspendedEV: 'Xe tạm dừng', SuspendedEVSE: 'Trụ tạm dừng' }
   const failure = walletFailure && walletFailure.stationId === stationId && walletFailure.connectorId === selected ? walletFailure
@@ -214,7 +215,11 @@ export function DriverCharging({ ownerId = 'session', stationId, stationName, st
   const startMessage = request?.rejection_reason === 'station_unavailable' ? 'Trạm đã tạm ngừng hoặc không còn khả dụng. Chọn trạm khác để bắt đầu sạc.' : request?.rejection_reason === 'reservation_unavailable' ? 'Trụ chưa xác nhận đúng quyền giữ chỗ. Kiểm tra đặt chỗ của bạn trước khi sạc.' : status ? messages[status] : ''
   const startStatus = !live && !failure && status && startMessage ? <p role="status" className="driver-start-status">{startMessage}{status === 'Accepted' && request?.deadline && ` Còn khoảng ${Math.min(60, Math.max(0, Math.ceil((Date.parse(request.deadline) - clock) / 1000)))} giây.`}</p> : null
   const walletFailureMessage = failure ? walletEligibilityMessages[failure.reason] : null
-  function chooseConnector(id: string) { setSelected(id); setPlugged(false); setRequestKey(null); setWalletFailure(null); setDismissedRequest(request?.id ?? null) }
+  function chooseConnector(id: string) {
+    const connector = connectors.find(item => item.id === id)
+    if (connector) setChargePoint(connector.charge_point_code)
+    setSelected(id); setPlugged(false); setRequestKey(null); setWalletFailure(null); setDismissedRequest(request?.id ?? null)
+  }
   const findStations = <a className="driver-primary-link" href="#driver-stations" onClick={event => { if (onFindStations) { event.preventDefault(); onFindStations() } }}>Tìm trạm để bắt đầu sạc</a>
   return <>
     <div className="driver-session-layout" hidden={!showSession}>
@@ -242,14 +247,13 @@ export function DriverCharging({ ownerId = 'session', stationId, stationName, st
       {connectorLoading && <p role="status">Đang tải đầu nối…</p>}
       {connectorError && <p role="alert">{connectorError}</p>}
       {walletFailureMessage && <div className="driver-start-reason" role="alert"><p>{walletFailureMessage}</p>{failure?.reason === 'wallet_low' && <><p>{failure.balance_vnd !== null && <>Số dư lúc kiểm tra: <strong>{failure.balance_vnd.toLocaleString('vi-VN')}đ</strong>. </>}{failure.minimum_balance_vnd !== null && <>Cần tối thiểu: <strong>{failure.minimum_balance_vnd.toLocaleString('vi-VN')}đ</strong>.</>}</p><a className="driver-primary-link" href="#driver-wallet">Nạp tiền</a></>}</div>}
-      {!connectorLoading && !connectors.length && <button className="secondary-button" onClick={() => setRevision(value => value + 1)}>Tải lại đầu nối</button>}
-      {!!connectors.length && <><div className="driver-connector-picker"><label htmlFor="driver-connector">Trụ và đầu nối</label><select id="driver-connector" value={selected} disabled={pending || !!live || !!current?.awaiting_unplug} onChange={event => chooseConnector(event.target.value)}><option value="">Chọn đầu nối</option>{connectors.map(connector => <option key={connector.id} value={connector.id} disabled={!canStart(connector)}>{connector.charge_point_code} · Đầu nối {connector.connector_number} · {chargingLabel(connector)}</option>)}</select></div>
+      {!connectorLoading && !connectors.length && !connectorError && <p>Trạm chưa có đầu nối được khai báo.</p>}
+      {!!connectors.length && <><div className="driver-connector-picker"><label htmlFor="driver-charge-point">Trụ sạc</label><select id="driver-charge-point" value={visibleChargePoint} disabled={pending || !!live || !!current?.awaiting_unplug} onChange={event => { setChargePoint(event.target.value); chooseConnector('') }}>{[...connectorGroups.keys()].map(code => <option key={code} value={code}>{code}</option>)}</select></div>
         <div className="driver-connector-group" role="group" aria-label={`Đầu nối tại ${visibleChargePoint}`}>
-          <div className="driver-connector-group-heading"><strong>{visibleChargePoint}</strong><span>{visibleConnectors.filter(connector => canStart(connector)).length}/{visibleConnectors.length} sẵn sàng</span></div>
-          <div className="driver-connector-grid">{visibleConnectors.map(connector => <button key={connector.id} type="button" className={`driver-connector-tile ${connector.status.toLowerCase()}`} disabled={pending || !!live || !!current?.awaiting_unplug || !canStart(connector)} aria-label={`${connector.charge_point_code} · Đầu nối ${connector.connector_number} · ${statusLabels[connector.status] ?? 'Chưa rõ'}`} aria-pressed={selected === connector.id} onClick={() => chooseConnector(connector.id)}><span>{connector.connector_number}</span><ConnectorSymbol status={connector.status} /><small>{statusLabels[connector.status] ?? 'Chưa rõ'}</small></button>)}</div>
+          <div className="driver-connector-group-heading"><strong>Đầu nối</strong><span>{visibleConnectors.filter(connector => canStart(connector)).length}/{visibleConnectors.length} sẵn sàng</span></div>
+          <div className="driver-connector-grid">{visibleConnectors.map(connector => <button key={connector.id} type="button" className={`driver-connector-tile ${connector.status.toLowerCase()}`} disabled={pending || !!live || !!current?.awaiting_unplug || !canStart(connector)} aria-label={`${connector.charge_point_code} · Đầu nối ${connector.connector_number} · ${statusLabels[connector.status] ?? 'Chưa rõ'}`} aria-description={connector.own_reservation ? chargingLabel(connector) : undefined} aria-pressed={selected === connector.id} onClick={() => chooseConnector(connector.id)}><span>{connector.connector_number}</span><ConnectorSymbol status={connector.status} /><small>{connector.own_reservation ? 'Chỗ của bạn' : statusLabels[connector.status] ?? 'Chưa rõ'}</small></button>)}</div>
         </div>
-        {selectedConnector && <p className="driver-selected-connector">Đã chọn: <strong>{selectedConnector.charge_point_code}</strong> · Đầu nối {selectedConnector.connector_number} · {chargingLabel(selectedConnector)}</p>}
-        <div className="driver-start-footer">{showConnectors && <DriverStartSummary key={stationId} pricing={stationPricing} />}<label className="driver-plug-confirm"><input type="checkbox" checked={plugged} disabled={pending || !!live || !!current?.awaiting_unplug} onChange={event => setPlugged(event.target.checked)} /> Tôi đã cắm súng sạc vào xe tại đầu nối đã chọn</label><button className="primary-button" disabled={!selected || !plugged || pending || !!live || !!current?.awaiting_unplug || !!error || connectorStale || !current || !selectedConnector || !canStart(selectedConnector)} onClick={() => { void start() }}>{sending ? 'Đang gửi yêu cầu…' : pending ? 'Đang chờ trụ bắt đầu sạc…' : 'Bắt đầu sạc'}</button>{selectedConnector && selectedConnector.reservation_capability !== undefined && <ReservationForm key={selectedConnector.id} connectorId={selectedConnector.id} capability={selectedConnector.reservation_capability} ownReservation={selectedConnector.own_reservation === true} available={selectedConnector.available === true && !connectorStale && !pending && !live && !current?.awaiting_unplug} ownerId={ownerId} onChanged={() => setRevision(value => value + 1)} onSelectAlternative={id => { if (!connectors.some(item => item.id === id)) return; chooseConnector(id); setRevision(value => value + 1); window.requestAnimationFrame(() => document.getElementById('driver-connector')?.focus()) }} />}<button className="secondary-button" disabled={pending || !!live || !!current?.awaiting_unplug} onClick={() => setRevision(value => value + 1)}>Tải lại trạng thái đầu nối</button></div>
+        <div className="driver-start-footer">{showConnectors && <DriverStartSummary key={stationId} pricing={stationPricing} />}<label className="driver-plug-confirm"><input type="checkbox" checked={plugged} disabled={pending || !!live || !!current?.awaiting_unplug} onChange={event => setPlugged(event.target.checked)} /> Tôi đã cắm súng sạc vào xe tại đầu nối đã chọn</label><button className="primary-button" disabled={!selected || !plugged || pending || !!live || !!current?.awaiting_unplug || !!error || connectorStale || !current || !selectedConnector || !canStart(selectedConnector)} onClick={() => { void start() }}>{sending ? 'Đang gửi yêu cầu…' : pending ? 'Đang chờ trụ bắt đầu sạc…' : 'Bắt đầu sạc'}</button>{selectedConnector && selectedConnector.reservation_capability !== undefined && <ReservationForm key={selectedConnector.id} connectorId={selectedConnector.id} capability={selectedConnector.reservation_capability} ownReservation={selectedConnector.own_reservation === true} available={selectedConnector.available === true && !connectorStale && !pending && !live && !current?.awaiting_unplug} ownerId={ownerId} onChanged={() => setRevision(value => value + 1)} onSelectAlternative={id => { if (!connectors.some(item => item.id === id)) return; chooseConnector(id); setRevision(value => value + 1); window.requestAnimationFrame(() => document.getElementById('driver-charge-point')?.focus()) }} />}</div>
       </>}
     </section>}
   </>

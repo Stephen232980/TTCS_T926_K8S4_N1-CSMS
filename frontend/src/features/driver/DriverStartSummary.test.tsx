@@ -14,7 +14,7 @@ it('shows supplied prices and the server wallet without claiming eligibility', a
   expect(screen.getByText('500 đ/phút')).toBeInTheDocument()
   expect(screen.getByText('Miễn 2 phút')).toBeInTheDocument()
   expect(await screen.findByText('882.432 đ')).toBeInTheDocument()
-  expect(screen.getByText('Giá lúc chọn trạm. Hệ thống kiểm tra số dư khi bắt đầu sạc.')).toBeInTheDocument()
+  expect(screen.queryByText(/Giá lúc chọn trạm/)).not.toBeInTheDocument()
   expect(screen.queryByText(/đủ điều kiện|tối thiểu/i)).not.toBeInTheDocument()
   expect(fetchMock).toHaveBeenCalledWith(expect.stringMatching(/\/api\/v1\/driver\/wallet$/), expect.objectContaining({ credentials: 'include', signal: expect.any(AbortSignal) }))
 })

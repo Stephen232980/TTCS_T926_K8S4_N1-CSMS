@@ -49,6 +49,5 @@ export function DriverStartSummary({ pricing }: { pricing?: DriverStartPricing }
     {wallet.kind === 'ready' && wallet.status !== 'active' && <p className="driver-start-wallet-warning">Ví chưa hoạt động. <a href="#driver-wallet">Kiểm tra ví</a></p>}
     {wallet.kind === 'ready' && wallet.status === 'active' && wallet.negative && <p className="driver-start-wallet-warning">Ví đang có số dư âm. <a href="#driver-wallet">Nạp tiền</a></p>}
     {wallet.kind === 'error' && <p>Không tải được số dư. <a href="#driver-wallet">Kiểm tra ví</a></p>}
-    <p>Giá lúc chọn trạm. Hệ thống kiểm tra số dư khi bắt đầu sạc.</p>
   </section>
 }

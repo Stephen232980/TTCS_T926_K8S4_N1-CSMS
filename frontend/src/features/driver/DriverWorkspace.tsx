@@ -174,7 +174,7 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
       </nav>
       {onExit && <footer className="driver-workspace-exit"><button type="button" onClick={onExit}>Đổi khu vực</button></footer>}
     </aside>
-    <main ref={mainRef} className="driver-main">
+    <main ref={mainRef} className={`driver-main${area === 'stations' && showStart ? ' driver-main-start' : ''}`}>
       <header className="driver-heading">
         <div className="driver-heading-copy"><h1>
           {area === 'history' ? 'Lịch sử phiên sạc' : area === 'reservations' ? reservationFocus ? 'Chi tiết đặt chỗ' : 'Lịch sử đặt chỗ' : area === 'privacy' ? 'Dữ liệu cá nhân' : area === 'session'
