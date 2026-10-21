@@ -213,14 +213,20 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
           onBack={showingReturn ? () => navigate('wallet') : undefined}
         />}
         {area === 'wallet' && !showingReturn && <div className="driver-wallet-stack">
-          <DriverWalletPage key={`wallet-${walletRevision}`} onTopUp={() => {
+          <DriverWalletPage key={`wallet-${walletRevision}`} topUpExpanded={topUpExpanded} onTopUp={() => {
             setTopUpExpanded(true)
-            window.setTimeout(() => document.getElementById('topup-amount')?.focus(), 0)
-          }} onOpenInvoice={openInvoice} topUpContent={<details className="driver-topup-disclosure" open={topUpExpanded} onToggle={event => setTopUpExpanded(event.currentTarget.open)}>
-            <summary><Icon name="chevronRight" /><span>Nạp tiền</span></summary>
+            window.setTimeout(() => {
+              document.getElementById('driver-topup-panel')?.scrollIntoView?.({ block: 'start', behavior: 'instant' })
+              document.getElementById('topup-amount')?.focus({ preventScroll: true })
+            }, 0)
+          }} onOpenInvoice={openInvoice} topUpContent={<div id="driver-topup-panel" className="driver-topup-panel" hidden={!topUpExpanded}>
+            <button className="text-button driver-topup-close" onClick={() => {
+              setTopUpExpanded(false)
+              window.setTimeout(() => document.querySelector<HTMLButtonElement>('.topup-button')?.focus(), 0)
+            }}>Đóng form nạp tiền</button>
             <WalletTopUpPage key={`topup-${walletRevision}`} storageKey={storageKey} onOrder={rememberOrder}
               onTopUp={createWalletTopUp} onCheckOrder={checkTopUpOrder} onRedirect={navigateToPayment} />
-          </details>} />
+          </div>} />
           <button className="secondary-button" onClick={() => openInvoice()}>Xem hóa đơn phiên sạc</button>
         </div>}
       </div>
