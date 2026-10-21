@@ -16,6 +16,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -120,6 +121,47 @@ class ReconciliationIssue(Base):
         Numeric(24, 6), nullable=True
     )
     details: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class PartnerContract(Base):
+    """Owner revenue-share terms for a station; effective dates are inclusive."""
+
+    __tablename__ = "partner_contracts"
+    __table_args__ = (
+        CheckConstraint(
+            "owner_share_bps BETWEEN 0 AND 10000",
+            name="ck_partner_contracts_owner_share_bps",
+        ),
+        CheckConstraint(
+            "effective_to IS NULL OR effective_from <= effective_to",
+            name="ck_partner_contracts_effective_range",
+        ),
+        UniqueConstraint(
+            "station_id",
+            "effective_from",
+            name="uq_partner_contracts_station_effective_from",
+        ),
+        Index(
+            "ix_partner_contracts_station_effective",
+            "station_id",
+            "effective_from",
+            "effective_to",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    station_id: Mapped[UUID] = mapped_column(
+        ForeignKey("stations.id", ondelete="RESTRICT"), nullable=False
+    )
+    owner_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    owner_share_bps: Mapped[int] = mapped_column(Integer, nullable=False)
+    effective_from: Mapped[date] = mapped_column(Date, nullable=False)
+    effective_to: Mapped[date | None] = mapped_column(Date)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
