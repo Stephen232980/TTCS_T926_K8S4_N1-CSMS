@@ -8,6 +8,33 @@ vi.mock('./DriverCharging', () => ({ DriverCharging: () => <div /> }))
 afterEach(() => vi.unstubAllGlobals())
 const data = { items: [{ id: 'one', name: 'Trạm thật', address: 'Địa chỉ trạm', latitude: 10.7, longitude: 106.7 }], page: 1, total: 1, total_pages: 1 }
 describe('DriverMapPage', () => {
+  it('requires the selected connector type itself to be free and preserves the filter if that type disappears', async () => {
+    const connector = (id: string, connector_type: string, available: boolean) => ({id, connector_type, available})
+    const mixed = {...data.items[0], id: 'mixed', name: 'Trạm CCS bận', available_connectors: 1, connectors: [connector('a', 'CCS2', false), connector('b', 'Type 2', true)]}
+    const ready = {...data.items[0], id: 'ready', name: 'Trạm CCS rảnh', available_connectors: 1, connectors: [connector('c', 'CCS2', true)]}
+    const unknown = {...data.items[0], id: 'unknown', name: 'Trạm chưa khai báo', available_connectors: 1}
+    const request = vi.fn().mockResolvedValue({ok: true, json: async () => ({...data, total: 3, items: [mixed, ready, unknown]})})
+    vi.stubGlobal('fetch', request)
+    const user = userEvent.setup()
+    render(<DriverMapPage />)
+    await screen.findByText('Trạm CCS rảnh')
+    await user.selectOptions(screen.getByLabelText('Loại đầu nối'), 'CCS2')
+    expect(screen.getByText('Trạm CCS bận')).toBeInTheDocument()
+    expect(screen.queryByText('Trạm chưa khai báo')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('checkbox', {name: 'Còn đầu nối rảnh'}))
+    expect(screen.queryByText('Trạm CCS bận')).not.toBeInTheDocument()
+    expect(screen.getByText('Trạm CCS rảnh')).toBeInTheDocument()
+    expect(screen.getByLabelText('Bản đồ trạm sạc')).toHaveAttribute('data-stations', 'ready')
+    expect(request).toHaveBeenCalledOnce()
+    request.mockResolvedValue({ok: true, json: async () => ({...data, items: [unknown]})})
+    fireEvent(document, new Event('visibilitychange'))
+    await screen.findByText('Không có trạm phù hợp với bộ lọc đã chọn.')
+    expect(screen.getByLabelText('Loại đầu nối')).toHaveValue('CCS2')
+    await user.click(screen.getByRole('button', {name: 'Xem tất cả trạm'}))
+    expect(screen.getByLabelText('Loại đầu nối')).toHaveValue('')
+    expect(screen.getByRole('checkbox', {name: 'Còn đầu nối rảnh'})).not.toBeChecked()
+    expect(screen.getByText('Trạm chưa khai báo')).toBeInTheDocument()
+  })
   it('filters the complete list and map by free connectors, updates after polling and recovers from no matches', async () => {
     const items = [
       { ...data.items[0], id: 'busy', name: 'Trạm hết chỗ', available_connectors: 0 },
