@@ -126,6 +126,10 @@
 .driver-return button { width: 100%; }
 .driver-connector-picker { display: grid; gap: 8px; margin-bottom: 18px; font-size: 14px; }
 .driver-shell .driver-connectors select { max-width: none; font-size: 16px; }
+.driver-connector-group { padding-bottom: 16px; }
+.driver-connector-group-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.driver-connector-group-heading > strong { min-width: 0; overflow-wrap: anywhere; }
+.driver-connector-group-heading > span { flex-shrink: 0; color: var(--muted); font-size: 13px; }
 .driver-connector-groups details { border-bottom: 1px solid var(--line); padding: 12px 0; }
 .driver-connector-groups summary { min-height: 44px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .driver-connector-groups summary > strong { flex: 1; min-width: 0; overflow-wrap: anywhere; }

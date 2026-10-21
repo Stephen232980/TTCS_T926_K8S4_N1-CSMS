@@ -20,6 +20,29 @@ afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); FakeDriverStream.in
 const empty = { session: null, start_request: null }
 const connectors = { items: [{ id: 'connector-one', charge_point_code: 'TRU-01', connector_number: 1, status: 'Available' }, { id: 'busy', charge_point_code: 'TRU-02', connector_number: 1, status: 'Reserved' }] }
 
+it('keeps confirmation beside the selected charge point and clears cable confirmation when switching', async () => {
+  const items = Array.from({ length: 40 }, (_, index) => ({
+    id: `connector-${index}`, charge_point_code: `TRU-${Math.floor(index / 4) + 1}`,
+    connector_number: index % 4 + 1, status: 'Available',
+  }))
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => ({ ok: true, json: async () => url.includes('/connectors') ? { items } : empty })))
+  const user = userEvent.setup()
+  render(<DriverCharging stationId="station-one" />)
+  const picker = await screen.findByLabelText('Trụ và đầu nối')
+  expect(screen.getAllByRole('option')).toHaveLength(41)
+  expect(screen.getAllByRole('button', { name: /TRU-1 · Đầu nối/ })).toHaveLength(4)
+  expect(screen.queryByRole('button', { name: /TRU-10 · Đầu nối/ })).not.toBeInTheDocument()
+  await user.selectOptions(picker, 'connector-0')
+  await user.click(screen.getByRole('checkbox'))
+  expect(screen.getByRole('button', { name: 'Bắt đầu sạc' })).toBeEnabled()
+  await user.selectOptions(picker, 'connector-39')
+  expect(screen.getAllByRole('button', { name: /TRU-10 · Đầu nối/ })).toHaveLength(4)
+  expect(screen.queryByRole('button', { name: /TRU-1 · Đầu nối/ })).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'TRU-10 · Đầu nối 4 · Sẵn sàng' })).toHaveAttribute('aria-pressed', 'true')
+  expect(screen.getByRole('checkbox')).not.toBeChecked()
+  expect(screen.getByRole('button', { name: 'Bắt đầu sạc' })).toBeDisabled()
+})
+
 it('allows starting on an owned confirmed reservation and blocks another driver reservation', async () => {
   const fetchMock = vi.fn().mockImplementation(async (url: string) => ({ ok: true, json: async () => url.includes('/connectors') ? { items: [
     { id: 'owned', charge_point_code: 'TRU-01', connector_number: 1, status: 'Reserved', own_reservation: true, can_start: true, available: false, reservation_capability: 'supported' },
