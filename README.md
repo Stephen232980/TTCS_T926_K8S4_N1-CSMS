@@ -1,329 +1,215 @@
-# CSMS Backend
+# CSMS — Charging Station Management System
 
-CSMS là hệ thống quản lý trạm, trụ và phiên sạc. Repository này chứa backend
-FastAPI. Frontend và bảng phân công sẽ được nhóm chốt riêng.
+CSMS là hệ thống quản lý vận hành và thanh toán cho mạng lưới trạm sạc xe điện. Hệ thống kết nối trụ sạc qua OCPP 1.6J, theo dõi trạng thái đầu nối và phiên sạc, áp dụng biểu giá theo thời gian, quản lý ví tài xế và cung cấp dữ liệu phục vụ đối soát. Các nghiệp vụ này được liên kết từ thao tác của người dùng trên giao diện đến bản tin của trụ và giao dịch trong cơ sở dữ liệu.
 
-Tài liệu này dành cho người mới. Hãy làm đúng thứ tự và chỉ chuyển bước khi
-bước hiện tại thành công.
+Repository bao gồm backend FastAPI, frontend React, migration PostgreSQL, bộ giả lập trụ OCPP và công cụ vận hành. Giao diện được tổ chức theo vai trò để tài xế, chủ trạm, vận hành viên, kế toán và quản trị viên làm việc trên cùng hệ thống với phạm vi dữ liệu phù hợp.
 
-## 1. Công nghệ
+## Nội dung
 
-- Python 3.12+, FastAPI, Uvicorn
-- SQLAlchemy 2 async, Psycopg 3, PostgreSQL 16
-- Alembic
-- Pytest, Ruff, mypy
-- Docker Compose
+- [Phạm vi hệ thống](#phạm-vi-hệ-thống)
+- [Kiến trúc và công nghệ](#kiến-trúc-và-công-nghệ)
+- [Cấu trúc repository](#cấu-trúc-repository)
+- [Khởi chạy trên máy phát triển](#khởi-chạy-trên-máy-phát-triển)
+- [Giả lập trụ và thanh toán](#giả-lập-trụ-và-thanh-toán)
+- [Kiểm thử và chất lượng](#kiểm-thử-và-chất-lượng)
+- [Triển khai và vận hành](#triển-khai-và-vận-hành)
+- [Tra cứu và đóng góp](#tra-cứu-và-đóng-góp)
 
-## 2. Chuẩn bị máy
+## Phạm vi hệ thống
 
-Cài Git, Python 3.12+ và Docker Desktop, sau đó kiểm tra trong PowerShell:
+### Trải nghiệm theo vai trò
 
-```powershell
-git --version
-python --version
-docker --version
-docker compose version
+Tài xế có thể tìm trạm trên bản đồ, xem đầu nối và giá sạc, đặt chỗ, bắt đầu hoặc yêu cầu dừng phiên, theo dõi điện năng, quản lý ví và tra cứu lịch sử, hóa đơn. Các yêu cầu điều khiển được theo dõi đến khi nhận được bằng chứng từ trụ; phản hồi chấp nhận lệnh không được coi là phiên đã bắt đầu hoặc kết thúc.
+
+Chủ trạm quản lý các trạm thuộc sở hữu, thông tin trụ và đầu nối, biểu giá, giới hạn công suất và doanh thu. Vận hành viên giám sát kết nối, lỗi và các phiên cần xử lý. Kế toán tra cứu phiên, hóa đơn, dữ liệu cần đối chiếu và các đợt đối soát; quản trị viên quản lý tài khoản, vai trò, nhật ký, ví và yêu cầu quyền riêng tư. Quyền truy cập được kiểm tra tại backend theo vai trò và quyền sở hữu, không chỉ thông qua việc hiển thị nút trên giao diện.
+
+### Các nhóm nghiệp vụ
+
+| Nhóm | Nội dung được triển khai trong repository |
+| --- | --- |
+| Hạ tầng sạc | Khai báo trạm/trụ/đầu nối; kết nối OCPP, Heartbeat, trạng thái và lỗi; giám sát realtime và điều khiển từ xa |
+| Phiên sạc | Xác thực thẻ, bắt đầu/dừng phiên, tiếp nhận số đo, phục hồi kết nối, đánh dấu bất thường và xử lý hồ sơ cần đối chiếu |
+| Giá và thanh toán | Biểu giá cố định hoặc theo khung giờ, phí chiếm chỗ, hóa đơn, ví và sổ cái; nạp tiền thủ công hoặc qua cổng thanh toán |
+| Khai thác trạm | Tìm trạm, đặt/hủy chỗ, phí không đến, phân bổ công suất và lịch giới hạn công suất |
+| Quản trị và báo cáo | Báo cáo doanh thu, đối soát, xuất CSV, cảnh báo, thông báo tài xế, nhật ký và xử lý quyền riêng tư |
+| Vận hành hệ thống | Migration, CI/CD, simulator, backup mã hóa và quy trình khôi phục PostgreSQL |
+
+Bảng này mô tả phạm vi mã nguồn, không thay cho kết luận nghiệm thu từng Story. Backlog xác định AC/NFR, Jira phản ánh tiến độ công việc; test local, CI, staging và kiểm chứng trên trụ thật là các lớp bằng chứng riêng biệt.
+
+## Kiến trúc và công nghệ
+
+CSMS sử dụng kiến trúc backend theo module nghiệp vụ. REST API, WebSocket OCPP và các tác vụ nền được khởi động trong cùng ứng dụng ASGI. PostgreSQL lưu dữ liệu nghiệp vụ, bản tin và các bản ghi phục vụ truy vết; frontend trao đổi với API bằng session cookie và nhận cập nhật realtime qua Server-Sent Events khi luồng tương ứng hỗ trợ.
+
+```mermaid
+flowchart LR
+    Browser[Trình duyệt — React] -->|HTTP API và SSE| API
+    Charger[Trụ sạc hoặc simulator] <-->|WebSocket — OCPP 1.6J| Gateway
+    Payment[Cổng thanh toán] -->|Thông báo kết quả| API
+    subgraph Backend[Ứng dụng ASGI — FastAPI]
+        API[REST API và phân quyền]
+        Gateway[OCPP và registry kết nối]
+        Jobs[Tác vụ nền]
+    end
+    API --> DB[(PostgreSQL)]
+    Gateway --> DB
+    Jobs --> DB
+    Jobs --> Gateway
+    API --> Gateway
 ```
 
-Nếu Docker báo lỗi kết nối, hãy mở Docker Desktop và chờ Docker Engine chạy.
+| Thành phần | Công nghệ và trách nhiệm |
+| --- | --- |
+| Backend | Python 3.12+, FastAPI và Uvicorn; xử lý HTTP, WebSocket và vòng đời ứng dụng |
+| Truy cập dữ liệu | SQLAlchemy 2 async, Psycopg 3, PostgreSQL 16; Alembic quản lý schema |
+| Frontend | React 19, TypeScript, Vite; Leaflet cho bản đồ; Nginx phục vụ bản build trong image frontend |
+| Kiểm thử | Pytest/pytest-asyncio, Vitest, Testing Library; Ruff, mypy và ESLint cho kiểm tra tĩnh |
+| Đóng gói và phân phối | Docker Compose cho local/simulator; GitHub Actions và GHCR cho build, kiểm tra và staging |
 
-### 2.1. Tạo SSH key để clone và push repository
+Registry socket OCPP hiện nằm trong bộ nhớ tiến trình. Cấu hình chạy được mô tả ở đây sử dụng **một tiến trình ứng dụng**; tăng `--workers` hoặc nhân bản backend cần thiết kế thêm cơ chế định tuyến kết nối/lệnh dùng chung. Các worker trong lifespan là tác vụ asyncio của ứng dụng, không phải dịch vụ hàng đợi độc lập đã được triển khai.
 
-Nếu repository dùng SSH, mỗi thành viên cần đăng ký public key với tài khoản
-GitHub. Việc này chỉ thực hiện một lần trên mỗi máy.
+Đối với thanh toán sạc, `StopTransaction` kết thúc phần tiền điện nhưng chưa nhất thiết chứng minh đầu nối đã được giải phóng. Phí chiếm chỗ và việc chốt hóa đơn cần tuân theo bằng chứng rút súng đã cấu hình. Xem [vòng đời chiếm trụ](docs/S28_OCCUPATION_LIFECYCLE.md) và [chốt phiên, trừ ví](docs/T102_CLOSURE_SETTLEMENT.md) trước khi thay đổi các luồng này.
 
-#### Bước 1: Kiểm tra key hiện có
-
-```powershell
-Get-ChildItem $env:USERPROFILE\.ssh
-```
-
-Nếu đã có `id_ed25519` và `id_ed25519.pub`, có thể dùng lại sau khi xác nhận đó
-là key của bạn. Không ghi đè key đang dùng nếu chưa biết mục đích của nó.
-
-#### Bước 2: Tạo key mới
-
-```powershell
-ssh-keygen -t ed25519 -C "email-github-cua-ban@example.com"
-```
-
-Khi được hỏi nơi lưu, nhấn `Enter` để dùng đường dẫn mặc định. Nên đặt
-passphrase để bảo vệ key nếu máy bị truy cập trái phép.
-
-Hai file được tạo:
+## Cấu trúc repository
 
 ```text
-~/.ssh/id_ed25519       # private key, tuyệt đối không chia sẻ
-~/.ssh/id_ed25519.pub   # public key, dùng để đăng ký với GitHub
+.
+├── src/
+│   ├── entrypoints/       # Ứng dụng HTTP/WS và vòng đời tác vụ nền
+│   ├── modules/           # Các miền nghiệp vụ
+│   ├── platform/          # Database, audit, email, CSV và hạ tầng dùng chung
+│   └── config.py          # Cấu hình môi trường và validation
+├── frontend/
+│   ├── src/app/           # Khung ứng dụng
+│   ├── src/features/      # Giao diện theo nghiệp vụ/vai trò
+│   ├── src/components/    # Thành phần dùng chung, bản đồ và biểu tượng
+│   ├── Dockerfile        # Build React và phục vụ bằng Nginx
+│   └── nginx.conf         # SPA fallback và proxy API
+├── migrations/            # Alembic env và các revision
+├── tests/                 # Test backend, tích hợp và nghiệm thu theo nghiệp vụ
+├── simulator/             # Seed, client, verifier và báo cáo đội trụ ảo
+├── scripts/               # Công cụ local, kiểm chứng, demo và triển khai
+├── ops/backup/            # Runtime backup, cấu hình mẫu và lịch systemd
+├── docs/                  # Kiến trúc, API, runbook và tài liệu theo chức năng
+└── .github/workflows/     # CI/CD và kiểm chứng backup/restore
 ```
 
-#### Bước 3: Bật SSH agent và nạp key
+Các module backend gồm `identity`, `stations`, `ocpp`, `charging`, `pricing`, `billing`, `wallet`, `payments`, `power`, `reservations`, `reporting`, `accounting`, `alerts`, `driver_notifications` và `privacy`. Mỗi miền có thể tách nhiều router/service để đáp ứng các luồng khác nhau; không phải module nào cũng có cùng một bộ tên file.
 
-Mở PowerShell bằng quyền Administrator một lần để cấu hình service:
+## Khởi chạy trên máy phát triển
 
-```powershell
-Get-Service ssh-agent | Set-Service -StartupType Automatic
-Start-Service ssh-agent
-```
+### Chuẩn bị và cấu hình
 
-Sau đó, trong PowerShell thông thường:
+Môi trường tham chiếu sử dụng Git, Docker Engine với Compose v2, Python 3.12 và Node.js 24 kèm npm. Python chỉ cần cài trên máy nếu chạy backend/công cụ ngoài container. Node.js 24 là phiên bản đang dùng trong CI và Dockerfile frontend; dùng cùng phiên bản giúp giảm khác biệt với pipeline.
 
-```powershell
-ssh-add $env:USERPROFILE\.ssh\id_ed25519
-```
-
-#### Bước 4: Sao chép public key
+Các lệnh bên dưới dành cho PowerShell và chạy từ thư mục gốc repository, trừ khi có chỉ dẫn khác. Với Bash, dùng lệnh kích hoạt môi trường và cú pháp biến môi trường tương ứng.
 
 ```powershell
-Get-Content $env:USERPROFILE\.ssh\id_ed25519.pub | Set-Clipboard
-```
-
-Trên GitHub, mở **Settings → SSH and GPG keys → New SSH key**, đặt tên nhận biết
-máy, dán public key rồi lưu. Không dán nội dung file không có đuôi `.pub`.
-
-#### Bước 5: Kiểm tra kết nối
-
-```powershell
-ssh -T git@github.com
-```
-
-Lần đầu, kiểm tra hostname rồi nhập `yes` để lưu host key. Khi thành công,
-GitHub sẽ xác nhận đã xác thực tài khoản; GitHub không cung cấp shell nên thông
-báo không có shell access là bình thường.
-
-Nếu nhóm dùng GitLab, đăng ký public key trong phần SSH Keys của GitLab và kiểm
-tra bằng `ssh -T git@gitlab.com`.
-
-#### Bước 6: Dùng remote SSH
-
-Kiểm tra remote hiện tại:
-
-```powershell
-git remote -v
-```
-
-Nếu remote đang dùng HTTPS, đổi sang URL SSH do repository cung cấp:
-
-```powershell
-git remote set-url origin git@github.com:<organization>/<repository>.git
-git remote -v
-```
-
-Thay `<organization>` và `<repository>` bằng giá trị thật. Sau đó có thể push:
-
-```powershell
-git push -u origin <tên-branch>
-```
-
-Nếu vẫn bị từ chối, kiểm tra bạn đã được thêm quyền vào repository; SSH key chỉ
-xác thực danh tính, không tự cấp quyền truy cập dự án.
-
-## 3. Lấy mã nguồn
-
-```powershell
-git clone <repository-url>
+git clone https://github.com/Stephen232980/TTCS_T926_K8S4_N1-CSMS.git CSMS
 Set-Location CSMS
-Get-ChildItem
-```
-
-Thay `<repository-url>` bằng URL nhóm cung cấp. Bạn phải nhìn thấy
-`pyproject.toml`, `Dockerfile` và `docker-compose.yml`.
-
-## 4. Tạo cấu hình local
-
-```powershell
 Copy-Item .env.example .env
 ```
 
-Mở `.env` và thay `change_me` bằng mật khẩu riêng:
+Sửa `.env` trước khi khởi động. Giữ database local riêng, thay mật khẩu mẫu và dùng cùng giá trị trong `POSTGRES_PASSWORD` và `DATABASE_URL`; ký tự đặc biệt trong URL cần được mã hóa phù hợp.
 
-```env
+```dotenv
 POSTGRES_DB=csms
 POSTGRES_USER=csms
-POSTGRES_PASSWORD=change_me
-DATABASE_URL=postgresql+psycopg://csms:change_me@localhost:5432/csms
-
-AUTH_MAX_FAILED_ATTEMPTS=5
-AUTH_LOCK_SECONDS=900
-AUTH_SESSION_TTL_SECONDS=86400
+POSTGRES_PASSWORD=<mat-khau-local>
+DATABASE_URL=postgresql+psycopg://csms:<mat-khau-local>@localhost:5433/csms
 AUTH_COOKIE_SECURE=false
+PAYMENT_GATEWAY=disabled
 ```
 
-Không commit `.env` và không dùng secret production. Khi backend chạy trên máy,
-database host là `localhost`; khi backend chạy trong Compose, host là `db` và
-Compose tự truyền URL phù hợp. `AUTH_COOKIE_SECURE=false` chỉ phù hợp với HTTP
-local; môi trường chạy HTTPS phải đặt thành `true`.
+**Cổng host PostgreSQL của Compose là `5433`.** Giá trị `localhost:5432` trong `.env.example` chỉ đúng nếu bạn có PostgreSQL riêng tại cổng đó. Khi backend chạy trong Compose, `docker-compose.yml` cấp URL nội bộ đến `db:5432`, không dùng cổng host.
 
-## 5. Chạy toàn bộ bằng Docker (khuyến nghị)
+Nếu đây là database local **mới, rỗng**, thêm cấu hình chuyển đổi như CI:
 
-### Bước 1: Build và khởi động
+```dotenv
+LEGACY_SETTLEMENT_CUTOFF=1970-01-01T00:00:00+00:00
+```
+
+Migration T-102 bắt buộc có mốc thời gian kèm timezone. Không áp dụng mốc ví dụ này cho database đã có hóa đơn: cần quyết định chuyển đổi dữ liệu được phê duyệt, theo [hướng dẫn T-102](docs/T102_CLOSURE_SETTLEMENT.md).
+
+Nguồn cấu hình đầy đủ là [`.env.example`](.env.example) và [`src/config.py`](src/config.py). Khi chạy Python trên máy, settings đọc `.env` từ thư mục làm việc. Trong container, chỉ các biến được khai báo qua `environment`/`env_file` hoặc cơ chế cấp secret mới đi vào ứng dụng; thêm một dòng vào `.env` của Compose không tự động truyền mọi biến đó vào container.
+
+### Phương án A — Backend trong Docker, frontend chạy bằng Vite
 
 ```powershell
 docker compose up --build -d
-```
-
-### Bước 2: Chờ service sẵn sàng
-
-```powershell
 docker compose ps
+curl.exe -f http://localhost:8001/health/live
+curl.exe -f http://localhost:8001/health/ready
 ```
 
-Phải có `db` và `app`, cả hai ở trạng thái `healthy`. `app` tự chạy migration
-trước khi khởi động Uvicorn.
-
-### Bước 3: Kiểm tra API
-
-- <http://localhost:8001/health/live>: tiến trình còn sống.
-- <http://localhost:8001/health/ready>: kết nối database thành công.
-- <http://localhost:8001/docs>: OpenAPI tương tác.
-
-Hai health endpoint phải trả HTTP `200`.
-
-Không chỉ dựa vào trạng thái `healthy` của container. Kiểm tra thêm từ máy
-Windows để xác nhận cổng publish có thể truy cập:
+Compose tạo `db` và `app`; backend chạy migration trước khi phục vụ API. Hai health endpoint phải trả HTTP `200`. Tệp Compose hiện tại **không có service frontend**. Mở terminal thứ hai, từ gốc repository:
 
 ```powershell
-curl.exe -i http://127.0.0.1:8001/health/live
-curl.exe -i http://127.0.0.1:8001/health/ready
+Set-Location frontend
+npm ci
+npm run dev
 ```
 
-### Bước 4: Xem log khi lỗi
+Mở địa chỉ Vite in trong terminal, thông thường là `http://localhost:5173`. Vite proxy `/api` đến `http://localhost:8001`; có thể đổi đích qua biến `CSMS_DEV_API_TARGET` trước khi chạy Vite. Dùng cùng hostname khi đăng nhập và sử dụng ứng dụng để tránh nhầm session cookie giữa `localhost` và `127.0.0.1`.
 
-```powershell
-docker compose logs app
-docker compose logs db
-docker compose logs -f app
-```
+Lệnh khởi động `app` hiện cũng chạy [`scripts/create_test_accounts.py`](scripts/create_test_accounts.py), tạo tài khoản mẫu theo vai trò khi chưa có. Danh tính và mật khẩu local nằm trong script này. Đây là cơ chế phục vụ phát triển/demo, cần được loại khỏi cấu hình triển khai có người dùng thật; không dùng tài khoản mẫu làm tài khoản vận hành. Khi chạy theo phương án B, script không tự được gọi.
 
-### Bước 5: Dừng
+### Phương án B — Backend trên máy, PostgreSQL trong Docker
 
-```powershell
-docker compose down
-```
-
-Lệnh trên giữ dữ liệu. `docker compose down -v` xoá volume database, chỉ dùng
-khi chủ động muốn mất toàn bộ dữ liệu local.
-
-### 5.1. S-26 — Chạy 20 trụ OCPP ảo
-
-Compose thông thường không cần mật khẩu simulator. Khi bật profile simulator,
-seed và verifier yêu cầu `SIMULATOR_OPERATOR_PASSWORD`. Mỗi lần chạy có mã
-riêng để báo cáo cũ không được dùng để nghiệm thu; trước khi chạy lại, dùng
-`docker compose --profile simulator down` rồi khởi động lại.
-
-CI chặn merge khi kịch bản lỗi qua check `Build Docker image` đã bắt buộc
-trên `main`: job này báo thất bại nếu simulator không thành công, kể cả khi
-dependency bị skip. Xem [hướng dẫn S-26](docs/S26_SIMULATOR_DELIVERY.md).
-
-S-26 thêm profile `simulator`: profile này seed trụ có tiền tố riêng, chạy
-kịch bản sạc có ngắt–nối lại và tự đối chiếu phiên, công tơ và kWh. Trong `.env`,
-đặt `SIMULATOR_OPERATOR_PASSWORD` là mật khẩu chỉ dùng local; không dùng mật
-khẩu production và không commit `.env`.
-
-Bật toàn bộ app, database và 20 trụ ảo bằng một lệnh:
-
-```powershell
-docker compose --profile simulator up --build -d
-```
-
-Kiểm tra kết quả:
-
-```powershell
-docker compose --profile simulator ps
-docker compose --profile simulator logs --no-color simulator-verify
-```
-
-Đạt khi `simulator-verify` kết thúc với mã `0` và log ghi `S-26 verified
-20/20 online chargers and sessions.` Báo cáo không chứa id tag nằm tại
-`.local/simulator-reports/simulator-results.json`, là dữ liệu local đã bị Git
-bỏ qua. Có thể đổi `SIMULATOR_COUNT`, `SIMULATOR_CODE_PREFIX`,
-`SIMULATOR_TAG_PREFIX` và `SIMULATOR_RANDOM_SEED` trong `.env`; mặc định là
-20 trụ `SIM-001` đến `SIM-020`.
-
-Docker Desktop phải đang chạy trước khi gọi lệnh. Nếu đổi logic OCPP, dùng
-`docker compose --profile simulator up --build -d` lại để build lại image
-simulator. Khi nâng simulator, chỉ đổi `SIMULATOR_OCPP_VERSION` và phiên bản
-WebSocket tương ứng trong cấu hình Compose; client, seed và verifier không cần
-sửa.
-
-## 6. Chạy backend trên máy, database trong Docker
-
-Cách này tiện khi phát triển vì Uvicorn tự reload.
-
-### Bước 1: Tạo môi trường ảo
-
-```powershell
-python -m venv .venv
-.venv\Scripts\Activate.ps1
-```
-
-### Bước 2: Cài project
-
-```powershell
-python -c "import sys; print(sys.executable)"
-.\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
-```
-
-Đường dẫn do lệnh đầu tiên in ra phải trỏ tới
-`CSMS\.venv\Scripts\python.exe`. Nếu không, cửa sổ PowerShell hiện tại đang dùng
-nhầm Python hệ thống hoặc Anaconda. Các lệnh tường minh bên dưới vẫn bảo đảm
-dùng đúng môi trường ảo. `-e` cho phép sửa source mà không cài lại; `[dev]` cài
-công cụ kiểm tra.
-
-### Bước 3: Chạy database
-
-```powershell
-docker compose up -d db
-docker compose ps
-```
-
-Chờ `db` thành `healthy`.
-
-### Bước 4: Chạy migration
-
-```powershell
-.\.venv\Scripts\python.exe -m alembic upgrade head
-.\.venv\Scripts\python.exe -m alembic current
-```
-
-### Bước 5: Chạy API
-
-```powershell
-.\.venv\Scripts\python.exe -m uvicorn src.entrypoints.http:app --reload --port 8001
-```
-
-Kiểm tra các URL ở mục 5. Dừng bằng `Ctrl+C`.
-
-Không chạy đồng thời API local và container `app` trên cùng cổng:
-
-| Chế độ | Container cần chạy | API được phục vụ bởi |
-| --- | --- | --- |
-| Toàn bộ bằng Docker | `app`, `db` | Container tại `localhost:8001` |
-| Phát triển trên máy | Chỉ `db` | Uvicorn local tại `localhost:8001` |
-
-Khi chuyển sang chế độ phát triển trên máy:
+Phương án này phù hợp khi cần reload backend trong lúc phát triển. Nếu container `app` đang chạy, dừng nó để tránh tranh cổng và tránh chạy hai bộ tác vụ nền trên cùng database.
 
 ```powershell
 docker compose stop app
 docker compose up -d db
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -e ".[dev,acceptance]"
+.\.venv\Scripts\python.exe -m alembic upgrade head
 .\.venv\Scripts\python.exe -m uvicorn src.entrypoints.http:app --reload --port 8001
 ```
 
-## 7. Kiểm tra chất lượng
+Các lệnh dùng đường dẫn Python tường minh để tránh chạy nhầm Anaconda hoặc Python global. Với Bash, đường dẫn tương ứng là `.venv/bin/python`. Frontend vẫn chạy như phương án A. Nếu cần dữ liệu tài khoản mẫu trên database local, chạy `python scripts/create_test_accounts.py` bằng Python của `.venv` sau khi migration hoàn tất; script không tạo đầy đủ trạm, biểu giá hoặc lịch sử phiên sạc.
 
-Ruff được khóa phiên bản trong dependency `dev` để local và CI dùng cùng
-bộ rule. Sau khi cập nhật code, đồng bộ công cụ bằng đúng môi trường dự án:
+### Địa chỉ và kiểm tra dịch vụ
+
+| Địa chỉ mặc định | Mục đích |
+| --- | --- |
+| `http://localhost:5173` | Giao diện Vite local |
+| `http://localhost:8001/docs` | OpenAPI tương tác của phiên bản API đang chạy |
+| `http://localhost:8001/openapi.json` | Schema OpenAPI |
+| `http://localhost:8001/health/live` | Kiểm tra tiến trình HTTP |
+| `http://localhost:8001/health/ready` | Kiểm tra kết nối database |
+| `localhost:5433` | PostgreSQL publish từ Compose cho công cụ trên máy |
+| `ws://localhost:8001/ocpp/{charge_point_code}` | Kết nối trụ, subprotocol `ocpp1.6` |
+
+Readiness chỉ chứng minh kiểm tra database thành công, không chứng minh trụ đang online, SMTP đã gửi thư hay cổng thanh toán hoạt động. Trụ cần được khai báo và đáp ứng điều kiện kết nối; việc mở được URL WebSocket chưa phải một kịch bản sạc hoàn chỉnh.
+
+Xem log bằng `docker compose logs -f app` hoặc `docker compose logs db`. Dừng stack bằng `docker compose down`; volume PostgreSQL vẫn được giữ. Không dùng `down -v` nếu cần bảo toàn dữ liệu.
+
+## Giả lập trụ và thanh toán
+
+### Đội trụ OCPP local
+
+Profile `simulator` cung cấp seed, client và verifier cho kịch bản đội 20 trụ ảo có ngắt/kết nối lại. Trước khi chạy, cấu hình `SIMULATOR_OPERATOR_PASSWORD` riêng trong `.env`; không dùng mật khẩu staging hoặc production.
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install -e ".[dev,acceptance]"
-.\.venv\Scripts\python.exe -m ruff --version
+docker compose --profile simulator up --build -d
+docker compose --profile simulator ps -a
+docker compose --profile simulator logs --no-color simulator-verify
 ```
 
-Phiên bản Ruff hiện tại là `0.17.0`. Không dùng bản Ruff global thay cho
-bản trong `.venv` khi kiểm tra chất lượng.
+Kết quả cần có là `simulator-verify` kết thúc với mã `0`, không chỉ các container còn chạy. Báo cáo mặc định nằm tại `.local/simulator-reports/simulator-results.json`, có thông tin lần chạy để verifier phát hiện báo cáo cũ. Trước một lần chạy độc lập mới, dừng profile bằng `docker compose --profile simulator down`, sau đó khởi động lại, không xóa volume database.
 
-Bảo đảm database đang chạy, rồi thực hiện bằng đúng Python trong `.venv`:
+`SIMULATOR_OCPP_VERSION` là phiên bản thư viện simulator, không phải phiên bản giao thức trên dây; giao thức kết nối vẫn là OCPP 1.6J. Hướng dẫn điều chỉnh fleet và tiêu chí verifier nằm tại [S-26](docs/S26_SIMULATOR_DELIVERY.md). Demo theo đầu nối đã khai báo hoặc seed theo manifest có quy trình khác: đọc [hướng dẫn simulator](docs/SIMULATOR_DEMO_GUIDE.md) và [manifest T-107/T-108](docs/T107_T108_MANIFEST.md) trước khi chạy script.
+
+### Nạp tiền và kết quả thanh toán
+
+`PAYMENT_GATEWAY=disabled` là mặc định. Chế độ `fake` phục vụ local/test; `sandbox` tích hợp VNPAY sandbox. Cả hai chế độ bật thanh toán đều cần `PAYMENT_WEBHOOK_SECRET`; sandbox còn cần merchant và các URL hợp lệ theo [runbook VNPAY](docs/S35_VNPAY_SANDBOX.md).
+
+Không suy ra ví đã được cộng tiền chỉ từ trang chuyển hướng thành công. Kết quả cần được backend xác minh và ghi nhận qua luồng settlement có kiểm soát trùng lặp. Khi cấu hình local `fake` qua cổng publish mặc định, `PAYMENT_FAKE_BASE_URL` cần trỏ tới địa chỉ trình duyệt truy cập được, thường là `http://localhost:8001`, thay vì cổng nội bộ `8000`. Không đưa khóa webhook hoặc HashSecret vào biến `VITE_*`, vì cấu hình frontend có thể xuất hiện trong bundle trình duyệt.
+
+## Kiểm thử và chất lượng
+
+Backend có cả test đơn vị, test PostgreSQL, test socket OCPP và các kịch bản đồng thời/khôi phục. Chạy test trên **database riêng có thể hủy**, không trỏ `DATABASE_URL` của bộ test đến staging hoặc dữ liệu demo đang sử dụng. Cách chuẩn bị database và lệnh kiểm tra theo phạm vi được mô tả trong [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ```powershell
 .\.venv\Scripts\python.exe -m ruff check .
@@ -332,248 +218,47 @@ Bảo đảm database đang chạy, rồi thực hiện bằng đúng Python tro
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
-- Ruff kiểm tra lỗi và quy ước code.
-- Ruff format kiểm tra định dạng nhưng không tự sửa file.
-- mypy kiểm tra kiểu dữ liệu.
-- Pytest chạy test tự động.
+Trong `frontend/`, chạy `npm run lint`, `npm test` và `npm run build`. `npm run build` kiểm tra TypeScript rồi tạo bản phân phối Vite. Phiên bản Ruff được khóa trong `pyproject.toml`; sử dụng dependency của dự án thay cho công cụ global.
 
-Cả bốn lệnh phải thành công trước khi push.
+Workflow [`ci.yml`](.github/workflows/ci.yml) chạy kiểm tra backend, frontend, hai kiểm tra độ trễ MeterValues riêng, kịch bản simulator và build image. Workflow [backup/restore](.github/workflows/s62-backup.yml) bổ sung kiểm chứng PostgreSQL khi các thành phần backup liên quan thay đổi hoặc được chạy thủ công. Kết quả pipeline và điều kiện merge cần được đọc trên từng PR; việc có workflow trong repository không tự chứng minh lần chạy hiện tại đã đạt.
 
-Không chạy `docker compose exec app pytest`: image ứng dụng chỉ chứa dependency
-runtime và không chứa thư mục `tests`. Chạy test trên máy bằng `.venv`; dùng
-Docker để kiểm tra runtime của ứng dụng và PostgreSQL.
+## Triển khai và vận hành
 
-## 8. Migration
+Khi có push lên `develop`, pipeline đủ điều kiện sẽ build/push image theo SHA lên GHCR, triển khai backend staging rồi triển khai frontend. Image cũng được push cho `main`; tag `latest` chỉ được push ở `main`. Không diễn giải điều này thành tự động đưa `main` lên production: workflow hiện có bước triển khai staging từ `develop`.
 
-Sau khi thay đổi model, tạo migration:
+Hai script [`deploy_staging.sh`](scripts/deploy_staging.sh) và [`deploy_frontend_staging.sh`](scripts/deploy_frontend_staging.sh) kiểm tra candidate trước khi chuyển container, giữ container cũ cho khôi phục nếu kiểm tra thất bại. Đây là cơ chế khôi phục ứng dụng; nó không tự đảo ngược dữ liệu đã được migration. Runtime cần Docker, mạng nội bộ đúng và cấu hình tài khoản database phù hợp. Các secret SSH của workflow gồm `STAGING_HOST`, `STAGING_USER`, `STAGING_SSH_KEY` và cổng tùy chọn `STAGING_PORT`.
 
-```powershell
-.\.venv\Scripts\python.exe -m alembic revision --autogenerate -m "mo ta thay doi"
-```
+Nginx frontend phục vụ SPA và proxy `/api/` đến `csms-app:8000`; frontend và backend phải ở mạng Docker phù hợp. Cấu hình mẫu này không thay thế cấu hình TLS/WSS ở lớp triển khai. Với HTTPS, bật `AUTH_COOKIE_SECURE=true`. Xem [phân quyền database runtime](docs/STAGING_RUNTIME_DATABASE.md) và [backup, khôi phục](docs/S62_BACKUP_RUNBOOK.md) trước khi thay đổi hạ tầng hoặc chạy migration trên môi trường có dữ liệu.
 
-Đọc file vừa sinh, rồi kiểm tra cả chiều tiến và lùi:
+Một số tích hợp cần cấu hình riêng: SMTP và người nhận cho email, URL/merchant cho VNPAY, tile provider cho bản đồ, cùng dữ liệu trạm/thẻ/ví hợp lệ cho simulator. Riêng `BILLING_AVAILABLE_CONFIRMS_UNPLUG` chỉ được bật khi fleet đã được xác minh rằng `Available` thực sự chứng minh rút súng; không dùng mất kết nối làm bằng chứng thay thế.
 
-```powershell
-.\.venv\Scripts\python.exe -m alembic upgrade head
-.\.venv\Scripts\python.exe -m alembic downgrade -1
-.\.venv\Scripts\python.exe -m alembic upgrade head
-```
+### Chẩn đoán nhanh
 
-Không tạo/sửa bảng bằng tay. Mọi thay đổi schema phải qua Alembic.
+| Hiện tượng | Hướng kiểm tra |
+| --- | --- |
+| API chưa sẵn sàng hoặc `/health/ready` trả `503` | Kiểm tra `docker compose ps`, log `app`/`db`, migration và URL database theo đúng ngữ cảnh host/container |
+| Migration yêu cầu legacy cutoff | Xác định database mới hay đã có dữ liệu; dùng mốc được phê duyệt, không tự chọn ngày hiện tại |
+| Không kết nối được PostgreSQL local | Compose publish `5433`; tài khoản/mật khẩu phải khớp database đang nằm trong volume |
+| Frontend mở được nhưng API/login lỗi | Kiểm tra proxy Vite/Nginx, hostname cookie và `AUTH_COOKIE_SECURE`; container frontend không được Compose mặc định khởi động |
+| Cổng `8001` bị chiếm | Chỉ chạy một trong container `app` hoặc Uvicorn local tại cổng đó |
+| Python thiếu module hoặc dùng nhầm môi trường | Kiểm tra `sys.executable`; dùng `.venv` và cài editable với nhóm dependency cần thiết |
+| Script async báo lỗi Proactor trên Windows | Script độc lập dùng Psycopg cần selector event loop; tham khảo cách khởi chạy trong `scripts/create_test_accounts.py` hoặc `migrations/env.py` |
+| Simulator không xác minh được | Kiểm tra seed, mật khẩu verifier, namespace, báo cáo lần chạy và log `simulator-verify`; không dùng báo cáo cũ để kết luận |
 
-## 9. Cấu trúc repository
+Đổi biến `POSTGRES_PASSWORD` không tự thay mật khẩu trong volume PostgreSQL đã tồn tại. Không xóa volume để giải quyết sự cố trên môi trường cần giữ dữ liệu.
 
-```text
-CSMS/
-├── src/
-│   ├── entrypoints/       # Điểm vào HTTP, OCPP, worker
-│   ├── modules/           # Module nghiệp vụ
-│   ├── platform/          # Database, auth, event, log, job dùng chung
-│   └── config.py          # Cấu hình môi trường
-├── tests/                 # Test tự động
-├── migrations/            # Alembic migration
-├── docs/                  # Kiến trúc và hướng dẫn task
-├── Dockerfile
-├── docker-compose.yml
-└── pyproject.toml
-```
+## Tra cứu và đóng góp
 
-Chiều phụ thuộc bắt buộc:
+README cung cấp điểm bắt đầu; tài liệu chuyên đề lưu chi tiết hợp đồng và vận hành. Khi nội dung chuyên đề cũ khác hành vi đang chạy, đối chiếu mã nguồn, migration và OpenAPI tương ứng trước khi áp dụng.
 
-```text
-entrypoints -> modules -> platform
-```
+| Chủ đề | Tài liệu |
+| --- | --- |
+| Quy trình đóng góp và review | [CONTRIBUTING](CONTRIBUTING.md), [giao backlog end-to-end](docs/BACKLOG_DELIVERY_GUIDE.md) |
+| Kiến trúc và phân quyền | [Kiến trúc hệ thống](docs/SYSTEM_ARCHITECTURE.md), [policy endpoint](docs/ENDPOINT_AUTHORIZATION_DELIVERY.md) |
+| OCPP và vòng đời phiên | [Kết nối](docs/OCPP_FOUNDATION_DELIVERY.md), [giám sát](docs/OCPP_MONITORING_DELIVERY.md), [phục hồi](docs/OCPP_RECOVERY_DELIVERY.md), [điều khiển](docs/OCPP_CONTROL_DELIVERY.md) |
+| Tài xế và lịch sử | [Bắt đầu/theo dõi sạc](docs/DRIVER_CHARGING_DELIVERY.md), [lịch sử và hóa đơn](docs/T114_DRIVER_HISTORY.md) |
+| Tính tiền và ví | [Chiếm trụ](docs/S28_OCCUPATION_LIFECYCLE.md), [chốt phiên](docs/T102_CLOSURE_SETTLEMENT.md), [điều kiện ví](docs/T104_WALLET_ELIGIBILITY.md), [đối soát VNPAY](docs/S35_VNPAY_RECONCILIATION.md) |
+| Khai thác trạm | [Công suất](docs/S42_S43_S44_POWER.md), [đặt chỗ](docs/S48_S49_S51_RESERVATIONS.md), [phí không đến](docs/S50_RESERVATION_FEES.md) |
+| Vận hành và dữ liệu | [SMTP](docs/SHARED_SMTP.md), [thông báo](docs/S59_NOTIFICATION_DELIVERY.md), [quyền riêng tư](docs/S57_DATA_RETENTION_PRIVACY.md), [backup](docs/S62_BACKUP_RUNBOOK.md) |
 
-## 10. Lỗi thường gặp
-
-### Cổng 8001 bị chiếm
-
-Đổi mapping thành `8002:8000`, hoặc chạy Uvicorn với `--port 8002`.
-
-### Cổng 5432 bị chiếm
-
-Đổi mapping thành `5433:5432` và đổi cổng trong `DATABASE_URL` local thành
-`5433`.
-
-### `/health/ready` trả 503
-
-```powershell
-docker compose ps
-docker compose logs db
-alembic current
-```
-
-Kiểm tra database đang healthy và URL dùng đúng host (`localhost` ngoài
-container, `db` trong Compose).
-
-### Không kích hoạt được `.venv` trong PowerShell
-
-```powershell
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-.venv\Scripts\Activate.ps1
-```
-
-Bạn cũng có thể không kích hoạt môi trường mà gọi trực tiếp
-`.\.venv\Scripts\python.exe` như các lệnh trong tài liệu này.
-
-### Có `ModuleNotFoundError` dù đã cài dependency
-
-Kiểm tra Python thực sự đang được sử dụng:
-
-```powershell
-python -c "import sys; print(sys.executable)"
-.\.venv\Scripts\python.exe -c "import sys; print(sys.executable)"
-```
-
-Nếu hai đường dẫn khác nhau, hãy chạy lệnh bằng
-`.\.venv\Scripts\python.exe -m <module>` thay vì `python` hoặc executable toàn
-cục.
-
-### Docker báo không tìm thấy Alembic revision
-
-Ví dụ: `Can't locate revision identified by '<revision>'`. Trường hợp thường
-gặp là image `app` được build từ source cũ trong khi database đã ở migration
-mới hơn. Rebuild image và xem log:
-
-```powershell
-docker compose up --build -d
-docker compose logs app
-```
-
-Không dùng `docker compose down -v` để sửa lỗi image cũ. Lệnh đó xóa toàn bộ dữ
-liệu PostgreSQL local nhưng không cập nhật source trong image.
-
-### Container healthy nhưng không truy cập được API từ Windows
-
-Trạng thái `healthy` có thể chỉ chứng minh endpoint truy cập được từ bên trong
-container. Kiểm tra URL từ host và cấu hình thực tế:
-
-```powershell
-curl.exe -i http://127.0.0.1:8001/health/live
-docker compose config
-docker compose logs app
-docker inspect csms-app --format '{{json .Config.Cmd}}'
-```
-
-Trong log, Uvicorn trong container phải lắng nghe tại `0.0.0.0:8000`, không
-phải `127.0.0.1:8000`.
-
-### Script async dùng Psycopg lỗi event loop trên Windows
-
-Với script Python độc lập truy cập database, dùng selector event loop:
-
-```python
-import asyncio
-import selectors
-
-asyncio.run(
-    main(),
-    loop_factory=lambda: asyncio.SelectorEventLoop(selectors.SelectSelector()),
-)
-```
-
-Ứng dụng, migration và test đã có cấu hình riêng; chỉ áp dụng đoạn trên cho
-script độc lập gặp lỗi Proactor event loop.
-
-### Không nhìn thấy session cookie sau khi đăng nhập
-
-Swagger UI không hiển thị giá trị `Set-Cookie` qua JavaScript. Kiểm tra trong
-Browser DevTools tại **Network** hoặc **Application/Storage**, hoặc dùng curl:
-
-```powershell
-curl.exe -i `
-  -H "Content-Type: application/json" `
-  -d '{"email":"email-cua-ban@example.com","password":"mat-khau-local"}' `
-  http://localhost:8001/api/v1/auth/login
-```
-
-Response thành công phải có header `Set-Cookie` với `HttpOnly`. Không gửi mật
-khẩu, token hoặc cookie thật khi nhờ người khác hỗ trợ.
-
-## 11. CI/CD frontend
-
-Pull request và mọi lần push chạy ba bước frontend trong GitHub Actions:
-`npm run lint`, `npm test` và `npm run build`. Workflow cũng build image từ
-`frontend/Dockerfile`; image chỉ được đẩy lên GHCR khi merge vào `main`.
-
-Sau khi backend staging triển khai thành công, workflow chạy
-`scripts/deploy_frontend_staging.sh`. Script kiểm tra candidate trên cổng nội
-bộ, xác nhận trang chủ trả HTTP `200` và API proxy trả HTTP `401`, rồi mới thay
-container đang phục vụ. Nếu lần kiểm tra sau khi thay thất bại, container cũ
-được khôi phục.
-
-Staging cần bốn repository secrets đã dùng cho backend: `STAGING_HOST`,
-`STAGING_PORT`, `STAGING_USER`, `STAGING_SSH_KEY`. VM cần Docker, container
-backend tên `csms-app`, và NSG/firewall phải cho phép cổng `80` nếu cần truy cập
-frontend từ Internet. Nginx chuyển tiếp `/api/` đến backend qua Docker network,
-vì vậy frontend không cần cấu hình URL API riêng cho staging.
-
-## 12. Tài liệu cần đọc
-
-1. [Hướng dẫn giao backlog end-to-end](docs/BACKLOG_DELIVERY_GUIDE.md)
-2. [Kiến trúc hệ thống](docs/SYSTEM_ARCHITECTURE.md)
-3. [Kế hoạch Sprint 1](docs/SPRINT_1_EXECUTION.md)
-4. [Hướng dẫn kỹ thuật backend](docs/BACKEND_TASK_GUIDE.md)
-5. [Quy tắc đóng góp](CONTRIBUTING.md)
-
-Trước mỗi backlog, đọc đầy đủ dòng tương ứng trong
-`.local/project-inputs/Backlog CSMS.xlsx`, lập Coverage Matrix và kiểm tra
-dependency. Không dùng danh sách task kỹ thuật để xác định hoặc thu hẹp phạm vi. Nếu tài
-liệu khác acceptance criteria trong backlog, acceptance criteria là nguồn kiểm
-tra cuối.
-
-## Nền tảng OCPP Sprint 2–3
-
-Nhóm kết nối OCPP (S-06/07/08/13/14) được giao cùng màn hình Kết nối trụ.
-Xem [phạm vi, Coverage Matrix và cách kiểm thử](docs/OCPP_FOUNDATION_DELIVERY.md). Registry hiện chạy
-một process; nâng migration trước khi khởi động. Kiểm tra trạng thái Jira riêng
-trước nghiệm thu. Phần bản đồ tài xế đã được tích hợp cùng trên nhánh cục bộ.
-
-
-## Điều chỉnh Sprint 2–3 (02/10/2026)
-
-Theo quyết định của người dùng, Sprint 2–3 triển khai theo chức năng với đầu ra DB/API/giao diện chạy thật. Quy tắc một story một nhánh và không làm sớm backlog tương lai được điều chỉnh trong phạm vi [kế hoạch chức năng](docs/SPRINT_2_3_FUNCTION_PLAN.md); AC/NFR của story vẫn được giữ để đối chiếu. Bản đồ vị trí trạm cho tài xế được làm sớm theo yêu cầu mentor.
-
-## Nhóm giám sát S-09–S-12
-
-Nhóm 2 bổ sung Heartbeat, trạng thái/lỗi đầu nối, offline theo lần liên lạc cuối
-và màn hình SSE tự nối lại. Xem [phạm vi, API và kiểm chứng](docs/OCPP_MONITORING_DELIVERY.md).
-Cần nâng migration a721093e4f62 trước khi chạy. Bằng chứng hiện là kiểm thử
-cục bộ; trạng thái Jira/CI và nghiệm thu được kiểm tra riêng.
-
-## Nhóm 3: phiên sạc OCPP
-
-S-15, S-17, S-18, S-19, S-20 bổ sung xác thực thẻ, phiên sạc, số đo và kiểm tra dữ liệu; có màn hình quản lý phiên/thẻ/chờ đối chiếu dùng API thật. Nâng migration d830a62f194b trước khi chạy. Xem [Coverage Matrix, API, kiểm chứng và demo thủ công](docs/OCPP_CHARGING_DELIVERY.md). Đối chiếu/xử lý pending, đóng tay và điều khiển từ xa thuộc các nhóm tiếp theo. Bằng chứng local không thay thế Jira/CI.
-
-
-## Nhóm 4: phục hồi phiên sạc
-
-S-21 và S-25 bổ sung giữ phiên khi nối lại, nhận tin/số đo muộn theo transactionId, đánh dấu bất thường khi offline quá ngưỡng (mặc định 6 giờ), đóng tay có lý do và lịch sử. Giao diện có bộ lọc bất thường, xác nhận đóng tay và quyền đọc cho kế toán. Nâng migration e41b9027c6a8 trước khi chạy. Xem [AC, API, cấu hình và kiểm thử thủ công](docs/OCPP_RECOVERY_DELIVERY.md). Đóng tay hồ sơ không gửi lệnh dừng tới trụ; pending không khớp vẫn không tự gán phiên. Bằng chứng local không thay Jira/CI.
-
-## Nhóm 5: điều khiển từ xa
-
-S-16, S-23, S-27 thêm Reset, dừng phiên từ xa và nhật ký bất biến. Operator/admin gửi lệnh; admin lọc nhật ký. Accepted không tự đóng phiên; chờ StopTransaction thật, sau 2 phút thiếu tin kết thúc thì cần kiểm tra. Nâng migration f52c813d7a09. Xem [AC, API và test thủ công](docs/OCPP_CONTROL_DELIVERY.md). Bằng chứng local không thay Jira/CI.
-
-## Nhóm 6: tài xế theo dõi và bắt đầu sạc
-
-S-22 và S-24 thêm phiên hiện tại theo tài khoản đăng nhập, cập nhật kWh/thời gian và bắt đầu bằng thẻ ảo qua RemoteStartTransaction. Accepted chờ StartTransaction thật; thiếu xác nhận sau 60 giây cho thử lại. Đầu nối bận/Reserved bị chặn; quyền sở hữu đặt chỗ thuộc phần đặt chỗ sau. Nâng migration c60318a4d962. Xem [AC, API và kiểm thử thủ công](docs/DRIVER_CHARGING_DELIVERY.md). Bằng chứng local không thay Jira/CI.
-
-## S-35: contract cổng thanh toán (T-90)
-
-Luồng nạp ví dùng cổng giả lập cho local/test; cổng sandbox thật thuộc S-67.
-Contract `PaymentGateway` có hai hàm: `create_payment(PaymentRequest)` trả
-`PaymentRedirect`, và `verify_webhook(raw_body, headers)` trả `GatewayEvent`.
-Ba biến môi trường: `PAYMENT_GATEWAY` (mặc định `disabled`, chọn `fake` hoặc
-`sandbox`), `PAYMENT_WEBHOOK_SECRET` (bắt buộc khi bật cổng),
-`PAYMENT_RETURN_URL` (local `http://localhost:5173/wallet/topup/return`).
-Không có khóa webhook mặc định. T-90 chưa cung cấp route hoặc adapter thanh toán.
-Xem [contract, ví dụ webhook HMAC và quy ước T-92/T-93/T-94/T-95](docs/T90_PAYMENT_GATEWAY.md).
-
-## S-35: tạo lệnh nạp ví (T-93)
-
-`POST /api/v1/driver/wallet/topups` kiểm quyền tài xế, lấy ví của chính tài xế,
-kiểm số tiền nguyên theo `WALLET_TOPUP_MIN_VND`/`WALLET_TOPUP_MAX_VND` (mặc định
-10.000–5.000.000 đồng), ghi lệnh pending và gọi PaymentGateway.
-`GET /api/v1/driver/wallet/topups/{order_id}` cung cấp trạng thái cho T-94.
-Chưa có adapter T-92 thì POST trả 503; tạo lệnh không cộng tiền vào ví.
-Xem [API, lỗi/timeout và điểm nối T-92/T-94](docs/T93_WALLET_TOPUP_API.md).
+Mọi đóng góp nên bắt đầu từ phạm vi đã thống nhất, một nhánh riêng từ `develop` và bằng chứng kiểm tra phù hợp. Hướng dẫn chi tiết về thay đổi schema, giao diện, API và chuẩn bị PR nằm trong [CONTRIBUTING.md](CONTRIBUTING.md).
