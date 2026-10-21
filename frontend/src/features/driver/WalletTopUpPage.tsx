@@ -72,7 +72,7 @@ export function WalletTopUpPage({ storageKey, onOrder, onTopUp, onCheckOrder, on
 
   return <section className="driver-wallet-page">
     <h2>Nạp tiền vào ví</h2>
-    <p>Chọn số tiền muốn nạp. Số dư chỉ thay đổi sau khi backend xác nhận thanh toán.</p>
+    <p>Chọn số tiền muốn nạp. Số dư chỉ thay đổi sau khi hệ thống xác nhận thanh toán.</p>
     <form onSubmit={event => void handleSubmit(event)} noValidate>
       <label htmlFor="topup-amount">Số tiền nạp (VNĐ)</label>
       <input id="topup-amount" type="text" inputMode="numeric" value={amount}

@@ -44,11 +44,13 @@ export function DriverWalletPage({
   onTopUp,
   onOpenInvoice,
   topUpContent,
+  topUpExpanded,
 }: {
   walletApi?: DriverWalletApi
   onTopUp?: () => void
   onOpenInvoice?: (id: number) => void
   topUpContent?: ReactNode
+  topUpExpanded?: boolean
 }) {
   const [wallet, setWallet] = useState<DriverWallet | null>(null)
   const [transactions, setTransactions] = useState<WalletLedgerItem[]>([])
@@ -175,7 +177,10 @@ export function DriverWalletPage({
       )}
 
       {loading && !wallet && <p role="status">Đang tải thông tin ví…</p>}
-      {!wallet && topUpContent}
+      {!wallet && <>
+        {onTopUp && <button className="primary-button topup-button" aria-expanded={topUpExpanded} aria-controls="driver-topup-panel" onClick={onTopUp}>Nạp tiền vào ví</button>}
+        {topUpContent}
+      </>}
       {wallet && <>
       {/* Main Balance Card */}
       <div className={`driver-balance-card ${isNegative ? 'negative' : ''}`}>
@@ -217,6 +222,8 @@ export function DriverWalletPage({
           <button
             className="primary-button topup-button"
             aria-label="Nạp tiền vào ví"
+            aria-expanded={topUpExpanded}
+            aria-controls={topUpContent ? 'driver-topup-panel' : undefined}
             onClick={() => onTopUp ? onTopUp() : setShowTopupModal(true)}
           >
             <Icon name="plus" />
@@ -242,12 +249,6 @@ export function DriverWalletPage({
           <div className="driver-tx-empty">
             <Icon name="wallet" />
             <p>Chưa có giao dịch nào được ghi nhận trong ví.</p>
-            <button
-              className="secondary-button"
-              onClick={() => onTopUp ? onTopUp() : setShowTopupModal(true)}
-            >
-              Nạp tiền ngay
-            </button>
           </div>
         ) : (
           <div className="driver-tx-list" role="feed" aria-label="Danh sách giao dịch ví">
@@ -305,7 +306,7 @@ export function DriverWalletPage({
                       {tx.reference_id && (
                         <span className="tx-ref-badge">
                           {['charging_session', 'session'].includes(tx.reference_type ?? '') && /^\d+$/.test(tx.reference_id) ? (
-                            <button className="text-button" onClick={async () => {
+                            <button className="driver-transaction-detail-link" aria-label={`Chi tiết phiên sạc #${tx.reference_id}`} onClick={async () => {
                               setActiveTransaction(tx.id)
                               detailRequest.current?.abort()
                               const controller = new AbortController()
@@ -321,12 +322,12 @@ export function DriverWalletPage({
                                 setSessionDetail(data)
                                 setDetailError('')
                               } catch (err) { if (controller.signal.aborted) return; setDetailError(err instanceof Error ? err.message : 'Không thể mở phiên sạc.') }
-                            }}>Xem phiên sạc #{tx.reference_id}</button>
+                            }}>Chi tiết</button>
                           ) : (
                             <>
-                              {tx.entry_type === 'reservation_fee' && tx.reference_type === 'reservation' && /^[0-9a-f-]{36}$/i.test(tx.reference_id) && <a className="text-button" href={`#driver-reservation-${tx.reference_id}`}>Xem đặt chỗ</a>}
+                              {tx.entry_type === 'reservation_fee' && tx.reference_type === 'reservation' && /^[0-9a-f-]{36}$/i.test(tx.reference_id) && <a className="driver-transaction-detail-link" aria-label={`Chi tiết đặt chỗ của giao dịch #${tx.id}`} href={`#driver-reservation-${tx.reference_id}`}>Chi tiết</a>}
                               <details className="tx-reference-value"><summary>Mã giao dịch</summary><p>Mã dòng #{tx.id}</p><p>Mã tham chiếu: {tx.reference_id}</p></details>
-                              {['gateway_topup', 'manual_topup'].includes(tx.entry_type) && <button className="text-button" onClick={async () => {
+                              {['gateway_topup', 'manual_topup'].includes(tx.entry_type) && <button className="driver-transaction-detail-link" aria-label={`Chi tiết lần nạp của giao dịch #${tx.id}`} onClick={async () => {
                                 setActiveTransaction(tx.id)
                               detailRequest.current?.abort()
                                 const controller = new AbortController()
@@ -339,7 +340,7 @@ export function DriverWalletPage({
                                   if (controller.signal.aborted) return
                                   setTransactionDetail(data); setDetailError('')
                                 } catch (error) { if (!controller.signal.aborted) setDetailError(error instanceof Error ? error.message : 'Không thể mở giao dịch.') }
-                              }}>Xem lần nạp</button>}
+                              }}>Chi tiết</button>}
                             </>
                           )}
                         </span>
