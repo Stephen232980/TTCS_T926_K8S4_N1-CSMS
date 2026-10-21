@@ -91,6 +91,11 @@ body:has(.driver-shell) { min-width: 0; }
 .driver-shell .leaflet-control-zoom a { width: 44px; height: 44px; line-height: 44px; }
 .driver-shell .station-map p { font-size: 13px; }
 .driver-station-results { min-width: 0; }
+.driver-discovery-tools { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; }
+.driver-shell .driver-availability-filter { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-size: 14px; cursor: pointer; }
+.driver-shell .driver-availability-filter input { width: 20px; height: 20px; min-height: 0; margin: 0; accent-color: var(--accent); flex-shrink: 0; }
+.driver-discovery-empty p { margin-top: 0; }
+.driver-discovery-empty button { min-height: 44px; }
 .driver-shell .driver-mobile-map-toggle { display: none; }
 @media (width < 700px) {
   .driver-shell .driver-station-search { grid-template-columns: minmax(0, 1fr) 44px; align-items: end; gap: 8px; }
