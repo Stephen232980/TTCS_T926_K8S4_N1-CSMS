@@ -34,7 +34,7 @@ from src.platform.database.session import SessionFactory, get_db_session
 @pytest.mark.asyncio
 @pytest.mark.parametrize("record_seen", [False, True])
 async def test_concurrent_duplicates_are_committed_once_and_replay_in_new_session(
-    record_seen,
+    record_seen: bool,
 ) -> None:
     async with SessionFactory() as session, session.begin():
         station, charger = await charger_fixture(session)
