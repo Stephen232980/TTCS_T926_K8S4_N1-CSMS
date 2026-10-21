@@ -3,11 +3,84 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DriverMapPage } from './DriverMapPage'
 
-vi.mock('../../components/maps/StationMap', () => ({ StationMap: ({ onLocate }: { onLocate?: (position: { latitude: number; longitude: number }) => void }) => <div aria-label="Bản đồ trạm sạc"><button onClick={() => onLocate?.({ latitude: 10.7, longitude: 106.7 })}>Đến vị trí của tôi</button></div> }))
+vi.mock('../../components/maps/StationMap', () => ({ StationMap: ({ onLocate, stations = [] }: { stations?: {id: string}[]; onLocate?: (position: { latitude: number; longitude: number }) => void }) => <div aria-label="Bản đồ trạm sạc" data-stations={stations.map(station => station.id).join(',')}><button onClick={() => onLocate?.({ latitude: 10.7, longitude: 106.7 })}>Đến vị trí của tôi</button></div> }))
 vi.mock('./DriverCharging', () => ({ DriverCharging: () => <div /> }))
 afterEach(() => vi.unstubAllGlobals())
 const data = { items: [{ id: 'one', name: 'Trạm thật', address: 'Địa chỉ trạm', latitude: 10.7, longitude: 106.7 }], page: 1, total: 1, total_pages: 1 }
 describe('DriverMapPage', () => {
+  it('requires the selected connector type itself to be free and preserves the filter if that type disappears', async () => {
+    const connector = (id: string, connector_type: string, available: boolean) => ({id, connector_type, available})
+    const mixed = {...data.items[0], id: 'mixed', name: 'Trạm CCS bận', available_connectors: 1, connectors: [connector('a', 'CCS2', false), connector('b', 'Type 2', true)]}
+    const ready = {...data.items[0], id: 'ready', name: 'Trạm CCS rảnh', available_connectors: 1, connectors: [connector('c', 'CCS2', true)]}
+    const unknown = {...data.items[0], id: 'unknown', name: 'Trạm chưa khai báo', available_connectors: 1}
+    const request = vi.fn().mockResolvedValue({ok: true, json: async () => ({...data, total: 3, items: [mixed, ready, unknown]})})
+    vi.stubGlobal('fetch', request)
+    const user = userEvent.setup()
+    render(<DriverMapPage />)
+    await screen.findByText('Trạm CCS rảnh')
+    await user.selectOptions(screen.getByLabelText('Loại đầu nối'), 'CCS2')
+    expect(screen.getByText('Trạm CCS bận')).toBeInTheDocument()
+    expect(screen.queryByText('Trạm chưa khai báo')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('checkbox', {name: 'Còn đầu nối rảnh'}))
+    expect(screen.queryByText('Trạm CCS bận')).not.toBeInTheDocument()
+    expect(screen.getByText('Trạm CCS rảnh')).toBeInTheDocument()
+    expect(screen.getByLabelText('Bản đồ trạm sạc')).toHaveAttribute('data-stations', 'ready')
+    expect(request).toHaveBeenCalledOnce()
+    request.mockResolvedValue({ok: true, json: async () => ({...data, items: [unknown]})})
+    fireEvent(document, new Event('visibilitychange'))
+    await screen.findByText('Không có trạm phù hợp với bộ lọc đã chọn.')
+    expect(screen.getByLabelText('Loại đầu nối')).toHaveValue('CCS2')
+    await user.click(screen.getByRole('button', {name: 'Xem tất cả trạm'}))
+    expect(screen.getByLabelText('Loại đầu nối')).toHaveValue('')
+    expect(screen.getByRole('checkbox', {name: 'Còn đầu nối rảnh'})).not.toBeChecked()
+    expect(screen.getByText('Trạm chưa khai báo')).toBeInTheDocument()
+  })
+  it('filters the complete list and map by free connectors, updates after polling and recovers from no matches', async () => {
+    const items = [
+      { ...data.items[0], id: 'busy', name: 'Trạm hết chỗ', available_connectors: 0 },
+      { ...data.items[0], id: 'free', name: 'Trạm còn chỗ', available_connectors: 2 },
+      { ...data.items[0], id: 'unknown', name: 'Trạm chưa rõ' },
+    ]
+    const request = vi.fn().mockResolvedValue({ok: true, json: async () => ({...data, total: 3, items})})
+    vi.stubGlobal('fetch', request)
+    const user = userEvent.setup()
+    render(<DriverMapPage />)
+    await screen.findByText('Trạm còn chỗ')
+    await user.click(screen.getByRole('checkbox', {name: 'Còn đầu nối rảnh'}))
+    expect(screen.queryByText('Trạm hết chỗ')).not.toBeInTheDocument()
+    expect(screen.queryByText('Trạm chưa rõ')).not.toBeInTheDocument()
+    expect(screen.getByText('1/3 trạm')).toBeInTheDocument()
+    expect(screen.getByLabelText('Bản đồ trạm sạc')).toHaveAttribute('data-stations', 'free')
+    expect(request).toHaveBeenCalledOnce()
+    request.mockResolvedValue({ok: true, json: async () => ({...data, total: 3, items: items.map(item => ({...item, available_connectors: 0}))})})
+    fireEvent(document, new Event('visibilitychange'))
+    await screen.findByText('Chưa có trạm còn đầu nối rảnh trong kết quả này.')
+    expect(screen.getByLabelText('Bản đồ trạm sạc')).toHaveAttribute('data-stations', '')
+    await user.click(screen.getByRole('button', {name: 'Xem tất cả trạm'}))
+    expect(screen.getByText('Trạm hết chỗ')).toBeInTheDocument()
+    expect(screen.getByText('3 trạm')).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', {name: 'Còn đầu nối rảnh'})).not.toBeChecked()
+  })
+  it('keeps selection and the map instance when opening and closing the mobile map', async () => {
+    const request = vi.fn().mockResolvedValue({ ok: true, json: async () => data })
+    vi.stubGlobal('fetch', request)
+    const user = userEvent.setup()
+    render(<DriverMapPage />)
+    const station = await screen.findByRole('button', { name: /Trạm thật/ })
+    await user.click(station)
+    const map = screen.getByLabelText('Bản đồ trạm sạc')
+    const toggle = screen.getByRole('button', { name: 'Hiện bản đồ' })
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await user.click(toggle)
+    expect(toggle).toHaveAccessibleName('Ẩn bản đồ')
+    expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    await user.click(toggle)
+    expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.getByLabelText('Bản đồ trạm sạc')).toBe(map)
+    expect(station).toHaveAttribute('aria-pressed', 'true')
+    expect(toggle).toHaveFocus()
+    expect(request).toHaveBeenCalledOnce()
+  })
   it('retains the last projection with a stale warning after a visible refresh fails', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce({ ok: true, json: async () => ({ ...data, items: [{ ...data.items[0], available_connectors: 1, total_connectors: 2, energy_rate_vnd_per_kwh: 2500 }] }) }).mockResolvedValue({ ok: false, status: 500 })
     vi.stubGlobal('fetch', fetchMock)
@@ -25,7 +98,7 @@ describe('DriverMapPage', () => {
     render(<DriverMapPage />)
     expect(await screen.findByText(/Có hơn 500 trạm/)).toBeInTheDocument()
     expect(request).toHaveBeenCalledOnce()
-    expect(screen.queryByLabelText('Danh sách trạm trên bản đồ')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Danh sách trạm sạc')).not.toBeInTheDocument()
   })
   it('loads the driver endpoint with a session and searches by address', async () => {
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => data })

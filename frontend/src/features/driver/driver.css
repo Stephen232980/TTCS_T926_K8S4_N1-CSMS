@@ -1,3 +1,4 @@
+body:has(.driver-shell) { min-width: 0; }
 .driver-shell {
   --ink: #193d4b;
   --muted: #526e7b;
@@ -90,6 +91,23 @@
 .driver-shell .leaflet-control-zoom a { width: 44px; height: 44px; line-height: 44px; }
 .driver-shell .station-map p { font-size: 13px; }
 .driver-station-results { min-width: 0; }
+.driver-discovery-tools { display: flex; align-items: end; flex-wrap: wrap; gap: 8px 16px; }
+.driver-connector-type-filter { display: grid; gap: 8px; width: min(100%, 240px); min-width: 0; font-size: 14px; font-weight: 600; }
+.driver-shell .driver-connector-type-filter select { width: 100%; min-width: 0; min-height: 44px; padding: 8px 12px; border: 1px solid var(--field-border); border-radius: 9px; background: #fff; color: var(--ink); }
+.driver-shell .driver-availability-filter { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font-size: 14px; cursor: pointer; }
+.driver-shell .driver-availability-filter input { width: 20px; height: 20px; min-height: 0; margin: 0; accent-color: var(--accent); flex-shrink: 0; }
+.driver-discovery-empty p { margin-top: 0; }
+.driver-discovery-empty button { min-height: 44px; }
+.driver-shell .driver-mobile-map-toggle { display: none; }
+@media (width < 700px) {
+  .driver-connector-type-filter { width: 100%; }
+  .driver-discovery-tools { gap: 8px 12px; justify-content: space-between; }
+  .driver-shell .driver-station-search { grid-template-columns: minmax(0, 1fr) 44px; align-items: end; gap: 8px; }
+  .driver-shell .driver-station-search > button { min-width: 44px; min-height: 44px; padding: 0; }
+  .driver-search-button-label { display: none; }
+  .driver-shell .driver-mobile-map-toggle { display: inline-flex; justify-self: start; width: auto; min-height: 44px; }
+  .driver-map-panel:not(.is-mobile-open) { display: none; }
+}
 .driver-results-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 16px; }
 .driver-shell .driver-results-heading h2 { font-size: 20px; margin: 0; }
 .driver-results-heading > span { white-space: nowrap; color: var(--muted); font-size: 13px; }
@@ -123,29 +141,41 @@
 }
 .driver-shell .driver-error { padding: 16px; border-radius: 12px; background: #fff0ec; }
 .driver-error p, .driver-charging > [role='alert'], .driver-connectors > [role='alert'] { color: #a3382c; }
-.driver-return button { width: 100%; }
-.driver-connector-picker { display: grid; gap: 8px; margin-bottom: 18px; font-size: 14px; }
+.driver-shell .driver-return .navigation-link { width: auto; justify-content: flex-start; background: transparent; padding: 8px 0; }
+.driver-start-layout, .driver-connector-selection { min-width: 0; }
+.driver-connector-picker { display: grid; gap: 8px; margin-bottom: var(--driver-picker-gap, 16px); font-size: 14px; }
 .driver-shell .driver-connectors select { max-width: none; font-size: 16px; }
-.driver-connector-groups details { border-bottom: 1px solid var(--line); padding: 12px 0; }
-.driver-connector-groups summary { min-height: 44px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-.driver-connector-groups summary > strong { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.driver-connector-groups summary > span { flex-shrink: 0; max-width: 45%; color: var(--muted); font-size: 13px; }
-.driver-connector-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
-.driver-connector-tile { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 9px 4px; border: 0; border-radius: 9px; background: #eaf2f5; color: #244e60; }
-.driver-connector-tile small { font: inherit; font-size: 11px; }
+.driver-connector-group { padding-bottom: var(--driver-group-padding, 12px); }
+.driver-connector-group-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.driver-connector-group-heading > strong { min-width: 0; overflow-wrap: anywhere; }
+.driver-connector-group-heading > span { flex-shrink: 0; color: var(--muted); font-size: 13px; }
+.driver-connector-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--driver-tile-gap, 12px); margin-top: var(--driver-grid-top, 14px); }
+.driver-shell .driver-connector-tile { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-content: center; align-items: center; gap: 4px 6px; min-height: var(--driver-tile-height, 80px); padding: var(--driver-tile-padding, 12px 8px); border: 0; border-radius: 9px; background: #eaf2f5; color: #244e60; }
+.driver-connector-tile > span { justify-self: end; font-weight: 650; }
+.driver-shell .driver-connector-tile > svg { justify-self: start; width: var(--driver-tile-icon, 20px); height: var(--driver-tile-icon, 20px); }
+.driver-connector-tile small { grid-column: 1 / -1; min-width: 0; font: inherit; font-size: var(--driver-tile-label, 13px); line-height: 1.25; text-align: center; overflow-wrap: anywhere; }
 .driver-connector-tile.available, .driver-connector-tile.preparing { color: #116443; background: #e4f5eb; }
 .driver-connector-tile.charging { color: #155e9e; background: #e8f2ff; }
 .driver-connector-tile.faulted { color: #a3382c; background: #fff0ec; }
 .driver-connector-tile[aria-pressed='true'] { outline: 2px solid #2688c1; outline-offset: 2px; }
 .driver-connector-tile:disabled { opacity: 1; }
-.driver-start-footer { display: grid; gap: 12px; padding-top: 8px; }
-.driver-shell .driver-plug-confirm { min-height: 44px; font-size: 14px; margin: 8px 0; }
+.driver-start-footer { display: grid; gap: var(--driver-footer-gap, 12px); padding-top: var(--driver-footer-top, 8px); min-width: 0; }
+.driver-start-summary { border-block: 1px solid var(--line); padding: var(--driver-summary-padding, 12px) 0; }
+.driver-start-summary dl { display: grid; gap: var(--driver-summary-gap, 8px); margin: 0; }
+.driver-start-summary dl > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 12px; align-items: baseline; font-size: 14px; }
+.driver-start-summary dt { color: var(--muted); }
+.driver-start-summary dd { margin: 0; text-align: right; font-weight: 650; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.driver-start-summary small { display: block; color: var(--muted); font-size: 13px; font-weight: 400; }
+.driver-shell .driver-start-summary p { margin: 8px 0 0; font-size: 13px; }
+.driver-shell .driver-start-summary .driver-start-wallet-warning { color: #a3382c; }
+.driver-start-summary a { display: inline-flex; align-items: center; min-height: 44px; }
+.driver-shell .driver-plug-confirm { min-height: 44px; font-size: 14px; margin: var(--driver-confirm-margin, 8px) 0; }
 .driver-shell .driver-connectors .driver-start-footer > button { width: 100%; }
 .driver-shell .driver-start-status { padding: 14px; border-radius: 10px; background: #eaf2f5; color: #244e60; font-size: 14px; }
 .driver-start-reason { display: grid; gap: 10px; }
 .driver-shell .driver-start-reason p { margin: 0; color: #a3382c; }
 .driver-start-reason .driver-primary-link { justify-self: start; }
-.driver-selected-connector, .driver-start-status, .driver-connectors > [role='alert'] { overflow-wrap: anywhere; }
+.driver-start-status, .driver-connectors > [role='alert'] { overflow-wrap: anywhere; }
 .driver-shell [hidden] { display: none !important; }
 @media (min-width: 700px) {
   .driver-shell { display: grid; grid-template-columns: 88px minmax(0, 1fr); height: 100dvh; overflow: hidden; }
@@ -199,12 +229,72 @@
   .driver-shell .driver-session-location .owner-charger-drawing { width: 48px; }
   .driver-station-select { flex-wrap: wrap; }
   .driver-distance { margin-left: 32px; }
-  .driver-connector-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (min-width: 700px) and (max-height: 650px) {
   .driver-session-layout { flex: none; }
   .driver-shell .station-map__canvas { height: 330px; }
   .driver-station-results { max-height: 384px; }
+}
+
+/* Charging density follows the same breakpoints as the driver navigation. */
+@media (width < 700px) {
+  .driver-main-start {
+    --driver-tile-height: 64px;
+    --driver-tile-padding: 8px 4px;
+    --driver-tile-icon: 18px;
+    --driver-tile-label: 12px;
+    --driver-picker-gap: 12px;
+    --driver-group-padding: 8px;
+    --driver-tile-gap: 8px;
+    --driver-grid-top: 10px;
+    --driver-footer-gap: 8px;
+    --driver-summary-padding: 10px;
+    --driver-summary-gap: 6px;
+    --driver-confirm-margin: 4px;
+    gap: 12px;
+  }
+  .driver-main-start > .driver-connectors { padding: 16px; }
+  .driver-main-start > .driver-connectors > h2 { font-size: 20px; margin-bottom: 12px; }
+}
+@media (700px <= width < 1100px) {
+  .driver-main-start {
+    --driver-tile-height: 72px;
+    --driver-tile-padding: 10px 6px;
+    --driver-tile-icon: 20px;
+    --driver-tile-label: 13px;
+    --driver-picker-gap: 16px;
+    --driver-group-padding: 12px;
+    --driver-tile-gap: 10px;
+    --driver-grid-top: 12px;
+    --driver-footer-gap: 12px;
+    --driver-summary-padding: 12px;
+    --driver-summary-gap: 8px;
+    --driver-confirm-margin: 8px;
+    gap: 16px;
+  }
+  .driver-main-start > .driver-connectors { width: 100%; max-width: 560px; padding: 24px; }
+  .driver-main-start .driver-start-footer > .primary-button,
+  .driver-main-start .driver-reservation-form > .driver-reservation-trigger { max-width: 360px; }
+}
+@media (min-width: 1100px) {
+  .driver-main-start {
+    --driver-tile-height: 80px;
+    --driver-tile-padding: 12px 8px;
+    --driver-tile-icon: 20px;
+    --driver-tile-label: 13px;
+    --driver-picker-gap: 20px;
+    --driver-group-padding: 0px;
+    --driver-tile-gap: 12px;
+    --driver-grid-top: 14px;
+    --driver-footer-gap: 12px;
+    --driver-footer-top: 0px;
+    --driver-summary-padding: 12px;
+    --driver-summary-gap: 8px;
+    --driver-confirm-margin: 8px;
+  }
+  .driver-main-start > .driver-connectors { width: 100%; max-width: 1040px; padding: 28px; }
+  .driver-main-start .driver-start-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 340px); gap: 28px; align-items: start; }
+  .driver-main-start .driver-connector-selection { max-width: 480px; }
 }
 
 /* T-94: Wallet pages reuse the existing T-48 driver design tokens. */
@@ -719,20 +809,25 @@
 .driver-wallet-stack .driver-wallet-container { margin: 0; }
 .driver-wallet-stack > .driver-wallet-page, .driver-wallet-stack .driver-wallet-page { max-width: none; width: 100%; }
 .driver-wallet-back { align-self: flex-start; }
-.driver-topup-disclosure { background: #fff; border-radius: 16px; padding: 16px 18px; }
-.driver-topup-disclosure > summary, details.driver-tx-history-section > summary { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; list-style: none; margin: 0; border: 0; padding: 0; }
-.driver-topup-disclosure > summary::-webkit-details-marker, details.driver-tx-history-section > summary::-webkit-details-marker { display: none; }
+.driver-topup-panel { background: #fff; border-radius: 16px; padding: 16px 18px; scroll-margin-top: 16px; }
+.driver-topup-panel[hidden] { display: none; }
+.driver-shell .driver-topup-close { display: block; margin-left: auto; min-height: 44px; padding: 8px 0; }
+details.driver-tx-history-section > summary { display: flex; align-items: center; gap: 10px; min-height: 44px; cursor: pointer; list-style: none; margin: 0; border: 0; padding: 0; }
+details.driver-tx-history-section > summary::-webkit-details-marker { display: none; }
 details.driver-tx-history-section > summary h3 { margin: 0; flex: 1; }
 details.driver-tx-history-section > summary > span { font-size: 12px; color: var(--muted); }
-.driver-topup-disclosure[open] > summary > svg, details.driver-tx-history-section[open] > summary > svg { transform: rotate(90deg); }
+details.driver-tx-history-section[open] > summary > svg { transform: rotate(90deg); }
 details.driver-tx-history-section[open] > summary { margin-bottom: 16px; }
-.driver-topup-disclosure .driver-wallet-page { padding: 16px 0 0; box-shadow: none; }
+.driver-topup-panel .driver-wallet-page { padding: 0; box-shadow: none; }
+.driver-topup-panel .driver-wallet-page form { margin-top: 16px; }
 .driver-tx-empty { padding: 18px 0; }
 .driver-balance-card .owner-subtle { color: #d7e8ee; margin: 0; }
 .driver-shell .topup-button { background: #0b765c !important; }
 .driver-shell .topup-button:hover { background: #095f4a !important; }
 .driver-tx-item .tx-meta-row { flex-wrap: wrap; }
-.driver-tx-item .tx-ref-badge { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-width: 0; max-width: 100%; padding: 6px 8px; }
+.driver-tx-item .tx-ref-badge { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-width: 0; max-width: 100%; padding: 0; background: transparent; border-radius: 0; }
+.driver-shell .driver-transaction-detail-link { display: inline-flex; align-items: center; min-height: 44px; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: #116443; font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.driver-shell .driver-transaction-detail-link:hover { color: var(--accent-hover); background: transparent; }
 .tx-reference-value { min-width: 0; overflow-wrap: anywhere; }
 .driver-tx-detail { padding-top: 12px; margin-top: 8px; border-top: 1px solid var(--line); }
 .driver-tx-detail section { min-width: 0; }
@@ -750,6 +845,30 @@ details.driver-tx-history-section[open] > summary { margin-bottom: 16px; }
 
 .driver-shell .topup-button span { display: inline; }
 .driver-shell .topup-button { width: auto; max-width: 100%; }
+
+/* Keep wallet density proportional to the driver's device. */
+.driver-wallet-stack .driver-balance-card { border-radius: 16px; gap: 12px; }
+.driver-wallet-stack .driver-balance-amount { line-height: 1.2; font-variant-numeric: tabular-nums; }
+.driver-wallet-stack .driver-balance-card .owner-subtle { font-size: 14px; }
+.driver-wallet-stack .driver-balance-cta { margin-top: 0; }
+.driver-wallet-stack .topup-button { min-height: 44px; }
+@media (width < 700px) {
+  .driver-wallet-stack, .driver-wallet-stack .driver-wallet-container { gap: 12px; }
+  .driver-wallet-stack .driver-balance-card { padding: 16px; gap: 10px; }
+  .driver-wallet-stack .driver-balance-amount { font-size: 28px; }
+  .driver-wallet-stack .driver-balance-header { gap: 8px; flex-wrap: wrap; }
+  .driver-wallet-stack .driver-tx-history-section, .driver-wallet-stack .driver-topup-panel { padding: 12px 16px; }
+  .driver-wallet-stack .topup-button { width: 100%; }
+}
+@media (700px <= width < 1100px) {
+  .driver-wallet-stack { max-width: 560px; gap: 16px; }
+  .driver-wallet-stack .driver-wallet-container { gap: 16px; }
+  .driver-wallet-stack .driver-balance-card { padding: 20px; }
+  .driver-wallet-stack .driver-balance-amount { font-size: 32px; }
+}
+@media (min-width: 1100px) {
+  .driver-wallet-stack .driver-balance-card { padding: 24px; }
+}
 
 .driver-invoice { margin: 0 auto; }
 .driver-invoice > button { margin: 0 8px 16px 0; }

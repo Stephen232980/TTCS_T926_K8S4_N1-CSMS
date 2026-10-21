@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Icon } from '../../components/icons/Icon'
-import type { MapStation } from '../../components/maps/StationMap'
 import type { AuthenticatedUser } from '../auth/model/auth'
 import { DriverSessionHistory } from './DriverSessionHistory'
 import { DriverAccountMenu } from './DriverAccountMenu'
 import { DriverNotificationCenter } from './DriverNotificationCenter'
 import { DriverPrivacy } from './DriverPrivacy'
 import { DriverCharging } from './DriverCharging'
-import { DriverMapPage } from './DriverMapPage'
+import { DriverMapPage, type DiscoveryStation } from './DriverMapPage'
 import { DriverReservations } from '../reservations/DriverReservations'
 import { DriverInvoicePage } from './DriverInvoicePage'
 import { DriverWalletPage } from './DriverWalletPage'
@@ -81,7 +80,15 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
   const showingReturn = returnLocation.isReturn || Boolean(manualOrderId)
   const returnOrderId = manualOrderId || returnLocation.orderId || trackedOrder
   const [mapOpened, setMapOpened] = useState(() => hashArea() === 'stations')
-  const [station, setStation] = useState<MapStation>()
+  const [station, setStation] = useState<DiscoveryStation>()
+  const updateSelectedStation = useCallback((stations: DiscoveryStation[]) => {
+    setStation(previous => {
+      if (!previous) return previous
+      return stations.find(item => item.id === previous.id) ?? {
+        ...previous, energy_rate_vnd_per_kwh: null, idle_rate_vnd_per_minute: null, grace_minutes: null,
+      }
+    })
+  }, [])
   const [showStart, setShowStart] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
   const [logoutError, setLogoutError] = useState('')
@@ -175,7 +182,7 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
       </nav>
       {onExit && <footer className="driver-workspace-exit"><button type="button" onClick={onExit}>Đổi khu vực</button></footer>}
     </aside>
-    <main ref={mainRef} className="driver-main">
+    <main ref={mainRef} className={`driver-main${area === 'stations' && showStart ? ' driver-main-start' : ''}`}>
       <header className="driver-heading">
         <div className="driver-heading-copy"><h1>
           {area === 'history' ? 'Lịch sử phiên sạc' : area === 'reservations' ? reservationFocus ? 'Chi tiết đặt chỗ' : 'Lịch sử đặt chỗ' : area === 'privacy' ? 'Dữ liệu cá nhân' : area === 'session'
@@ -214,14 +221,20 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
           onBack={showingReturn ? () => navigate('wallet') : undefined}
         />}
         {area === 'wallet' && !showingReturn && <div className="driver-wallet-stack">
-          <DriverWalletPage key={`wallet-${walletRevision}`} onTopUp={() => {
+          <DriverWalletPage key={`wallet-${walletRevision}`} topUpExpanded={topUpExpanded} onTopUp={() => {
             setTopUpExpanded(true)
-            window.setTimeout(() => document.getElementById('topup-amount')?.focus(), 0)
-          }} onOpenInvoice={openInvoice} topUpContent={<details className="driver-topup-disclosure" open={topUpExpanded} onToggle={event => setTopUpExpanded(event.currentTarget.open)}>
-            <summary><Icon name="chevronRight" /><span>Nạp tiền</span></summary>
+            window.setTimeout(() => {
+              document.getElementById('driver-topup-panel')?.scrollIntoView?.({ block: 'start', behavior: 'instant' })
+              document.getElementById('topup-amount')?.focus({ preventScroll: true })
+            }, 0)
+          }} onOpenInvoice={openInvoice} topUpContent={<div id="driver-topup-panel" className="driver-topup-panel" hidden={!topUpExpanded}>
+            <button className="text-button driver-topup-close" onClick={() => {
+              setTopUpExpanded(false)
+              window.setTimeout(() => document.querySelector<HTMLButtonElement>('.topup-button')?.focus(), 0)
+            }}>Đóng form nạp tiền</button>
             <WalletTopUpPage key={`topup-${walletRevision}`} storageKey={storageKey} onOrder={rememberOrder}
               onTopUp={createWalletTopUp} onCheckOrder={checkTopUpOrder} onRedirect={navigateToPayment} />
-          </details>} />
+          </div>} />
           <button className="secondary-button" onClick={() => openInvoice()}>Xem hóa đơn phiên sạc</button>
         </div>}
       </div>
@@ -231,8 +244,8 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
       {(area === 'session' || area === 'stations') && (
         <>
           <div className="driver-return" hidden={!showStart || area !== 'stations'}><button className="navigation-link secondary-button" onClick={() => setShowStart(false)}><Icon name="chevronLeft" />Quay lại bản đồ và danh sách</button></div>
-          <DriverCharging ownerId={currentUser.id} stationId={station?.id} stationName={station?.name} showSession={area === 'session'} showConnectors={area === 'stations' && showStart} onFindStations={showStations} onSessionStarted={sessionStarted} />
-          {mapOpened && <div className="driver-map-container" hidden={area !== 'stations' || showStart}><DriverMapPage selectedStationId={station?.id} onOpenStation={selected => { setStation(selected); setShowStart(true) }} /></div>}
+          <DriverCharging ownerId={currentUser.id} stationId={station?.id} stationName={station?.name} stationPricing={station} showSession={area === 'session'} showConnectors={area === 'stations' && showStart} onFindStations={showStations} onSessionStarted={sessionStarted} />
+          {mapOpened && <div className="driver-map-container" hidden={area !== 'stations' || showStart}><DriverMapPage selectedStationId={station?.id} onStationsUpdated={updateSelectedStation} onOpenStation={selected => { setStation(selected); setShowStart(true) }} /></div>}
         </>
       )}
     </main>
