@@ -19,6 +19,7 @@ function distance(station: MapStation, position: MapPosition) {
 }
 export function DriverMapPage({ selectedStationId, onOpenStation }: { selectedStationId?: string; onOpenStation?: (station: DiscoveryStation) => void }) {
   const [search, setSearch] = useState('')
+  const [mobileMapOpen, setMobileMapOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [revision, setRevision] = useState(0)
   const [result, setResult] = useState<Result | null>(null)
@@ -89,17 +90,18 @@ export function DriverMapPage({ selectedStationId, onOpenStation }: { selectedSt
   // Price/status polls must not rebuild markers and reset the user's map view.
   const mapKey = JSON.stringify(stations.map(({ id, name, address, latitude, longitude }) => ({ id, name, address, latitude, longitude })))
   const mapStations = useMemo(() => JSON.parse(mapKey) as MapStation[], [mapKey])
-  return <section className="driver-map-page" aria-label="Tìm trạm trên bản đồ">
+  return <section className="driver-map-page" aria-label="Tìm trạm sạc">
     <form className="driver-station-search" onSubmit={event => { event.preventDefault(); const next = search.trim(); if (next === query) setRevision(value => value + 1); else setQuery(next) }}>
       <label htmlFor="driver-station-search">Tên trạm hoặc địa chỉ<input id="driver-station-search" type="search" maxLength={100} value={search} onChange={event => setSearch(event.target.value)} placeholder="Bạn muốn sạc ở đâu?" /></label>
-      <button className="primary-button" type="submit"><Icon name="search" />Tìm trạm</button>
+      <button className="primary-button" type="submit" aria-label="Tìm trạm"><Icon name="search" /><span className="driver-search-button-label">Tìm trạm</span></button>
     </form>
     {loading && <p role="status">Đang tải trạm sạc…</p>}
     {error && <div className="driver-error" role="alert"><p>{error}{result && ' Dữ liệu bên dưới có thể cũ.'}</p><button className="secondary-button" onClick={() => setRevision(value => value + 1)}>Thử lại</button></div>}
     {result?.search_too_broad && <p role="status">Có hơn 500 trạm phù hợp. Nhập tên hoặc địa chỉ cụ thể hơn để xem đầy đủ và sắp theo khoảng cách.</p>}
     {result && !result.search_too_broad && <div className="driver-station-layout">
-      <div className="driver-map-panel"><StationMap stations={mapStations} selectedId={selectedId} onSelect={selectStation} focusNearby selectionRevision={selectionRevision} onLocate={next => { setSelectedId(undefined); setPosition(next) }} userPosition={position} /></div>
-      <section className="driver-station-results" aria-label="Danh sách trạm trên bản đồ">
+      <button className="secondary-button driver-mobile-map-toggle" type="button" aria-expanded={mobileMapOpen} aria-controls="driver-discovery-map" onClick={() => setMobileMapOpen(value => !value)}>{mobileMapOpen ? 'Ẩn bản đồ' : 'Hiện bản đồ'}</button>
+      <div id="driver-discovery-map" className={`driver-map-panel${mobileMapOpen ? ' is-mobile-open' : ''}`}><StationMap stations={mapStations} selectedId={selectedId} onSelect={selectStation} focusNearby selectionRevision={selectionRevision} onLocate={next => { setSelectedId(undefined); setPosition(next) }} userPosition={position} /></div>
+      <section className="driver-station-results" aria-label="Danh sách trạm sạc">
         <div className="driver-results-heading"><h2>{position ? 'Trạm gần bạn' : 'Trạm đang hoạt động'}</h2><span role="status">{stations.length} trạm</span></div>
         {stations.length === 0 && <p>Chưa có trạm đang hoạt động phù hợp. Hãy thử tên hoặc địa chỉ khác.</p>}
         {stations.map(station => <article key={station.id} className={`driver-station-card${selectedId === station.id ? ' is-selected' : ''}`}>
