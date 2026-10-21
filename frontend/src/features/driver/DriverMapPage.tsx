@@ -17,7 +17,7 @@ function distance(station: MapStation, position: MapPosition) {
   const a = Math.sin(lat / 2) ** 2 + Math.cos(rad(position.latitude)) * Math.cos(rad(station.latitude)) * Math.sin(lon / 2) ** 2
   return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(Math.max(0, 1 - a)))
 }
-export function DriverMapPage({ selectedStationId, onOpenStation }: { selectedStationId?: string; onOpenStation?: (station: DiscoveryStation) => void }) {
+export function DriverMapPage({ selectedStationId, onOpenStation, onStationsUpdated }: { selectedStationId?: string; onOpenStation?: (station: DiscoveryStation) => void; onStationsUpdated?: (stations: DiscoveryStation[]) => void }) {
   const [search, setSearch] = useState('')
   const [mobileMapOpen, setMobileMapOpen] = useState(false)
   const [availableOnly, setAvailableOnly] = useState(false)
@@ -45,6 +45,9 @@ export function DriverMapPage({ selectedStationId, onOpenStation }: { selectedSt
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const loadedQuery = useRef(query)
+  useEffect(() => {
+    if (result && !result.search_too_broad) onStationsUpdated?.(result.items)
+  }, [result, onStationsUpdated])
   useEffect(() => {
     const controller = new AbortController()
     let running = false

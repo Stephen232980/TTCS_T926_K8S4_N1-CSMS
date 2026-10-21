@@ -825,7 +825,9 @@ details.driver-tx-history-section[open] > summary { margin-bottom: 16px; }
 .driver-shell .topup-button { background: #0b765c !important; }
 .driver-shell .topup-button:hover { background: #095f4a !important; }
 .driver-tx-item .tx-meta-row { flex-wrap: wrap; }
-.driver-tx-item .tx-ref-badge { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-width: 0; max-width: 100%; padding: 6px 8px; }
+.driver-tx-item .tx-ref-badge { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-width: 0; max-width: 100%; padding: 0; background: transparent; border-radius: 0; }
+.driver-shell .driver-transaction-detail-link { display: inline-flex; align-items: center; min-height: 44px; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: #116443; font: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.driver-shell .driver-transaction-detail-link:hover { color: var(--accent-hover); background: transparent; }
 .tx-reference-value { min-width: 0; overflow-wrap: anywhere; }
 .driver-tx-detail { padding-top: 12px; margin-top: 8px; border-top: 1px solid var(--line); }
 .driver-tx-detail section { min-width: 0; }

@@ -19,6 +19,14 @@ class FakeDriverStream {
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); FakeDriverStream.instances = [] })
 const empty = { session: null, start_request: null }
 const connectors = { items: [{ id: 'connector-one', charge_point_code: 'TRU-01', connector_number: 1, status: 'Available' }, { id: 'busy', charge_point_code: 'TRU-02', connector_number: 1, status: 'Reserved' }] }
+it.each([['Faulted','Có lỗi'],['Unavailable','Không khả dụng'],['Reserved','Đã đặt chỗ']])('keeps the real %s status visible on an owned reservation', async (status,label) => {
+  vi.stubGlobal('fetch',vi.fn(async (url:string)=>({ok:true,json:async()=>url.includes('/connectors') ? {items:[{id:'owned',charge_point_code:'TRU-01',connector_number:1,status,own_reservation:true,can_start:false}]} : empty})))
+  render(<DriverCharging stationId="station" showSession={false} />)
+  const tile=await screen.findByRole('button',{name:`TRU-01 · Đầu nối 1 · ${label}`})
+  expect(tile).toHaveTextContent(label)
+  expect(tile).not.toHaveTextContent('Chỗ của bạn')
+  expect(tile).toBeDisabled()
+})
 async function pickFirstConnector(user: ReturnType<typeof userEvent.setup>) {
   await user.selectOptions(await screen.findByLabelText('Trụ sạc'), 'TRU-01')
   await user.click(screen.getByRole('button', { name: 'TRU-01 · Đầu nối 1 · Sẵn sàng' }))
@@ -78,7 +86,7 @@ it('allows starting on an owned confirmed reservation and blocks another driver 
   await screen.findByLabelText('Trụ sạc')
   expect(screen.getByRole('button', { name: 'TRU-01 · Đầu nối 2 · Đã đặt chỗ' })).toBeDisabled()
   expect(screen.getByRole('button', { name: 'TRU-01 · Đầu nối 1 · Đã đặt chỗ' })).toHaveAccessibleDescription('Đã đặt chỗ của bạn · Có thể bắt đầu sạc')
-  expect(screen.getByRole('button', { name: 'TRU-01 · Đầu nối 1 · Đã đặt chỗ' })).toHaveTextContent('Chỗ của bạn')
+  expect(screen.getByRole('button', { name: 'TRU-01 · Đầu nối 1 · Đã đặt chỗ' })).toHaveTextContent('Đã đặt chỗ')
   await userEvent.click(screen.getByRole('button', { name: 'TRU-01 · Đầu nối 1 · Đã đặt chỗ' }))
   expect(await screen.findByText(/Đầu nối đang được giữ cho bạn/)).toBeInTheDocument()
   await userEvent.click(screen.getByRole('checkbox'))
