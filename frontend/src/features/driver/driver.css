@@ -143,6 +143,15 @@
 .driver-connector-tile[aria-pressed='true'] { outline: 2px solid #2688c1; outline-offset: 2px; }
 .driver-connector-tile:disabled { opacity: 1; }
 .driver-start-footer { display: grid; gap: 12px; padding-top: 8px; }
+.driver-start-summary { border-block: 1px solid var(--line); padding: 12px 0; }
+.driver-start-summary dl { display: grid; gap: 8px; margin: 0; }
+.driver-start-summary dl > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 12px; align-items: baseline; font-size: 14px; }
+.driver-start-summary dt { color: var(--muted); }
+.driver-start-summary dd { margin: 0; text-align: right; font-weight: 650; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.driver-start-summary small { display: block; color: var(--muted); font-size: 13px; font-weight: 400; }
+.driver-shell .driver-start-summary p { margin: 8px 0 0; font-size: 13px; }
+.driver-shell .driver-start-summary .driver-start-wallet-warning { color: #a3382c; }
+.driver-start-summary a { display: inline-flex; align-items: center; min-height: 44px; }
 .driver-shell .driver-plug-confirm { min-height: 44px; font-size: 14px; margin: 8px 0; }
 .driver-shell .driver-connectors .driver-start-footer > button { width: 100%; }
 .driver-shell .driver-start-status { padding: 14px; border-radius: 10px; background: #eaf2f5; color: #244e60; font-size: 14px; }

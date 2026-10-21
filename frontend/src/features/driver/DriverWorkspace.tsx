@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Icon } from '../../components/icons/Icon'
-import type { MapStation } from '../../components/maps/StationMap'
 import type { AuthenticatedUser } from '../auth/model/auth'
 import { DriverSessionHistory } from './DriverSessionHistory'
 import { DriverAccountMenu } from './DriverAccountMenu'
 import { DriverNotificationCenter } from './DriverNotificationCenter'
 import { DriverPrivacy } from './DriverPrivacy'
 import { DriverCharging } from './DriverCharging'
-import { DriverMapPage } from './DriverMapPage'
+import { DriverMapPage, type DiscoveryStation } from './DriverMapPage'
 import { DriverReservations } from '../reservations/DriverReservations'
 import { DriverInvoicePage } from './DriverInvoicePage'
 import { DriverWalletPage } from './DriverWalletPage'
@@ -81,7 +80,7 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
   const showingReturn = returnLocation.isReturn || Boolean(manualOrderId)
   const returnOrderId = manualOrderId || returnLocation.orderId || trackedOrder
   const [mapOpened, setMapOpened] = useState(() => hashArea() === 'stations')
-  const [station, setStation] = useState<MapStation>()
+  const [station, setStation] = useState<DiscoveryStation>()
   const [showStart, setShowStart] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
   const [logoutError, setLogoutError] = useState('')
@@ -231,7 +230,7 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
       {(area === 'session' || area === 'stations') && (
         <>
           <div className="driver-return" hidden={!showStart || area !== 'stations'}><button className="navigation-link secondary-button" onClick={() => setShowStart(false)}><Icon name="chevronLeft" />Quay lại bản đồ và danh sách</button></div>
-          <DriverCharging ownerId={currentUser.id} stationId={station?.id} stationName={station?.name} showSession={area === 'session'} showConnectors={area === 'stations' && showStart} onFindStations={showStations} onSessionStarted={sessionStarted} />
+          <DriverCharging ownerId={currentUser.id} stationId={station?.id} stationName={station?.name} stationPricing={station} showSession={area === 'session'} showConnectors={area === 'stations' && showStart} onFindStations={showStations} onSessionStarted={sessionStarted} />
           {mapOpened && <div className="driver-map-container" hidden={area !== 'stations' || showStart}><DriverMapPage selectedStationId={station?.id} onOpenStation={selected => { setStation(selected); setShowStart(true) }} /></div>}
         </>
       )}

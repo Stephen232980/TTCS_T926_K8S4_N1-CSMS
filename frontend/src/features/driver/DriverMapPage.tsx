@@ -3,7 +3,7 @@ import { StationMap, type MapPosition, type MapStation } from '../../components/
 import { Icon } from '../../components/icons/Icon'
 import { notifySessionUnauthorized } from '../auth/sessionEvents'
 
-interface DiscoveryStation extends MapStation {
+export interface DiscoveryStation extends MapStation {
   available_connectors?: number; total_connectors?: number
   energy_rate_vnd_per_kwh?: number | null
   idle_rate_vnd_per_minute?: number | null; grace_minutes?: number | null
@@ -17,7 +17,7 @@ function distance(station: MapStation, position: MapPosition) {
   const a = Math.sin(lat / 2) ** 2 + Math.cos(rad(position.latitude)) * Math.cos(rad(station.latitude)) * Math.sin(lon / 2) ** 2
   return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(Math.max(0, 1 - a)))
 }
-export function DriverMapPage({ selectedStationId, onOpenStation }: { selectedStationId?: string; onOpenStation?: (station: MapStation) => void }) {
+export function DriverMapPage({ selectedStationId, onOpenStation }: { selectedStationId?: string; onOpenStation?: (station: DiscoveryStation) => void }) {
   const [search, setSearch] = useState('')
   const [query, setQuery] = useState('')
   const [revision, setRevision] = useState(0)

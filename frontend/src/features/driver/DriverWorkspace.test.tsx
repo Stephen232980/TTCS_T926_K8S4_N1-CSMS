@@ -19,6 +19,7 @@ it('preserves station search across connector navigation and only calls driver e
   await screen.findByText('Trạm thật')
   await user.click(screen.getByRole('button', { name: 'Xem đầu nối' }))
   const reserved = await screen.findByRole('button', { name: 'TRU-01 · Đầu nối 1 · Đã đặt chỗ' })
+  expect(screen.getByRole('region', { name: 'Giá và ví trước khi sạc' })).toHaveTextContent('2.500 đ/kWh')
   expect(reserved).toBeDisabled()
   expect(screen.getByRole('button', { name: 'Bắt đầu sạc' })).toBeDisabled()
   expect(screen.getByRole('button', {name:'Quay lại bản đồ và danh sách'})).toBeInTheDocument()
