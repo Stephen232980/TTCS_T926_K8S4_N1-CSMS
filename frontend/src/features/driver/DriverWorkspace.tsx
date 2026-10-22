@@ -173,7 +173,7 @@ export function DriverWorkspace({ currentUser, onLogout, onExit, navigateToPayme
 
       <nav className="driver-navigation" aria-label="Khu vực tài xế">
         {([
-          { key: 'session', label: 'Phiên sạc của bạn', icon: 'session' },
+          { key: 'session', label: 'Phiên sạc của bạn', icon: 'bolt' },
           { key: 'stations', label: 'Tìm trạm', icon: 'station' },
           { key: 'wallet', label: 'Ví của bạn', icon: 'wallet' },
           { key: 'history', label: 'Lịch sử phiên sạc', icon: 'session' },
