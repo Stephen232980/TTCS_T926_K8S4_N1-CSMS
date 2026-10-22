@@ -61,6 +61,47 @@ async def test_start_replay_on_new_connection_keeps_exact_transaction(db_session
     )
 
 
+@pytest.mark.asyncio
+async def test_real_start_invalidates_old_power_confirmation_but_replay_does_not(
+    db_session,
+):
+    from src.modules.power.models import ConnectorPower, StationPower
+
+    station, charger, connector, _, _, conn, tag = await setup(db_session)
+    charger.last_boot_at = datetime.now(UTC)
+    db_session.add(
+        StationPower(
+            station_id=station.id,
+            limit_w=30000,
+            applied_limit_w=30000,
+            enabled=True,
+            target_enabled=True,
+            state="ready",
+        )
+    )
+    await db_session.flush()
+    cap = ConnectorPower(
+        connector_id=connector.id,
+        station_id=station.id,
+        rated_w=22000,
+        confirmed_w=7000,
+        reserved_w=7000,
+        baseline_boot_at=charger.last_boot_at,
+    )
+    db_session.add(cap)
+    await db_session.flush()
+    stamp = datetime.now(UTC)
+    uid = str(uuid4())
+    first = await start(db_session, conn, tag, stamp, uid=uid)
+    assert first.payload["idTagInfo"]["status"] == "Accepted"
+    assert cap.confirmed_w == 0 and cap.reserved_w == 7000
+    cap.confirmed_w = 7000  # Simulate a later verified worker readback.
+    await db_session.flush()
+    replay = await start(db_session, conn, tag, stamp, uid=uid)
+    assert replay.payload == first.payload
+    assert cap.confirmed_w == cap.reserved_w == 7000
+
+
 async def setup(session):
     station, charger = await charger_fixture(session)
     connector = Connector(
@@ -598,6 +639,10 @@ async def test_api_owner_scope_cards_samples_pending_and_driver_denied(db_sessio
                 )
             ).status_code == 404
             actor = CurrentActor(driver.id, frozenset({"driver"}))
+            history = await client.get("/api/v1/charging/my-sessions")
+            assert history.status_code == 200
+            assert history.json()["items"][0]["id"] == tid
+            assert history.json()["items"][0]["station_id"] == str(station.id)
             for path in ("sessions", "cards", "pending"):
                 assert (await client.get("/api/v1/charging/" + path)).status_code == 403
     finally:

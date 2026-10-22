@@ -58,6 +58,15 @@ async def test_two_runs_concurrency_retry_after_debit_and_cleanup(committed_tari
             )
             == 40
         )
+        funding_audits = (
+            await db.scalars(
+                select(AuditLog).where(AuditLog.action == "wallet.manual_topup")
+            )
+        ).all()
+        assert all(
+            row.data.get("reason") == "T-108 acceptance fixture funding"
+            for row in funding_audits
+        )
         for run in (first, second):
             ids = [p.driver_id for p in run.participants]
             wallets = list(

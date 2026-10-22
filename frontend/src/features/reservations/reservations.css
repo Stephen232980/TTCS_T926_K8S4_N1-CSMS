@@ -1,11 +1,21 @@
-.driver-reservations { flex-shrink: 0; margin-bottom: 16px; background: var(--surface, #fff); color: var(--ink, #193d4b); border-radius: 14px; padding: 14px 16px; }
+.driver-reservations { flex-shrink: 0; margin-bottom: 16px; background: var(--surface, #fff); color: var(--ink, #193d4b); border-radius: 14px; padding: 0 16px; }
+.driver-reservations[open] { padding-bottom: 16px; }
 .driver-reservations summary { cursor: pointer; font-weight: 600; min-height: 44px; display: list-item; align-content: center; overflow-wrap: anywhere; }
 .driver-reservation-content { padding-top: 12px; }
 .driver-reservation-content article { padding: 14px 0; border-bottom: 1px solid var(--line, #e4edf0); }
 .driver-reservation-content h3, .driver-reservation-form h3 { margin: 0 0 8px; font-size: 16px; }
 .driver-reservation-content p, .driver-reservation-form p { font-size: 13px; line-height: 1.5; color: var(--muted, #526e7b); margin: 8px 0; overflow-wrap: anywhere; }
 .driver-reservation-content [role="alert"], .driver-reservation-form [role="alert"] { color: #a3382c; }
-.driver-reservation-form { flex-shrink: 0; padding: 16px 0; border-top: 1px solid var(--line, #e4edf0); }
+.driver-shell .driver-reservation-form { display: block; flex-shrink: 0; width: 100%; min-width: 0; }
+.driver-shell .driver-reservation-form .driver-reservation-trigger { display: block; width: 100%; max-width: none; }
+.driver-reservation-dialog { box-sizing: border-box; width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); margin: auto; padding: 24px; border: 1px solid var(--line, #e4edf0); border-radius: 14px; color: var(--ink, #193d4b); background: var(--surface, #fff); overflow-y: auto; }
+.driver-reservation-dialog::backdrop { background: rgb(15 39 49 / 48%); }
+.driver-reservation-dialog h2 { margin: 0 0 12px; font-size: 22px; }
+.driver-shell .driver-reservation-form .driver-reservation-cancel { width: 100%; margin-top: 12px; }
+.driver-shell .driver-reservation-dialog form > button { width: 100%; }
+.driver-reservation-dialog :focus-visible { outline: 3px solid #168ade; outline-offset: 3px; }
+.driver-reservation-fields { padding: 12px 0; }
+.driver-reservation-summary { margin: 0 0 16px; padding-left: 20px; color: var(--muted, #526e7b); font-size: 14px; line-height: 1.6; }
 .driver-reservation-form form { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
 .driver-reservation-form label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; flex: 1 1 200px; }
 .driver-reservation-form input, .driver-reservation-form select { width: 100%; min-height: 44px; box-sizing: border-box; background: #fff; color: #193d4b; border: 1px solid #b9cdd6; border-radius: 9px; padding: 9px 12px; }
@@ -15,3 +25,6 @@
 
 .driver-reservation-form label.reservation-fee-consent { flex-basis: 100%; flex-direction: row; align-items: flex-start; line-height: 1.5; min-height: 44px; }
 .driver-reservation-form input[type=checkbox] { width: 20px; min-height: 20px; height: 20px; flex: 0 0 20px; margin: 2px 0; }
+.reservation-alternatives { margin-block: 16px; }
+.reservation-alternatives ul { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 8px; }
+.driver-shell .reservation-alternatives button { width: 100%; min-height: 44px; white-space: normal; overflow-wrap: anywhere; text-align: start; }

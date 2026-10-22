@@ -49,7 +49,8 @@
 }
 .admin-shell button,
 .admin-shell input,
-.admin-shell select {
+.admin-shell select,
+.admin-shell textarea {
   font: inherit;
   color: inherit;
 }
@@ -92,7 +93,8 @@
   min-width: 0;
 }
 .admin-shell input:not([type='checkbox']):not([type='range']),
-.admin-shell select {
+.admin-shell select,
+.admin-shell textarea {
   border: 1px solid #b9cdd6;
   padding: 8px 10px;
   border-radius: 9px;
@@ -305,6 +307,19 @@
   border-radius: 16px;
   min-height: 0;
   min-width: 0;
+}
+.admin-wallet-audit {
+  overflow: auto;
+  flex: 1;
+}
+.admin-wallet-audit-row {
+  padding: 14px 18px;
+  border-bottom: 1px solid #dce7eb;
+}
+.admin-wallet-audit-row summary {
+  cursor: pointer;
+  font-weight: 650;
+  overflow-wrap: anywhere;
 }
 .admin-split {
   display: grid;
@@ -1130,3 +1145,23 @@
     transition: background-color 150ms ease-out;
   }
 }
+
+.admin-shell textarea { resize: vertical; min-height: 84px; }
+.admin-privacy-requests { min-height: 0; overflow-y: auto; background: #fff; border-radius: 16px; padding: 20px; }
+.admin-privacy-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+.admin-privacy-policy { color: var(--muted); margin-bottom: 16px !important; max-width: 75ch; }
+.admin-privacy-request { border-top: 1px solid #dce7eb; padding: 16px 0; overflow-wrap: anywhere; }
+.admin-privacy-request summary { cursor: pointer; padding: 8px 0; }
+.admin-privacy-request summary strong { margin-right: 12px; }
+.admin-privacy-detail { display: grid; gap: 12px; padding-top: 12px; }
+.admin-privacy-detail dl { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 8px; margin: 0; }
+.admin-privacy-detail dd { margin: 0; white-space: pre-wrap; }
+.admin-privacy-form { display: grid; gap: 12px; max-width: 640px; }
+.admin-privacy-blockers { padding-left: 20px; margin: 0; color: #705410; }
+@media (max-width: 800px) { .admin-privacy-detail dl { grid-template-columns: 1fr; } .admin-privacy-requests { overflow: visible; padding: 16px; } }
+
+.admin-shell .admin-privacy-confirm { flex-direction: row; align-items: flex-start; gap: 10px; font-weight: 400; }
+.admin-privacy-confirm input { flex: none; margin-top: 4px; }
+
+.admin-shell .admin-privacy-confirm { flex-direction: row; align-items: flex-start; gap: 10px; font-weight: 400; }
+.admin-privacy-confirm input { flex: none; margin-top: 4px; }

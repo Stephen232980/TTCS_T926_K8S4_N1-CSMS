@@ -96,7 +96,12 @@ async def _meter_values(
 
 
 async def _daily_tariffs(
-    db: AsyncSession, station: Station, start: datetime, end: datetime
+    db: AsyncSession,
+    station: Station,
+    start: datetime,
+    end: datetime,
+    *,
+    mark_used: bool = True,
 ) -> tuple[dict[date, Tariff], dict[date, list[TariffFrame]]]:
     tz = ZoneInfo(station.timezone)
     day = start.astimezone(tz).date()
@@ -109,9 +114,10 @@ async def _daily_tariffs(
         if selected is None:
             raise _InvalidInvoice("invoice_missing_tariff")
         if selected.id not in cached:
-            selected = await danh_dau_bieu_gia_da_dung(
-                db, station_id=station.id, tariff_id=selected.id
-            )
+            if mark_used:
+                selected = await danh_dau_bieu_gia_da_dung(
+                    db, station_id=station.id, tariff_id=selected.id
+                )
             bands = list(
                 await db.scalars(
                     select(TariffBand)
@@ -331,6 +337,9 @@ async def lap_hoa_don(db: AsyncSession, session_id: int) -> InvoiceResult:
         return InvoiceResult("pending", reason="invoice_session_in_progress")
     existing = await db.scalar(select(Invoice).where(Invoice.session_id == session_id))
     if existing is not None:
+        from src.modules.driver_notifications.service import notify_event
+
+        await notify_event(db, charging, "invoice", invoice=existing)
         return InvoiceResult("ready", existing)
     if (
         charging.billing_lifecycle_version == 1
@@ -346,4 +355,7 @@ async def lap_hoa_don(db: AsyncSession, session_id: int) -> InvoiceResult:
         charging.review_reasons = [*charging.review_reasons, reason]
         await db.flush()
         return InvoiceResult("needs_review", reason=reason)
+    from src.modules.driver_notifications.service import notify_event
+
+    await notify_event(db, charging, "invoice", invoice=invoice)
     return InvoiceResult("ready", invoice)

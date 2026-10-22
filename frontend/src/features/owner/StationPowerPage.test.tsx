@@ -4,12 +4,21 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { StationPowerPage } from './StationPowerPage'
 
 const snapshot = {
-  station_id: 'station', version: 1, limit_kw: '30', applied_limit_w: 30000,
+  station_id: 'station', version: 1, generation: 7, limit_kw: '30', applied_limit_w: 30000,
   total_rated_w: 66000, over_registered: true, enabled: false, state: 'disabled', issue: null,
   zero_limit_verified: false, offline_retention_verified: false, verification_note: '',
   connectors: [1, 2, 3].map(number => ({ connector_id: `c${number}`, charge_point_code: 'CP-01', connector_number: number, rated_kw: '22', confirmed_w: 0, reserved_w: 0, desired_w: 0, baseline_verified: false, status: 'Available' })),
 }
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks() })
+
+it('shows the current plan generation and explains an unauthorized session', async () => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => new Response(JSON.stringify(url.includes('/power-config')
+    ? { ...snapshot, enabled: true, state: 'degraded', issue: 'power_unauthorized_session' }
+    : { items: [{ id: 'station', name: 'Trạm thử' }], total_pages: 1 }))))
+  render(<StationPowerPage />)
+  expect(await screen.findByText('Kế hoạch #7')).toBeInTheDocument()
+  expect(screen.getByText(/Có phiên chưa được phép sạc/)).toBeInTheDocument()
+})
 
 it('saves with the advanced version after an own control action', async () => {
   let current = { ...snapshot, zero_limit_verified: true, offline_retention_verified: true, verification_note: 'Verified device' }

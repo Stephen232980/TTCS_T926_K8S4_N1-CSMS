@@ -247,7 +247,9 @@ async def _credit_once(
         session,
         driver_id=driver.id,
         actor_id=admin.id,
-        request=ManualTopupRequest(amount_vnd=amount_vnd, receipt_code=receipt),
+        request=ManualTopupRequest(
+            reason="QA seed funding", amount_vnd=amount_vnd, receipt_code=receipt
+        ),
         authorization=AuthorizationEvidence(
             permission="admin.wallet.manual_topup", roles=admin_roles
         ),

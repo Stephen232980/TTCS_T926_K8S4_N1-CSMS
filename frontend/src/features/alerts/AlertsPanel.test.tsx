@@ -16,7 +16,7 @@ afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks() })
 describe('G3 operational alerts', () => {
   it('shows real incident and email status, acknowledges then reloads', async () => {
     render(<AlertsPanel area="ops" />)
-    fireEvent.click(screen.getByRole('button', { name: 'Xem cảnh báo' }))
+    fireEvent.click(screen.getByRole('button', { name: /^Đang mở/ }))
     fireEvent.click(await screen.findByRole('button', { name: 'Tiếp nhận DEMO-01' }))
     await waitFor(() => expect(request).toHaveBeenCalledWith('/ops/alerts/alert-1/acknowledge', expect.objectContaining({ method: 'POST' })))
     expect(await screen.findByText('Đã tiếp nhận cảnh báo.')).toBeInTheDocument()
@@ -26,7 +26,7 @@ describe('G3 operational alerts', () => {
 
   it('owner only reads owned alerts and never sees mutation controls', async () => {
     render(<AlertsPanel area="owner" />)
-    fireEvent.click(screen.getByRole('button', { name: 'Xem cảnh báo' }))
+    fireEvent.click(screen.getByRole('button', { name: /^Đang mở/ }))
     await screen.findByText(/Ngoại tuyến quá ngưỡng/)
     expect(request).toHaveBeenCalledWith('/owner/alerts?status=active&page=1', expect.anything())
     expect(screen.queryByRole('button', { name: /Tiếp nhận|Thử lại email|Đóng DEMO/ })).not.toBeInTheDocument()
@@ -34,7 +34,7 @@ describe('G3 operational alerts', () => {
 
   it('requires an admin reason to force-close a continuing incident', async () => {
     render(<AlertsPanel area="admin" />)
-    fireEvent.click(screen.getByRole('button', { name: 'Xem cảnh báo' }))
+    fireEvent.click(screen.getByRole('button', { name: /^Đang mở/ }))
     fireEvent.click(await screen.findByRole('button', { name: 'Đóng DEMO-01' }))
     const reason = screen.getByRole('textbox', { name: 'Lý do đóng DEMO-01' })
     expect(reason).toBeRequired()
@@ -46,10 +46,10 @@ describe('G3 operational alerts', () => {
 
   it('retains visible incidents and reports failed updates without showing a healthy empty state', async () => {
     render(<AlertsPanel area="ops" />)
-    fireEvent.click(screen.getByRole('button', { name: 'Xem cảnh báo' }))
+    fireEvent.click(screen.getByRole('button', { name: /^Đang mở/ }))
     await screen.findByText(/Ngoại tuyến quá ngưỡng/)
     request.mockRejectedValueOnce(new Error('offline'))
-    fireEvent.click(screen.getByRole('button', { name: 'Tải lại cảnh báo' }))
+    fireEvent(document, new Event('visibilitychange'))
     expect(await screen.findByRole('alert')).toHaveTextContent('có thể đã cũ')
     expect(screen.getByText(/Ngoại tuyến quá ngưỡng/)).toBeInTheDocument()
     expect(screen.queryByText('Không có cảnh báo đang mở.')).not.toBeInTheDocument()
@@ -58,7 +58,7 @@ describe('G3 operational alerts', () => {
   it('polls every 10 seconds and pauses while the tab is hidden', async () => {
     vi.useFakeTimers()
     render(<AlertsPanel area="ops" />)
-    fireEvent.click(screen.getByRole('button', { name: 'Xem cảnh báo' }))
+    fireEvent.click(screen.getByRole('button', { name: /^Đang mở/ }))
     await act(async () => { await Promise.resolve() })
     expect(request).toHaveBeenCalledTimes(2)
     await act(async () => { vi.advanceTimersByTime(10000); await Promise.resolve() })
@@ -72,9 +72,9 @@ describe('G3 operational alerts', () => {
     let resolveOld: (value: unknown) => void = () => undefined
     request.mockResolvedValueOnce(page).mockResolvedValueOnce(page).mockImplementationOnce(() => new Promise(resolve => { resolveOld = resolve }))
     render(<AlertsPanel area="ops" />)
-    fireEvent.click(screen.getByRole('button', { name: 'Xem cảnh báo' }))
+    fireEvent.click(screen.getByRole('button', { name: /^Đang mở/ }))
     await screen.findByText(/Ngoại tuyến quá ngưỡng/)
-    fireEvent.click(screen.getByRole('button', { name: 'Tải lại cảnh báo' }))
+    fireEvent(document, new Event('visibilitychange'))
     await waitFor(() => expect(request).toHaveBeenCalledTimes(4))
     request.mockResolvedValueOnce({ status: 'acknowledged' }).mockResolvedValue({ ...page, items: [{ ...item, status: 'acknowledged' }] })
     fireEvent.click(screen.getByRole('button', { name: 'Tiếp nhận DEMO-01' }))
@@ -86,13 +86,13 @@ describe('G3 operational alerts', () => {
   it('resets to the last available page after incidents are closed', async () => {
     request.mockResolvedValueOnce({ ...page, total: 51, total_pages: 2 })
     render(<AlertsPanel area="ops" />)
-    fireEvent.click(screen.getByRole('button', { name: 'Xem cảnh báo' }))
+    fireEvent.click(screen.getByRole('button', { name: /^Đang mở/ }))
     await screen.findByText('Trang 1/2')
     request.mockResolvedValueOnce({ ...page, page: 2, total: 51, total_pages: 2 })
     fireEvent.click(screen.getByRole('button', { name: 'Trang sau' }))
     await screen.findByText('Trang 2/2')
     request.mockResolvedValue({ ...page, page: 1, total: 1, total_pages: 1 })
-    fireEvent.click(screen.getByRole('button', { name: 'Tải lại cảnh báo' }))
+    fireEvent(document, new Event('visibilitychange'))
     await waitFor(() => expect(request).toHaveBeenCalledWith('/ops/alerts?status=active&page=1', expect.anything()))
     expect(screen.queryByText('Không có cảnh báo đang mở.')).not.toBeInTheDocument()
     expect(screen.getByText(/Ngoại tuyến quá ngưỡng/)).toBeInTheDocument()
@@ -103,10 +103,10 @@ describe('G3 operational alerts', () => {
    request.mockImplementation(async path => String(path).includes('status=closed') ? { ...page, total: 10, items: [{ ...item, status: 'closed' }] } : { ...page, total: 0, items: [] })
    render(<AlertsPanel area={area} />)
    await screen.findByText('Đang mở: 0 · Đã đóng: 10')
-   expect(screen.getByRole('button', { name: 'Xem cảnh báo' })).toHaveAttribute('aria-expanded', 'false')
+   expect(screen.getByRole('button', { name: /^Đang mở/ })).toHaveAttribute('aria-expanded', 'false')
    fireEvent.click(screen.getByRole('button', { name: 'Lịch sử (10)' }))
    await screen.findByText(/Ngoại tuyến quá ngưỡng/)
-   fireEvent.click(screen.getByRole('button', { name: 'Thu gọn' }))
+   fireEvent.click(screen.getByRole('button', { name: 'Lịch sử (10)' }))
    expect(screen.getByText('Đang mở: 0 · Đã đóng: 10')).toBeVisible()
    expect(screen.queryByRole('button', { name: 'Đóng DEMO-01' })).not.toBeInTheDocument()
    fireEvent.click(screen.getByRole('button', { name: 'Đang mở (0)' }))
@@ -116,7 +116,7 @@ describe('G3 operational alerts', () => {
 
 it('dismisses the floating list by Escape, close button and outside click', async () => {
   render(<AlertsPanel area="owner" />)
-  const trigger = screen.getByRole('button', { name: 'Xem cảnh báo' })
+  const trigger = screen.getByRole('button', { name: /^Đang mở/ })
   fireEvent.click(trigger)
   const panel = screen.getByRole('region', { name: 'Cảnh báo đang mở' })
   expect(panel).toHaveFocus()
@@ -130,4 +130,24 @@ it('dismisses the floating list by Escape, close button and outside click', asyn
   fireEvent.pointerDown(document.body)
   expect(trigger).toHaveAttribute('aria-expanded', 'false')
   await screen.findByText('Đang mở: 1 · Đã đóng: 1')
+})
+
+
+it.each(['owner', 'ops', 'admin'] as const)('toggles each named view independently for %s', async area => {
+  request.mockImplementation(async path => String(path).includes('status=closed') ? { ...page, items: [{ ...item, status: 'closed' }] } : page)
+  render(<AlertsPanel area={area} />)
+  await screen.findByText('Đang mở: 1 · Đã đóng: 1')
+  const active = screen.getByRole('button', { name: 'Đang mở (1)' })
+  const history = screen.getByRole('button', { name: 'Lịch sử (1)' })
+  fireEvent.click(history)
+  expect(screen.getByRole('region', { name: 'Lịch sử cảnh báo' })).toBeVisible()
+  fireEvent.click(history)
+  expect(screen.queryByRole('region', { name: 'Lịch sử cảnh báo' })).not.toBeInTheDocument()
+  fireEvent.click(active)
+  expect(screen.getByRole('region', { name: 'Cảnh báo đang mở' })).toBeVisible()
+  fireEvent.click(active)
+  expect(screen.queryByRole('region', { name: 'Cảnh báo đang mở' })).not.toBeInTheDocument()
+  fireEvent.click(history)
+  fireEvent.click(screen.getByRole('button', { name: 'Đóng danh sách cảnh báo' }))
+  expect(history).toHaveFocus()
 })

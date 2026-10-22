@@ -1,0 +1,17 @@
+DROP TRIGGER privacy_update_guard ON invoices;
+DROP TRIGGER privacy_update_guard ON wallet_ledger;
+DROP TRIGGER privacy_update_guard ON wallet_audits;
+DROP TRIGGER privacy_update_guard ON audit_logs;
+DROP TRIGGER privacy_update_guard ON ocpp_control_requests;
+DROP TRIGGER privacy_driver_fence ON charging_cards;
+DROP TRIGGER privacy_driver_fence ON charging_sessions;
+DROP TRIGGER privacy_driver_fence ON driver_start_requests;
+DROP TRIGGER privacy_driver_fence ON reservations;
+DROP TRIGGER privacy_driver_fence ON wallet_topups;
+DROP TRIGGER privacy_driver_fence ON wallets;
+DROP TRIGGER immutable_invoices ON invoices; DROP TRIGGER immutable_invoices_delete ON invoices; CREATE TRIGGER immutable_invoices BEFORE UPDATE OR DELETE OR TRUNCATE ON invoices FOR EACH STATEMENT EXECUTE FUNCTION reject_invoice_mutation();
+DROP TRIGGER immutable_wallet_ledger ON wallet_ledger; DROP TRIGGER immutable_wallet_ledger_delete ON wallet_ledger; CREATE TRIGGER immutable_wallet_ledger BEFORE UPDATE OR DELETE OR TRUNCATE ON wallet_ledger FOR EACH STATEMENT EXECUTE FUNCTION reject_wallet_ledger_mutation();
+DROP TRIGGER immutable_wallet_audits ON wallet_audits; DROP TRIGGER immutable_wallet_audits_delete ON wallet_audits; CREATE TRIGGER immutable_wallet_audits BEFORE UPDATE OR DELETE OR TRUNCATE ON wallet_audits FOR EACH STATEMENT EXECUTE FUNCTION reject_wallet_ledger_mutation();
+DROP TRIGGER immutable_audit_logs ON audit_logs; DROP TRIGGER immutable_audit_logs_delete ON audit_logs; CREATE TRIGGER immutable_audit_logs BEFORE UPDATE OR DELETE OR TRUNCATE ON audit_logs FOR EACH STATEMENT EXECUTE FUNCTION reject_audit_log_mutation();
+DROP TRIGGER immutable_control_audit ON ocpp_control_requests; DROP TRIGGER immutable_control_audit_delete ON ocpp_control_requests; CREATE TRIGGER immutable_control_audit BEFORE UPDATE OR DELETE OR TRUNCATE ON ocpp_control_requests FOR EACH STATEMENT EXECUTE FUNCTION reject_control_audit_mutation();
+DROP SCHEMA privacy_private CASCADE; DROP TABLE privacy_jobs; DROP TABLE privacy_policies;

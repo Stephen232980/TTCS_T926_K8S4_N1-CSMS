@@ -707,3 +707,14 @@ Driver own scope: capability, booking intent, list/detail và cancel intent. 202
 ## S-50 — Quá hạn đặt chỗ và phí không đến
 
 Owner policy GET/PUT theo trạm sở hữu; driver đọc quote theo connector và xác nhận phí/version khi đặt. Phí snapshot, miễn đặt chỗ cũ, worker idempotent, ledger `reservation_fee` và xử lý thông điệp đến chậm: [S50_RESERVATION_FEES.md](S50_RESERVATION_FEES.md).
+
+## S-59 — Driver notification inbox
+
+`GET /api/v1/driver/notifications?limit=50&before=<notification UUID>` returns
+`{items:[{id,session_id,event_type,title,message,occurred_at,created_at,read_at}],next_cursor}`.
+Only the current driver can list their inbox (max 100/page, newest first); no caller
+supplied driver identity. `event_type` is `stop`, `idle` or `invoice`.
+`POST /api/v1/driver/notifications/{id}/read` returns the persisted item, is idempotent,
+and returns 404 for missing/other-account items. Other roles receive 403.
+Expired inbox items are not returned. See `S59_NOTIFICATION_DELIVERY.md` for transaction,
+SMTP retry, retention and S-57 behavior. Browser Notification is optional presentation.

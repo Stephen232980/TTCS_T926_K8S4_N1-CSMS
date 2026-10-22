@@ -1,3 +1,4 @@
+import { StrictMode } from 'react'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import L from 'leaflet'
@@ -62,4 +63,32 @@ describe('StationMap geolocation', () => {
     expect(onLocate).toHaveBeenCalledWith({ latitude: 10.7, longitude: 106.7 })
     expect(pick).not.toHaveBeenCalled()
   })
+})
+
+
+it('opens nearby at street zoom, focuses every selection and preserves polling view', () => {
+  const setView = vi.spyOn(L.Map.prototype, 'setView')
+  const fitBounds = vi.spyOn(L.Map.prototype, 'fitBounds')
+  const stations = [
+    { id: 'hanoi', name: 'Hà Nội', address: 'HN', latitude: 21, longitude: 105.8 },
+    { id: 'hcm', name: 'Bình Thạnh', address: 'HCM', latitude: 10.8, longitude: 106.7 },
+  ]
+  const position = { latitude: 10.81, longitude: 106.71 }
+  const view = render(<StationMap stations={stations} userPosition={position} focusNearby />)
+  expect(setView).toHaveBeenLastCalledWith([10.81, 106.71], 15)
+  expect(fitBounds).not.toHaveBeenCalled()
+  view.rerender(<StationMap stations={stations} userPosition={position} focusNearby selectedId="hanoi" selectionRevision={1} />)
+  expect(setView).toHaveBeenLastCalledWith([21, 105.8], 15)
+  setView.mockClear()
+  view.rerender(<StationMap stations={[...stations]} userPosition={{ ...position }} focusNearby selectedId="hanoi" selectionRevision={1} />)
+  expect(setView).not.toHaveBeenCalled()
+  view.rerender(<StationMap stations={stations} userPosition={position} focusNearby selectedId="hanoi" selectionRevision={2} />)
+  expect(setView).toHaveBeenLastCalledWith([21, 105.8], 15)
+})
+
+
+it('retains street zoom when React replays mount effects', () => {
+  const setView = vi.spyOn(L.Map.prototype, 'setView')
+  render(<StrictMode><StationMap focusNearby stations={[{ id: 'near', name: 'Gần', address: 'HCM', latitude: 10.8, longitude: 106.7 }]} /></StrictMode>)
+  expect(setView).toHaveBeenLastCalledWith([10.8, 106.7], 15)
 })

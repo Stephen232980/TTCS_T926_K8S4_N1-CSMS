@@ -10,7 +10,7 @@ from src.modules.identity.dependencies import (
     RequestScope,
     authorize_request,
 )
-from src.modules.identity.policy_routing import PolicyRoute
+from src.modules.wallet.admin_route import WalletCommandRoute
 from src.modules.wallet.exceptions import (
     ManualTopupRequestConflictError,
     WalletAdminRequiredError,
@@ -20,6 +20,7 @@ from src.modules.wallet.exceptions import (
     WalletNotFoundError,
 )
 from src.modules.wallet.manual_topup import (
+    ManualTopupReasonError,
     ManualTopupRequest,
     ManualTopupResponse,
     nap_tay,
@@ -29,7 +30,7 @@ from src.platform.database.session import get_db_session
 router = APIRouter(
     prefix="/api/v1/admin/drivers",
     tags=["admin-wallet"],
-    route_class=PolicyRoute,
+    route_class=WalletCommandRoute,
     dependencies=[Depends(authorize_request)],
 )
 Database = Annotated[AsyncSession, Depends(get_db_session)]
@@ -74,8 +75,21 @@ async def manual_topup(
         raise HTTPException(409, "receipt_already_used") from error
     except WalletLockedError as error:
         raise HTTPException(409, "wallet_locked") from error
+    except ManualTopupReasonError as error:
+        raise HTTPException(
+            422, [{"loc": ["body", "reason"], "msg": str(error), "type": "value_error"}]
+        ) from error
     except WalletAmountError as error:
         raise HTTPException(
             422,
-            [{"loc": ["body", "amount_vnd"], "msg": str(error), "type": "value_error"}],
+            [
+                {
+                    "loc": [
+                        "body",
+                        "amount_vnd",
+                    ],
+                    "msg": str(error),
+                    "type": "value_error",
+                }
+            ],
         ) from error

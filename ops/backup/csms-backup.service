@@ -1,0 +1,14 @@
+[Unit]
+Description=CSMS encrypted PostgreSQL backup
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+OnFailure=csms-backup-failure.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/csms-run-backup
+TimeoutStartSec=3600
+TimeoutStopSec=30
+ExecStopPost=-/usr/bin/docker stop -t 10 csms-s62-backup
+UMask=0077

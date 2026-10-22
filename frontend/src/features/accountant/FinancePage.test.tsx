@@ -164,3 +164,67 @@ it('denies API access explicitly and handles unauthorized sessions',async()=>{
   vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response('{}',{status:401})))
   await act(async()=>{await expect(financeRequest('/finance/sessions')).rejects.toThrow()})
 })
+
+it('triggers accountant revenue CSV export when button is clicked', async () => {
+  const fetcher = mockApi()
+  const user = userEvent.setup()
+  window.URL.createObjectURL = vi.fn(() => 'blob:mock-url')
+  window.URL.revokeObjectURL = vi.fn()
+
+  render(<FinancePage area="sessions" />)
+  await screen.findByRole('link', { name: 'Phiên #42' })
+
+  const exportBtn = screen.getByRole('button', {
+    name: 'Xuất CSV báo cáo doanh thu',
+  })
+  expect(exportBtn).toBeInTheDocument()
+  await user.click(exportBtn)
+
+  await waitFor(() => {
+    expect(fetcher).toHaveBeenCalledWith(
+      expect.stringContaining('/accounting/reports/revenue/export'),
+      expect.objectContaining({ credentials: 'include' }),
+    )
+  })
+})
+
+it('triggers accountant revenue CSV export with custom period when date range filter is active', async () => {
+  window.location.hash = '#accountant-sessions?date_from=2026-10-10&date_to=2026-10-12'
+  const fetcher = mockApi()
+  const user = userEvent.setup()
+  window.URL.createObjectURL = vi.fn(() => 'blob:mock-url')
+  window.URL.revokeObjectURL = vi.fn()
+
+  render(<FinancePage area="sessions" />)
+  await screen.findByRole('link', { name: 'Phiên #42' })
+
+  const exportBtn = screen.getByRole('button', {
+    name: 'Xuất CSV báo cáo doanh thu',
+  })
+  await user.click(exportBtn)
+
+  await waitFor(() => {
+    expect(fetcher).toHaveBeenCalledWith(
+      expect.stringContaining('period=custom'),
+      expect.objectContaining({ credentials: 'include' }),
+    )
+    expect(fetcher).toHaveBeenCalledWith(
+      expect.stringContaining('date_from=2026-10-10'),
+      expect.objectContaining({ credentials: 'include' }),
+    )
+    expect(fetcher).toHaveBeenCalledWith(
+      expect.stringContaining('date_to=2026-10-12'),
+      expect.objectContaining({ credentials: 'include' }),
+    )
+  })
+  window.location.hash = ''
+})
+
+
+
+it.each(['invoices', 'reconciliation'] as const)('does not offer revenue export in %s', async area => {
+  mockApi()
+  render(<FinancePage area={area} />)
+  await screen.findByRole('heading', { level: 1 })
+  expect(screen.queryByRole('button', { name: 'Xuất CSV báo cáo doanh thu' })).not.toBeInTheDocument()
+})

@@ -22,7 +22,7 @@ const messages: Record<string, string> = {
   reservation_capability_unverified: 'Chưa xác minh trụ hỗ trợ đặt chỗ. Bấm kiểm tra hỗ trợ rồi thử lại.',
   reservation_unsupported: 'Trụ không hỗ trợ đặt chỗ. Chọn trụ khác.',
   station_or_charger_unavailable: 'Trạm hoặc trụ đang không khả dụng. Tải lại để kiểm tra.',
-  reservation_arrival_out_of_range: 'Giờ đến phải từ bây giờ đến hai giờ tới.',
+  reservation_arrival_out_of_range: 'Chỉ hỗ trợ giữ chỗ ngay trong 15 phút. Vui lòng tạo yêu cầu mới.',
   reservation_request_conflict: 'Mã yêu cầu đã được dùng cho thao tác khác. Tải lại đặt chỗ của bạn.',
   reservation_policy_changed: 'Phí không đến đã thay đổi. Kiểm tra và xác nhận mức phí mới trước khi đặt.',
   reservation_expired: 'Đặt chỗ đã quá hạn. Không thể hủy ngược thời gian.',
@@ -35,12 +35,29 @@ const messages: Record<string, string> = {
   tariff_unavailable: 'Trạm chưa có biểu giá hợp lệ để đặt chỗ.',
   power_unavailable: 'Công suất trạm chưa sẵn sàng. Chọn trạm khác hoặc thử lại sau.',
 }
+export interface ReservationAlternative {
+  connector_id: string
+  charge_point_code: string
+  connector_number: number
+}
+function isAlternative(value: unknown): value is ReservationAlternative {
+  if (!value || typeof value !== 'object') return false
+  const row = value as Partial<ReservationAlternative>
+  return typeof row.connector_id === 'string' && row.connector_id.length > 0 && row.connector_id.length <= 64
+    && typeof row.charge_point_code === 'string' && row.charge_point_code.length > 0 && row.charge_point_code.length <= 64
+    && typeof row.connector_number === 'number' && Number.isInteger(row.connector_number) && row.connector_number > 0
+}
 export class ReservationApiError extends Error {
   readonly status: number
+  readonly code: string
+  readonly alternatives: ReservationAlternative[]
   constructor(status: number, detail: unknown) {
     const code = typeof detail === 'string' ? detail : detail && typeof detail === 'object' && 'reason' in detail ? String(detail.reason) : ''
     super(messages[code] ?? (status === 401 ? 'Phiên đăng nhập đã hết hạn.' : status === 403 ? 'Bạn không có quyền thực hiện thao tác này.' : 'Không đọc hoặc lưu được đặt chỗ. Tải lại để kiểm tra.'))
     this.status = status
+    this.code = code
+    const candidates = status === 409 && code === 'connector_reserved' && detail && typeof detail === 'object' && 'alternatives' in detail ? detail.alternatives : []
+    this.alternatives = Array.isArray(candidates) ? candidates.filter(isAlternative).slice(0, 3) : []
   }
 }
 const base = import.meta.env.VITE_API_BASE_URL?.replace(/\/$/, '') ?? ''

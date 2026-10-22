@@ -17,6 +17,7 @@ from src.modules.reservations.service import (
     create_reservation,
     probe_capability,
 )
+from src.modules.stations.discovery import reservation_alternatives
 from src.modules.stations.models import ChargePoint, Connector, Station
 from src.platform.database.session import get_db_session
 
@@ -30,7 +31,11 @@ class BookingBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
     request_id: UUID
     connector_id: UUID
-    arrival_at: AwareDatetime | None = None
+    arrival_at: AwareDatetime | None = Field(
+        default=None,
+        description="Omit or use null for a new immediate 15-minute hold. "
+        "Explicit timestamps are only accepted when replaying an existing request.",
+    )
     accepted_fee_vnd: Annotated[StrictInt, Field(ge=0, le=1000000)] | None = None
     accepted_policy_version: Annotated[StrictInt, Field(ge=0)] | None = None
 
@@ -98,16 +103,39 @@ async def book(
     evidence: AuditEvidence,
     db: Database,
 ) -> dict[str, object]:
-    result = await create_reservation(
-        db,
-        actor.user_id,
-        body.request_id,
-        body.connector_id,
-        body.arrival_at,
-        evidence,
-        body.accepted_fee_vnd,
-        body.accepted_policy_version,
-    )
+    try:
+        result = await create_reservation(
+            db,
+            actor.user_id,
+            body.request_id,
+            body.connector_id,
+            body.arrival_at,
+            evidence,
+            body.accepted_fee_vnd,
+            body.accepted_policy_version,
+        )
+    except HTTPException as error:
+        if error.status_code != 409 or error.detail != "connector_reserved":
+            raise
+        connector = await db.get(Connector, body.connector_id)
+        point = (
+            await db.get(ChargePoint, connector.charge_point_id) if connector else None
+        )
+        station = await db.get(Station, point.station_id) if point else None
+        now = await database_time(db)
+        alternatives = (
+            await reservation_alternatives(db, connector, station, now)
+            if connector is not None and station is not None
+            else []
+        )
+        raise HTTPException(
+            409,
+            {
+                "reason": "connector_reserved",
+                "alternatives": alternatives,
+                "generated_at": now.isoformat(),
+            },
+        ) from error
     return await view(db, result)
 
 

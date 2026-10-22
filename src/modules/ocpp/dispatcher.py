@@ -4,11 +4,13 @@ import hashlib
 import json
 import logging
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
-from sqlalchemy import delete, insert, select
+from sqlalchemy import bindparam, delete, insert, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.dml import Insert
 
 from src.config import settings
 from src.modules.charging.models import MeterSample
@@ -27,6 +29,46 @@ from src.modules.stations.models import ChargePoint, Station
 from src.platform.database.session import SessionFactory
 
 logger = logging.getLogger("csms.ocpp")
+
+
+METER_COLUMNS = (
+    "session_id",
+    "timestamp",
+    "measurand",
+    "phase",
+    "location",
+    "value",
+    "unit",
+)
+
+
+@lru_cache(maxsize=16)
+def meter_reply_statement(sample_count: int) -> Insert:
+    """Cache the SQL shape of small periodic reports, never their values."""
+    samples = [
+        select(
+            *(
+                bindparam(
+                    f"sample_{index}_{name}", type_=MeterSample.__table__.c[name].type
+                )
+                for name in METER_COLUMNS
+            )
+        )
+        for index in range(sample_count)
+    ]
+    source = samples[0] if sample_count == 1 else union_all(*samples)
+    return (
+        insert(OcppMessageReply)
+        .values(
+            charge_point_id=bindparam("reply_charger"),
+            message_id=bindparam("reply_message"),
+            request_hash=bindparam("reply_hash"),
+            response=bindparam("reply_response"),
+        )
+        .add_cte(
+            insert(MeterSample).from_select(METER_COLUMNS, source).cte("meter_batch")
+        )
+    )
 
 
 class BootPayload(BaseModel):
@@ -163,6 +205,15 @@ async def process_call(
             )
             connection.boot_accepted = accepted
             now = datetime.now(UTC)
+            from src.modules.ocpp.configuration_gate import (
+                reboot_heartbeat,
+                verified_heartbeat,
+            )
+
+            interval = await verified_heartbeat(
+                session, charge_point.id, settings.ocpp_heartbeat_interval_seconds
+            )
+            pending_interval = await reboot_heartbeat(session, charge_point.id)
             if accepted:
                 if not boot_was_accepted:
                     await note_reconnection(session, charge_point.id)
@@ -171,9 +222,8 @@ async def process_call(
                 if "firmwareVersion" in frame.payload:
                     charge_point.firmware_version = boot.firmwareVersion
                 charge_point.last_boot_at = now
-                charge_point.heartbeat_interval_seconds = (
-                    settings.ocpp_heartbeat_interval_seconds
-                )
+                if pending_interval is None:
+                    charge_point.heartbeat_interval_seconds = interval
                 charge_point.status = "online"
                 charge_point.status_updated_at = now
             else:
@@ -185,7 +235,9 @@ async def process_call(
                     {
                         "status": "Accepted" if accepted else "Rejected",
                         "currentTime": now.isoformat(),
-                        "interval": settings.ocpp_heartbeat_interval_seconds,
+                        "interval": pending_interval
+                        if pending_interval is not None
+                        else interval,
                     },
                 )
             )
@@ -260,7 +312,23 @@ async def process_call(
         response = error_frame(
             frame.message_id, "NotImplemented", "Action is not implemented"
         )
-    if meter_rows:
+    if meter_rows and len(meter_rows) <= 16:
+        # A VALUES(list) insert disables SQLAlchemy's compiled-statement cache.
+        # Bind-only SELECTs reuse compilation across concurrent periodic reports.
+        # Samples and replay reply remain atomic and ACK still follows commit.
+        parameters = {
+            f"sample_{index}_{name}": row[name]
+            for index, row in enumerate(meter_rows)
+            for name in METER_COLUMNS
+        }
+        parameters.update(
+            reply_charger=charge_point.id,
+            reply_message=frame.message_id,
+            reply_hash=digest,
+            reply_response=response,
+        )
+        await session.execute(meter_reply_statement(len(meter_rows)), parameters)
+    elif meter_rows:
         # Data-modifying CTEs persist samples and their replay reply in one
         # database round trip. Both still commit before transport sends the ACK.
         statement = insert(OcppMessageReply).values(

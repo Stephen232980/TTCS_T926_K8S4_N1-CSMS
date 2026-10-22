@@ -165,7 +165,7 @@ describe('DriverWalletPage (S-40 / T-100)', () => {
     try {
       const page = { ...mockLedgerPage1, items: mockLedgerPage1.items.map(tx => tx.id === 2 ? { ...tx, reference_type: 'charging_session', reference_id: '901' } : tx) }
       render(<DriverWalletPage walletApi={{ getWallet: vi.fn().mockResolvedValue(mockWallet), getTransactions: vi.fn().mockResolvedValue(page) }} />)
-      await userEvent.click(await screen.findByRole('button', { name: 'Xem phiên sạc #901' }))
+      await userEvent.click(await screen.findByRole('button', { name: 'Chi tiết phiên sạc #901' }))
       expect(fetchMock).toHaveBeenCalledWith('/api/v1/driver/charging/sessions/901', { credentials: 'include', signal: expect.any(AbortSignal) })
       expect(await screen.findByRole('region', { name: 'Chi tiết phiên sạc' })).toHaveTextContent('Trạm A · 12 kWh')
       expect(screen.getByText(/Mã tham chiếu: PG-001/)).toBeInTheDocument()
@@ -199,7 +199,7 @@ describe('DriverWalletPage (S-40 / T-100)', () => {
     const fetcher = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({...item, topup_order_id: 'real-order', topup_status: 'succeeded', topup_reason: null})))
     try {
       render(<DriverWalletPage walletApi={{getWallet: vi.fn().mockResolvedValue(mockWallet), getTransactions: vi.fn().mockResolvedValue({items:[item],next_cursor:null,has_more:false})}} />)
-      await userEvent.click(await screen.findByRole('button', {name:'Xem lần nạp'}))
+      await userEvent.click(await screen.findByRole('button', {name:'Chi tiết lần nạp của giao dịch #1'}))
       const detail = await screen.findByRole('region', {name:'Chi tiết lần nạp'})
       expect(detail.closest('article')).not.toBeNull()
       expect(detail).toHaveTextContent('real-order')

@@ -50,17 +50,17 @@ export function AlertsPanel({ area }: { area: 'ops' | 'owner' | 'admin' }) {
   function dismiss(restoreFocus = false) {
     setExpanded(false)
     setClosing('')
-    if (restoreFocus) triggerRef.current?.focus()
+    if (restoreFocus) triggerRef.current?.focus({ preventScroll: true })
   }
   useEffect(() => {
     if (!expanded) return
-    panelRef.current?.focus()
+    panelRef.current?.focus({ preventScroll: true })
     const escape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault()
         setExpanded(false)
         setClosing('')
-        triggerRef.current?.focus()
+        triggerRef.current?.focus({ preventScroll: true })
       }
     }
     const outside = (event: PointerEvent) => {
@@ -144,9 +144,14 @@ export function AlertsPanel({ area }: { area: 'ops' | 'owner' | 'admin' }) {
       <h2>Cảnh báo trụ</h2>
       <span className="csms-alerts-count">Đang mở: {totals.active ?? '…'} · Đã đóng: {totals.closed ?? '…'}</span>
       <div className="csms-alerts-actions">
-        <button type="button" disabled={!!busy} onClick={() => { setExpanded(true); setHistory(!history); setPage(1); setData(undefined); setClosing(''); setNotice('') }}>{history ? `Đang mở${totals.active === undefined ? '' : ` (${totals.active})`}` : `Lịch sử${totals.closed === undefined ? '' : ` (${totals.closed})`}`}</button>
-        <button ref={triggerRef} type="button" aria-expanded={expanded} aria-controls={contentId} disabled={!!busy} onClick={() => expanded ? dismiss() : setExpanded(true)}>{expanded ? 'Thu gọn' : 'Xem cảnh báo'}</button>
-        <button type="button" className="csms-alerts-refresh" aria-label="Tải lại cảnh báo" title="Tải lại cảnh báo" disabled={!!busy} onClick={() => setRevision(value => value + 1)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M20 12a8 8 0 1 0-2 5" /></svg></button>
+        {([false, true] as const).map(showHistory => <button key={String(showHistory)} type="button"
+          aria-expanded={expanded && history === showHistory} aria-controls={contentId} disabled={!!busy}
+          onClick={event => {
+            triggerRef.current = event.currentTarget
+            if (expanded && history === showHistory) { dismiss(); return }
+            if (history !== showHistory) { setData(undefined); setError('') }
+            setHistory(showHistory); setPage(1); setExpanded(true); setClosing(''); setNotice(''); setActionError('')
+          }}>{showHistory ? 'Lịch sử' : 'Đang mở'} ({totals[showHistory ? 'closed' : 'active'] ?? '…'})</button>)}
       </div>
     </div>
     {error && <p role="alert">{error}</p>}
@@ -157,6 +162,7 @@ export function AlertsPanel({ area }: { area: 'ops' | 'owner' | 'admin' }) {
         <h3>{history ? 'Lịch sử cảnh báo' : 'Cảnh báo đang mở'}</h3>
         <button type="button" aria-label="Đóng danh sách cảnh báo" onClick={() => dismiss(true)}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg></button>
       </div>
+    {error && <button type="button" disabled={!!busy} onClick={() => setRevision(value => value + 1)}>Thử lại</button>}
     {!data && !error && <p role="status">Đang tải cảnh báo…</p>}
     {data && !data.items.length && <p className="csms-alerts-muted">{history ? 'Chưa có cảnh báo đã đóng.' : 'Không có cảnh báo đang mở.'}</p>}
     {data && <ul className="csms-alerts-list">{data.items.map(item => <li key={item.id}>

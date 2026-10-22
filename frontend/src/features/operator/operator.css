@@ -350,6 +350,12 @@
 .operator-review-focus > span { font-size: 13px; font-weight: 600; }
 .operator-review-row .operator-review-focus.is-note { background: #eaf2f5; border-left-color: #8ba5b1; color: #526e7b; }
 .operator-account-body { display: grid; gap: 10px; min-width: 0; }
+.operator-configuration { display: grid; gap: 10px; padding-block: 12px; }
+.operator-configuration-values { display: flex; flex-wrap: wrap; gap: 12px; }
+.operator-configuration form { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
+.operator-configuration label { display: grid; gap: 4px; flex: 1 1 120px; }
+.operator-configuration input, .operator-configuration select { width: 100%; min-width: 0; padding: 8px; }
+.operator-configuration p { margin: 0; overflow-wrap: anywhere; }
 @media (max-width: 800px) {
   .operator-shell .operator-account-toggle { display: inline-flex; min-height: 44px; }
   .operator-account-body { display: none; }

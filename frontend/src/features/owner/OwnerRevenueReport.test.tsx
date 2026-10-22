@@ -15,9 +15,17 @@ const mockReport: RevenueReportResponse = {
     idle_amount_vnd: 30000,
     total_invoice_vnd: 450000,
     debited_vnd: 350000,
+    invoice_cohort_settled_vnd: 350000,
     awaiting_settlement_vnd: 100000,
+    awaiting_settlement_sessions: 1,
+    legacy_exempt_sessions: 1,
+    legacy_exempt_vnd: 38500,
+    free_sessions: 1,
+    reservation_fee_vnd: 50000,
+    reservation_count: 1,
     unbilled_sessions: 1,
     unbilled_operating_kwh: '25.0',
+    unbilled_missing_meter_sessions: 1,
   },
   charge_points: [
     {
@@ -31,9 +39,17 @@ const mockReport: RevenueReportResponse = {
       idle_amount_vnd: 25000,
       total_invoice_vnd: 340000,
       debited_vnd: 340000,
+      invoice_cohort_settled_vnd: 340000,
       awaiting_settlement_vnd: 0,
+      awaiting_settlement_sessions: 0,
+      legacy_exempt_sessions: 0,
+      legacy_exempt_vnd: 0,
+      free_sessions: 0,
+      reservation_fee_vnd: 0,
+      reservation_count: 0,
       unbilled_sessions: 0,
       unbilled_operating_kwh: '0',
+      unbilled_missing_meter_sessions: 0,
     },
     {
       station_id: 'sta-1',
@@ -46,9 +62,17 @@ const mockReport: RevenueReportResponse = {
       idle_amount_vnd: 5000,
       total_invoice_vnd: 110000,
       debited_vnd: 10000,
+      invoice_cohort_settled_vnd: 10000,
       awaiting_settlement_vnd: 100000,
+      awaiting_settlement_sessions: 1,
+      legacy_exempt_sessions: 1,
+      legacy_exempt_vnd: 38500,
+      free_sessions: 1,
+      reservation_fee_vnd: 50000,
+      reservation_count: 1,
       unbilled_sessions: 1,
       unbilled_operating_kwh: '25.0',
+      unbilled_missing_meter_sessions: 1,
     },
   ],
   daily_timeline: [
@@ -58,6 +82,7 @@ const mockReport: RevenueReportResponse = {
       kwh: '30.0',
       invoice_vnd: 110000,
       debited_vnd: 10000,
+      reservation_fee_vnd: 50000,
     },
     {
       date: '2026-11-02',
@@ -104,6 +129,14 @@ it('renders default monthly revenue report with summary cards, chart and table',
   // Energy & Sessions check
   expect(screen.getByText(/120,5 kWh/)).toBeInTheDocument()
   expect(screen.getByText(/4 phiên/)).toBeInTheDocument()
+
+  // New classifications & badges check
+  expect(screen.getByText('Đã trừ ví kỳ này')).toBeInTheDocument()
+  expect(screen.getByText('Chờ settlement')).toBeInTheDocument()
+  expect(screen.getByText('Miễn trừ cũ')).toBeInTheDocument()
+  expect(screen.getByText('Phiên miễn phí')).toBeInTheDocument()
+  expect(screen.getByText(/Phí giữ chỗ \(No-show\):/)).toBeInTheDocument()
+  expect(screen.getByText(/Thiếu số đo: 1 phiên/)).toBeInTheDocument()
 
   // Unbilled operating kWh check
   expect(screen.getAllByText(/25,0 kWh/).length).toBeGreaterThanOrEqual(1)
@@ -210,4 +243,71 @@ it('displays empty message when period has no charging data', async () => {
     'Không có dữ liệu phiên sạc hoặc doanh thu trong kỳ đã chọn.',
   )
   expect(screen.getByText('Tổng doanh thu hóa đơn')).toBeInTheDocument()
+})
+
+it('triggers CSV export when Xuất CSV button is clicked', async () => {
+  const user = userEvent.setup()
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input)
+    if (url.includes('/export')) {
+      return new Response('\ufeffperiod_from,period_to\n', {
+        headers: {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition':
+            'attachment; filename="revenue_report_20261101_20261201.csv"',
+        },
+      })
+    }
+    return new Response(JSON.stringify(mockReport))
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  window.URL.createObjectURL = vi.fn(() => 'blob:mock-url')
+  window.URL.revokeObjectURL = vi.fn()
+
+  render(<OwnerRevenueReport />)
+
+  await screen.findByText('Tổng doanh thu hóa đơn')
+
+  const exportBtn = screen.getByRole('button', {
+    name: 'Xuất CSV báo cáo doanh thu',
+  })
+  expect(exportBtn).toBeInTheDocument()
+  await user.click(exportBtn)
+
+  await waitFor(() => {
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/owner/reports/revenue/export'),
+      expect.objectContaining({ credentials: 'include' }),
+    )
+  })
+})
+
+
+
+it('clears a previous load error when switching to a period that succeeds', async () => {
+  let fails = true
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(fails ? {detail: 'Server unavailable'} : mockReport), { status: fails ? 500 : 200 })))
+  render(<OwnerRevenueReport />)
+  await screen.findByRole('alert')
+  fails = false
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Hôm nay' }))
+  await screen.findByText('CP-LANDMARK-01')
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  expect(screen.getByRole('region', { name: 'Chi tiết doanh thu theo trụ' })).toHaveAttribute('tabindex', '0')
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Hôm nay' }))
+  expect(screen.getByRole('button', { name: 'Xuất CSV báo cáo doanh thu' })).toBeEnabled()
+})
+
+
+it('marks retained figures as updating and disables export while changing a filter', async () => {
+  let complete: (response: Response) => void = () => undefined
+  const fetcher = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(mockReport))).mockImplementationOnce(() => new Promise<Response>(resolve => { complete = resolve }))
+  vi.stubGlobal('fetch', fetcher)
+  render(<OwnerRevenueReport />)
+  await screen.findByText('CP-LANDMARK-01')
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Tuần này' }))
+  expect(screen.getByRole('status')).toHaveTextContent('Đang cập nhật báo cáo')
+  expect(screen.getByRole('button', { name: 'Xuất CSV báo cáo doanh thu' })).toBeDisabled()
+  complete(new Response(JSON.stringify(mockReport)))
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Xuất CSV báo cáo doanh thu' })).toBeEnabled())
 })

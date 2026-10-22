@@ -13,14 +13,17 @@ from src.modules.alerts import models as alert_models  # noqa: F401
 from src.modules.billing import models as billing_models  # noqa: F401
 from src.modules.charging import driver_models  # noqa: F401
 from src.modules.charging import models as charging_models  # noqa: F401
+from src.modules.driver_notifications import models as notification_models  # noqa: F401
 from src.modules.identity import models  # noqa: F401
 from src.modules.ocpp import (
     admin_health_models,  # noqa: F401
+    configuration_models,  # noqa: F401
     control_models,  # noqa: F401
 )
 from src.modules.ocpp import models as ocpp_models  # noqa: F401
 from src.modules.power import models as power_models  # noqa: F401
 from src.modules.pricing import models as pricing_models  # noqa: F401
+from src.modules.privacy import models as privacy_models  # noqa: F401
 from src.modules.reservations import models as reservation_models  # noqa: F401
 from src.modules.stations import models as stations_models  # noqa: F401
 from src.modules.wallet import models as wallet_models  # noqa: F401

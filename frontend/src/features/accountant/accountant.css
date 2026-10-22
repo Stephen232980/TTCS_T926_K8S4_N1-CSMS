@@ -226,3 +226,183 @@
 @media (prefers-reduced-motion:no-preference) {
   .accountant-shell button, .accountant-sidebar a { transition: background-color 150ms ease-out; }
 }
+
+/* S-53: Reconciliation Runs & Issues */
+.finance-create-run-form {
+  margin-top: 14px;
+  padding: 16px 20px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.finance-create-run-form h3 {
+  margin: 0 0 6px;
+  font-size: 16px;
+  color: var(--ink);
+}
+.finance-create-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 14px 0;
+}
+.finance-create-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.finance-create-fields input,
+.finance-create-fields select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  color-scheme: light;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--canvas);
+  color: var(--ink);
+}
+.finance-code-chip {
+  padding: 4px 8px;
+  font-family: monospace;
+  font-size: 12px;
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  color: var(--muted);
+}
+.finance-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.finance-summary-card {
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.finance-summary-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+.finance-summary-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.finance-summary-breakdown {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.finance-summary-sub {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.finance-diff.is-warning {
+  color: #9b3025;
+  font-weight: 600;
+}
+.finance-category-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 16px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.accountant-shell .finance-tab {
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.accountant-shell .finance-tab.is-active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.finance-badge.is-severity-critical {
+  background: #fff0ec;
+  color: #9b3025;
+  border: 1px solid #edc9c2;
+}
+.finance-badge.is-severity-warning {
+  background: #faf3df;
+  color: #705410;
+  border: 1px solid #e5d6aa;
+}
+.finance-badge.is-severity-info {
+  background: #eaf2f5;
+  color: #244e60;
+  border: 1px solid #c8dce5;
+}
+.finance-evidence-details {
+  margin-top: 6px;
+  font-size: 12px;
+}
+.finance-evidence-details summary {
+  cursor: pointer;
+  color: var(--accent);
+}
+.finance-evidence-details pre {
+  margin: 6px 0 0;
+  padding: 8px;
+  background: var(--canvas);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 11px;
+  max-height: 160px;
+  overflow: auto;
+}
+.finance-copied-toast {
+  display: block;
+  margin-top: 4px;
+  color: #116443;
+  font-size: 11px;
+}
+
+
+.finance-create-fields select option { background: var(--surface); color: var(--ink); }
+.finance-run-detail-container { display: grid; gap: 16px; min-width: 0; }
+.finance-summary-value { font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.accountant-shell .finance-create-run-form .finance-filter-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.accountant-shell .finance-create-run-form .finance-filter-actions button { flex: 0 1 auto; }
+@media (max-width: 800px) {
+  .finance-create-run-form { padding: 16px; }
+  .finance-create-fields label { flex-basis: 100%; }
+  .accountant-shell .finance-create-run-form .finance-filter-actions button { flex: 1 1 100%; }
+  .finance-heading .finance-actions { flex-wrap: wrap; }
+}
+
+.finance-badge { display: inline-block; padding: 4px 8px; border-radius: 7px; font-size: 12px; color: var(--muted); background: var(--canvas); }
+.finance-badge.is-settled { color: #116443; background: #e4f5eb; }
+.finance-badge.is-needs_review { color: #9b3025; background: #fff0ec; }
+.accountant-shell .finance-tab.is-active:hover:not(:disabled) { background: #0d624b; }
+
+@media (min-width: 801px) {
+  .finance-reconciliation-runs .finance-session-table td:first-child,
+  .finance-reconciliation-runs .finance-session-table td:nth-child(2) { width: auto; }
+  .finance-reconciliation-runs .finance-session-table td:last-child button { min-width: 130px; }
+}
+@media (max-width: 800px) {
+  .finance-reconciliation-runs td[data-label]::before { content: attr(data-label); display: block; font-size: 12px; font-weight: 400; color: var(--muted); }
+}

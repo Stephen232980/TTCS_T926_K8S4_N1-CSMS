@@ -35,7 +35,12 @@ async def request(wallet_id, command, actor=None, body=None):
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
             return await client.post(
-                f"/api/v1/admin/wallets/{wallet_id}/{command}", json=body
+                f"/api/v1/admin/wallets/{wallet_id}/{command}",
+                json=(
+                    {"reason": "Checked"}
+                    if command == "unlock" and body is None
+                    else body
+                ),
             )
     finally:
         app.dependency_overrides.pop(get_current_actor, None)
@@ -113,7 +118,10 @@ async def test_missing_invoice_debit_blocks_repair_and_unlock(db_session):
     await db_session.flush()
     # Committed webhook warnings may exist; rejected commands must add no audit.
     audit_count = await db_session.scalar(select(func.count()).select_from(AuditLog))
-    for command, kwargs in ((mo_khoa_vi, {}), (sua_so_du_cache, {"reason": "Checked"})):
+    for command, kwargs in (
+        (mo_khoa_vi, {"reason": "Checked"}),
+        (sua_so_du_cache, {"reason": "Checked"}),
+    ):
         with pytest.raises(WalletReconciliationError) as error:
             await command(db_session, wallet_id=wallet.id, actor_id=admin.id, **kwargs)
         assert "invoice_debit_count" in error.value.checks
@@ -193,7 +201,9 @@ async def test_service_rejects_zero_and_adjustment_does_not_hide_missing_debit(
         reason="Correction",
     )
     with pytest.raises(WalletReconciliationError) as error:
-        await mo_khoa_vi(db_session, wallet_id=wallet.id, actor_id=admin.id)
+        await mo_khoa_vi(
+            db_session, wallet_id=wallet.id, actor_id=admin.id, reason="Checked"
+        )
     assert "invoice_debit_count" in error.value.checks and wallet.status == "locked"
 
 
@@ -218,7 +228,7 @@ async def test_each_audit_failure_rolls_back_business_changes(
         if command == "repair":
             await sua_so_du_cache(db_session, **kwargs, reason="Checked")
         elif command == "unlock":
-            await mo_khoa_vi(db_session, **kwargs)
+            await mo_khoa_vi(db_session, **kwargs, reason="Checked")
         else:
             await dieu_chinh_vi(
                 db_session, **kwargs, amount_vnd=1, audit_id=uuid4(), reason="Checked"
@@ -296,7 +306,9 @@ async def test_unlock_waits_for_writer_then_rechecks_committed_drift(
         )
         pid = await unlocker.scalar(text("SELECT pg_backend_pid()"))
         task = asyncio.create_task(
-            mo_khoa_vi(unlocker, wallet_id=wallet.id, actor_id=admin.id)
+            mo_khoa_vi(
+                unlocker, wallet_id=wallet.id, actor_id=admin.id, reason="Checked"
+            )
         )
         try:
             async with asyncio.timeout(10):
@@ -333,7 +345,9 @@ async def test_administrative_actions_follow_caller_rollback(isolated_wallet_db)
             audit_id=uuid4(),
             reason="Checked",
         )
-        await mo_khoa_vi(writer, wallet_id=wallet.id, actor_id=admin.id)
+        await mo_khoa_vi(
+            writer, wallet_id=wallet.id, actor_id=admin.id, reason="Checked"
+        )
         assert await writer.scalar(select(func.count()).select_from(AuditLog)) == 2
         assert await reader.scalar(select(func.count()).select_from(AuditLog)) == 0
         assert (await reader.get(Wallet, wallet.id)).status == "locked"

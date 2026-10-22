@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import {
+  exportOwnerRevenueCsv,
   fetchRevenueReport,
   formatKwh,
   formatVnd,
@@ -25,9 +26,11 @@ export function OwnerRevenueReport({
   const [page, setPage] = useState(1)
 
   const [loading, setLoading] = useState(true)
+  const [exporting, setExporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [report, setReport] = useState<RevenueReportResponse | null>(null)
   const [refreshCount, setRefreshCount] = useState(0)
+
 
   useEffect(() => {
     let ignore = false
@@ -42,6 +45,7 @@ export function OwnerRevenueReport({
     })
       .then((data) => {
         if (!ignore) {
+          setError(null)
           setReport(data)
           setLoading(false)
         }
@@ -63,6 +67,7 @@ export function OwnerRevenueReport({
   }, [period, dateFrom, dateTo, stationId, page, refreshCount])
 
   const handlePeriodChange = (newPeriod: PeriodType) => {
+    if (newPeriod === period) return
     setLoading(true)
     setPeriod(newPeriod)
     setPage(1)
@@ -74,19 +79,41 @@ export function OwnerRevenueReport({
     setRefreshCount((c) => c + 1)
   }
 
+  const handleExportCsv = async () => {
+    try {
+      setExporting(true)
+      await exportOwnerRevenueCsv({
+        period,
+        date_from: dateFrom || undefined,
+        date_to: dateTo || undefined,
+        station_id: stationId || undefined,
+      })
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Xuất CSV thất bại. Vui lòng thử lại.',
+      )
+    } finally {
+      setExporting(false)
+    }
+  }
+
+
   // Daily timeline max calculation for bar height
   const maxInvoice = report?.daily_timeline
     ? Math.max(1, ...report.daily_timeline.map((d) => d.invoice_vnd))
     : 1
 
   return (
-    <div className="owner-revenue-container" data-testid="owner-revenue-report">
+    <div className="owner-revenue-container" data-testid="owner-revenue-report" aria-busy={loading}>
       {/* 1. Filter Toolbar */}
       <div className="owner-revenue-toolbar">
         <div className="owner-revenue-period-group" role="group" aria-label="Kỳ báo cáo">
           <button
             type="button"
             className={`owner-period-btn ${period === 'day' ? 'active' : ''}`}
+            aria-pressed={period === 'day'}
             onClick={() => handlePeriodChange('day')}
           >
             Hôm nay
@@ -94,6 +121,7 @@ export function OwnerRevenueReport({
           <button
             type="button"
             className={`owner-period-btn ${period === 'week' ? 'active' : ''}`}
+            aria-pressed={period === 'week'}
             onClick={() => handlePeriodChange('week')}
           >
             Tuần này
@@ -101,6 +129,7 @@ export function OwnerRevenueReport({
           <button
             type="button"
             className={`owner-period-btn ${period === 'month' ? 'active' : ''}`}
+            aria-pressed={period === 'month'}
             onClick={() => handlePeriodChange('month')}
           >
             Tháng này
@@ -108,6 +137,7 @@ export function OwnerRevenueReport({
           <button
             type="button"
             className={`owner-period-btn ${period === 'custom' ? 'active' : ''}`}
+            aria-pressed={period === 'custom'}
             onClick={() => handlePeriodChange('custom')}
           >
             Tùy chọn
@@ -124,6 +154,7 @@ export function OwnerRevenueReport({
                   aria-label="Từ ngày"
                   value={dateFrom}
                   onChange={(e) => {
+                    setLoading(true)
                     setDateFrom(e.target.value)
                     setPage(1)
                   }}
@@ -136,6 +167,7 @@ export function OwnerRevenueReport({
                   aria-label="Đến ngày"
                   value={dateTo}
                   onChange={(e) => {
+                    setLoading(true)
                     setDateTo(e.target.value)
                     setPage(1)
                   }}
@@ -150,6 +182,7 @@ export function OwnerRevenueReport({
               className="owner-station-select"
               value={stationId}
               onChange={(e) => {
+                setLoading(true)
                 setStationId(e.target.value)
                 setPage(1)
               }}
@@ -172,6 +205,15 @@ export function OwnerRevenueReport({
           >
             Làm mới
           </button>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={handleExportCsv}
+            aria-label="Xuất CSV báo cáo doanh thu"
+            disabled={loading || exporting}
+          >
+            {exporting ? 'Đang xuất…' : 'Xuất CSV'}
+          </button>
         </div>
       </div>
 
@@ -185,6 +227,7 @@ export function OwnerRevenueReport({
         </div>
       )}
 
+      {loading && report && <p className="owner-revenue-loading" role="status">Đang cập nhật báo cáo…</p>}
       {/* Loading state indicator */}
       {loading && !report && (
         <div role="status" className="owner-panel owner-placeholder">
@@ -204,13 +247,31 @@ export function OwnerRevenueReport({
               </span>
               <div className="owner-metric-subtext">
                 <div>
-                  <span className="owner-badge success">Đã thu ví</span>{' '}
+                  <span className="owner-badge success">Đã trừ ví kỳ này</span>{' '}
                   <strong>{formatVnd(report.summary.debited_vnd)}</strong>
                 </div>
                 <div>
-                  <span className="owner-badge pending">Chờ thu / Đối soát</span>{' '}
-                  <strong>{formatVnd(report.summary.awaiting_settlement_vnd)}</strong>
+                  <span className="owner-badge pending">Chờ settlement</span>{' '}
+                  <strong>{formatVnd(report.summary.awaiting_settlement_vnd)}</strong>{' '}
+                  <span className="owner-subtle">
+                    ({report.summary.awaiting_settlement_sessions ?? 0} phiên)
+                  </span>
                 </div>
+                {Boolean(report.summary.legacy_exempt_sessions) && (
+                  <div>
+                    <span className="owner-badge subtle">Miễn trừ cũ</span>{' '}
+                    <strong>{formatVnd(report.summary.legacy_exempt_vnd ?? 0)}</strong>{' '}
+                    <span className="owner-subtle">
+                      ({report.summary.legacy_exempt_sessions} phiên)
+                    </span>
+                  </div>
+                )}
+                {Boolean(report.summary.free_sessions) && (
+                  <div>
+                    <span className="owner-badge subtle">Phiên miễn phí</span>{' '}
+                    <strong>{report.summary.free_sessions} phiên</strong>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -230,13 +291,14 @@ export function OwnerRevenueReport({
 
             {/* Card 3: Fee Breakdown */}
             <div className="owner-metric-card info">
-              <span className="owner-metric-title">Cơ cấu doanh thu</span>
+              <span className="owner-metric-title">Cơ cấu doanh thu & phí</span>
               <span className="owner-metric-value">
                 {formatVnd(report.summary.energy_amount_vnd)}
               </span>
               <div className="owner-metric-subtext">
                 <div>Tiền điện năng: <strong>{formatVnd(report.summary.energy_amount_vnd)}</strong></div>
                 <div>Phí quá giờ: <strong>{formatVnd(report.summary.idle_amount_vnd)}</strong></div>
+                <div>Phí giữ chỗ (No-show): <strong>{formatVnd(report.summary.reservation_fee_vnd ?? 0)}</strong> <span className="owner-subtle">({report.summary.reservation_count ?? 0} lượt)</span></div>
               </div>
             </div>
 
@@ -251,6 +313,13 @@ export function OwnerRevenueReport({
                   Phiên hoàn tất chưa xuất HĐ:{' '}
                   <strong>{report.summary.unbilled_sessions} phiên</strong>
                 </div>
+                {Boolean(report.summary.unbilled_missing_meter_sessions) && (
+                  <div>
+                    <span className="owner-badge warning">
+                      Thiếu số đo: {report.summary.unbilled_missing_meter_sessions} phiên
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -287,7 +356,10 @@ export function OwnerRevenueReport({
                       <div className="owner-bar-tooltip">
                         <strong>{d.date}</strong>
                         <div>Doanh thu: {formatVnd(d.invoice_vnd)}</div>
-                        <div>Đã thu: {formatVnd(d.debited_vnd)}</div>
+                        <div>Đã trừ ví: {formatVnd(d.debited_vnd)}</div>
+                        {Boolean(d.reservation_fee_vnd) && (
+                          <div>Phí giữ chỗ: {formatVnd(d.reservation_fee_vnd ?? 0)}</div>
+                        )}
                         <div>Sản lượng: {formatKwh(d.kwh)}</div>
                         <div>Số phiên: {d.sessions_count}</div>
                       </div>
@@ -306,7 +378,7 @@ export function OwnerRevenueReport({
                 Tổng cộng {report.pagination.total_items} trụ
               </span>
             </div>
-            <div className="owner-revenue-table-wrap">
+            <div className="owner-revenue-table-wrap" role="region" aria-label="Chi tiết doanh thu theo trụ" tabIndex={0}>
               <table className="owner-revenue-table">
                 <thead>
                   <tr>
@@ -319,13 +391,14 @@ export function OwnerRevenueReport({
                     <th className="num">Tổng hóa đơn</th>
                     <th className="num">Đã trừ ví</th>
                     <th className="num">Chờ thu</th>
+                    <th className="num">Phí đặt chỗ</th>
                     <th className="num">Chưa lập HĐ</th>
                   </tr>
                 </thead>
                 <tbody>
                   {report.charge_points.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="owner-empty-row">
+                      <td colSpan={11} className="owner-empty-row">
                         Không có dữ liệu phiên sạc hoặc doanh thu trong kỳ đã chọn.
                       </td>
                     </tr>
@@ -354,9 +427,25 @@ export function OwnerRevenueReport({
                           )}
                         </td>
                         <td className="num">
-                          {cp.unbilled_sessions > 0
-                            ? `${formatKwh(cp.unbilled_operating_kwh)} (${cp.unbilled_sessions} phiên)`
-                            : '—'}
+                          {(cp.reservation_fee_vnd ?? 0) > 0 ? (
+                            <span>{formatVnd(cp.reservation_fee_vnd ?? 0)}</span>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                        <td className="num">
+                          {cp.unbilled_sessions > 0 ? (
+                            <span>
+                              {formatKwh(cp.unbilled_operating_kwh)} ({cp.unbilled_sessions} phiên)
+                              {Boolean(cp.unbilled_missing_meter_sessions) && (
+                                <span className="owner-badge warning" style={{ marginLeft: 4 }}>
+                                  Thiếu {cp.unbilled_missing_meter_sessions}
+                                </span>
+                              )}
+                            </span>
+                          ) : (
+                            '—'
+                          )}
                         </td>
                       </tr>
                     ))
@@ -374,15 +463,15 @@ export function OwnerRevenueReport({
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button
                     type="button"
-                    disabled={page <= 1}
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={loading || page <= 1}
+                    onClick={() => { setLoading(true); setPage((p) => Math.max(1, p - 1)) }}
                   >
                     Trước
                   </button>
                   <button
                     type="button"
-                    disabled={page >= report.pagination.total_pages}
-                    onClick={() => setPage((p) => p + 1)}
+                    disabled={loading || page >= report.pagination.total_pages}
+                    onClick={() => { setLoading(true); setPage((p) => p + 1) }}
                   >
                     Sau
                   </button>

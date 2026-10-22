@@ -4,15 +4,16 @@ import type { AuthenticatedUser } from '../auth/model/auth'
 import { FinancePage } from './FinancePage'
 import './accountant.css'
 
-type Area = 'sessions' | 'invoices' | 'reconciliation'
+type Area = 'sessions' | 'invoices' | 'reconciliation' | 'runs'
 const areas: {
   id: Area
   label: string
-  icon: 'session' | 'report' | 'settings'
+  icon: 'session' | 'report' | 'settings' | 'dashboard'
 }[] = [
   { id: 'sessions', label: 'Phiên sạc & thanh toán', icon: 'session' },
   { id: 'invoices', label: 'Hóa đơn phí sạc', icon: 'report' },
   { id: 'reconciliation', label: 'Cần đối chiếu', icon: 'settings' },
+  { id: 'runs', label: 'Đợt đối soát', icon: 'dashboard' },
 ]
 
 const readArea = (): Area =>
