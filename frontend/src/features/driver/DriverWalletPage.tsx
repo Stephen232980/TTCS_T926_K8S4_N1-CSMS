@@ -255,7 +255,7 @@ export function DriverWalletPage({
               const amountNum = moneyValue(tx.amount)
               const isPlus = amountNum > 0n
               return (
-                <article key={tx.id} className="driver-tx-item">
+                <article key={tx.id} className={`driver-tx-item${tx.entry_type === 'reservation_fee' ? ' reservation-fee-item' : ''}`}>
                   <div
                     className={`tx-type-icon ${
                       tx.entry_type === 'topup' ||
@@ -271,7 +271,9 @@ export function DriverWalletPage({
                     }`}
                     aria-hidden="true"
                   >
-                    {tx.entry_type === 'topup' ||
+                    {tx.entry_type === 'reservation_fee' ? (
+                      <Icon name="wallet" />
+                    ) : tx.entry_type === 'topup' ||
                     tx.entry_type === 'gateway_topup' ||
                     tx.entry_type === 'manual_topup' ? (
                       '↑'
@@ -322,6 +324,7 @@ export function DriverWalletPage({
                             }}>Xem phiên sạc #{tx.reference_id}</button>
                           ) : (
                             <>
+                              {tx.entry_type === 'reservation_fee' && tx.reference_type === 'reservation' && /^[0-9a-f-]{36}$/i.test(tx.reference_id) && <a className="text-button" href={`#driver-reservation-${tx.reference_id}`}>Xem đặt chỗ</a>}
                               <details className="tx-reference-value"><summary>Mã giao dịch</summary><p>Mã dòng #{tx.id}</p><p>Mã tham chiếu: {tx.reference_id}</p></details>
                               {['gateway_topup', 'manual_topup'].includes(tx.entry_type) && <button className="text-button" onClick={async () => {
                                 setActiveTransaction(tx.id)

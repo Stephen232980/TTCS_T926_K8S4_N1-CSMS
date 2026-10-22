@@ -84,7 +84,7 @@ export function StationDetailPage({
 
   return (
     <section className="workspace station-detail" aria-labelledby="page-title">
-      <button className="back-button" type="button" onClick={onBack}>
+      <button className="navigation-link back-button" type="button" onClick={onBack}>
         <Icon name="chevronLeft" />
         Quay lại danh sách trạm
       </button>

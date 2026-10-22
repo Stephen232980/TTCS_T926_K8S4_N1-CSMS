@@ -476,7 +476,7 @@ function AccountWizard({
           <span>Bước {step} / 3</span>
           <div className="admin-actions">
             {step > 1 && (
-              <button
+              <button className="navigation-link"
                 type="button"
                 disabled={busy}
                 onClick={() => {

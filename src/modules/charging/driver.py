@@ -112,12 +112,31 @@ async def remote_start(
             .where(ChargePoint.id == registered.charge_point_id)
             .with_for_update()
         )
+        station = (
+            await session.scalar(
+                select(Station)
+                .where(Station.id == charger.station_id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+            if charger
+            else None
+        )
         connector = await session.scalar(
             select(Connector)
             .where(Connector.id == connector_id)
             .with_for_update()
             .execution_options(populate_existing=True)
         )
+        from src.modules.reservations.service import admissible, connector_hold
+
+        reservation = await connector_hold(session, connector_id, lock=True)
+        observed_at = await database_time(session)
+        if reservation is not None and not (
+            reservation.status == "active"
+            and admissible(reservation, driver_id, observed_at)
+        ):
+            raise HTTPException(409, {"reason": "connector_reserved"})
         driver = await session.scalar(
             select(User).where(User.id == driver_id).with_for_update()
         )
@@ -128,7 +147,6 @@ async def remote_start(
         )
         if driver is None or driver.status != "active" or is_driver is None:
             raise HTTPException(403, "Tài khoản không có quyền bắt đầu sạc.")
-        station = await session.get(Station, charger.station_id) if charger else None
         if (
             charger is None
             or connector is None
@@ -140,6 +158,10 @@ async def remote_start(
         ):
             raise HTTPException(409, "Trạm hoặc đầu nối hiện không khả dụng.")
         await expire_start_requests(session, now)
+        from src.modules.power.service import power_start_allowed
+
+        if not await power_start_allowed(session, charger.station_id):
+            raise HTTPException(409, {"reason": "power_unavailable"})
         lease = await session.scalar(
             select(DriverStartRequest.id).where(
                 DriverStartRequest.status.in_(["Pending", "Accepted"]),
@@ -167,7 +189,9 @@ async def remote_start(
                 409,
                 "Đầu nối đang bận hoặc bạn đã có phiên/yêu cầu đang chờ. Vui lòng kiểm tra phiên của bạn.",
             )
-        if connector.status not in ("Available", "Preparing"):
+        if connector.status not in ("Available", "Preparing") and not (
+            connector.status == "Reserved" and reservation is not None
+        ):
             raise HTTPException(
                 409,
                 "Đầu nối đang bận, được đặt chỗ hoặc chưa sẵn sàng. Vui lòng chọn đầu nối khác.",
@@ -187,7 +211,6 @@ async def remote_start(
                 },
             )
         connection = await ocpp_connections.get(charger.code.strip().lower())
-        observed_at = await database_time(session)
         online = (
             connection is not None
             and connection.boot_accepted
@@ -296,6 +319,40 @@ async def reject_remote_start(
         request.rejection_reason = eligibility.reason
         request.balance_vnd = eligibility.balance_vnd
         request.minimum_balance_vnd = eligibility.minimum_balance_vnd
+        request.lease_until = datetime.now(UTC)
+
+
+async def reject_unavailable_start(
+    session: AsyncSession,
+    connector: Connector,
+    card: ChargingCard | None,
+    *,
+    reason: str,
+) -> None:
+    if card is None:
+        return
+    tag = await session.scalar(
+        select(DriverVirtualTag).where(DriverVirtualTag.card_id == card.id)
+    )
+    if tag is None:
+        return
+    request = await session.scalar(
+        select(DriverStartRequest)
+        .where(
+            DriverStartRequest.driver_id == card.driver_id,
+            DriverStartRequest.connector_id == connector.id,
+            DriverStartRequest.session_id.is_(None),
+            DriverStartRequest.status.in_(
+                ["Pending", "Accepted", "StartNotConfirmed", "Timeout", "Disconnected"]
+            ),
+        )
+        .order_by(DriverStartRequest.created_at.desc())
+        .limit(1)
+        .with_for_update()
+    )
+    if request is not None:
+        request.status = "Rejected"
+        request.rejection_reason = reason
         request.lease_until = datetime.now(UTC)
 
 
