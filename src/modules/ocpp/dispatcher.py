@@ -7,10 +7,11 @@ from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
-from sqlalchemy import delete, select
+from sqlalchemy import delete, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config import settings
+from src.modules.charging.models import MeterSample
 from src.modules.charging.recovery import note_connector_status, note_reconnection
 from src.modules.charging.service import charging_call
 from src.modules.ocpp.connection_registry import OcppConnection
@@ -124,6 +125,7 @@ async def process_call(
                 await note_reconnection(session, charge_point.id)
         return cached.response
 
+    meter_rows: list[dict[str, object]] = []
     if frame.action == "BootNotification":
         try:
             boot = BootPayload.model_validate(frame.payload)
@@ -232,7 +234,14 @@ async def process_call(
                 Frame(
                     3,
                     frame.message_id,
-                    await charging_call(session, charge_point, frame),
+                    await charging_call(
+                        session,
+                        charge_point,
+                        frame,
+                        deferred_meter_rows=meter_rows
+                        if frame.action == "MeterValues"
+                        else None,
+                    ),
                 )
             )
         except (ValidationError, ValueError):
@@ -251,14 +260,44 @@ async def process_call(
         response = error_frame(
             frame.message_id, "NotImplemented", "Action is not implemented"
         )
-    session.add(
-        OcppMessageReply(
+    if meter_rows:
+        # Data-modifying CTEs persist samples and their replay reply in one
+        # database round trip. Both still commit before transport sends the ACK.
+        statement = insert(OcppMessageReply).values(
             charge_point_id=charge_point.id,
             message_id=frame.message_id,
             request_hash=digest,
             response=response,
         )
-    )
+        for offset in range(0, len(meter_rows), 1024):
+            statement = statement.add_cte(
+                insert(MeterSample)
+                .values(meter_rows[offset : offset + 1024])
+                .cte(f"meter_batch_{offset}")
+            )
+        await session.execute(statement)
+    else:
+        session.add(
+            OcppMessageReply(
+                charge_point_id=charge_point.id,
+                message_id=frame.message_id,
+                request_hash=digest,
+                response=response,
+            )
+        )
+    if (
+        frame.action
+        in {
+            "BootNotification",
+            "StatusNotification",
+            "StartTransaction",
+            "StopTransaction",
+        }
+        and json.loads(response)[0] == 3
+    ):
+        from src.modules.power.service import note_power_event
+
+        await note_power_event(session, charge_point.station_id)
     await session.flush()
     return response
 

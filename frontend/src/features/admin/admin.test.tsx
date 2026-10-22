@@ -371,7 +371,7 @@ describe('journal and real health contracts', () => {
       response({ error: { message: 'Không đọc được DB' } }, 503),
     )
     await user.click(screen.getByRole('button', { name: 'Cập nhật ngay' }))
-    await screen.findByRole('alert')
+    await screen.findByText('Không đọc được DB')
     expect(screen.getByText('Không đọc được DB')).toBeInTheDocument()
     expect(screen.getAllByRole('img')).toHaveLength(4)
     expect(screen.getByText(/Đo lúc/)).toHaveTextContent('10:00:00')

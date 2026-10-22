@@ -190,7 +190,14 @@ async def test_owner_cannot_modify_ledger_even_by_cascading_truncate(
     _, wallet = await wallet_fixture(db_session)
     db_session.add(entry(wallet.id))
     await db_session.flush()
-    with pytest.raises(DBAPIError, match="append-only"):
+    # S-50's reservation -> ledger FK rejects a plain TRUNCATE before the
+    # append-only trigger. CASCADE must still hit the immutable ledger guard.
+    rejection = (
+        "cannot truncate a table referenced in a foreign key constraint"
+        if statement == "TRUNCATE wallet_ledger"
+        else "append-only"
+    )
+    with pytest.raises(DBAPIError, match=rejection):
         async with db_session.begin_nested():
             await db_session.execute(text(statement))
 

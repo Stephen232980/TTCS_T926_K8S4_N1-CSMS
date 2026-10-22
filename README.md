@@ -312,6 +312,17 @@ docker compose up -d db
 
 ## 7. Kiểm tra chất lượng
 
+Ruff được khóa phiên bản trong dependency `dev` để local và CI dùng cùng
+bộ rule. Sau khi cập nhật code, đồng bộ công cụ bằng đúng môi trường dự án:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".[dev,acceptance]"
+.\.venv\Scripts\python.exe -m ruff --version
+```
+
+Phiên bản Ruff hiện tại là `0.17.0`. Không dùng bản Ruff global thay cho
+bản trong `.venv` khi kiểm tra chất lượng.
+
 Bảo đảm database đang chạy, rồi thực hiện bằng đúng Python trong `.venv`:
 
 ```powershell
